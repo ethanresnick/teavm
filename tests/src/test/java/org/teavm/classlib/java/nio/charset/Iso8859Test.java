@@ -17,6 +17,9 @@ package org.teavm.classlib.java.nio.charset;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -87,5 +90,19 @@ public class Iso8859Test {
 
     private void runDecode(int inSize, int outSize) {
         CharsetTestCommon.runDecode(hex, CharsetTestCommon.asciiText, StandardCharsets.ISO_8859_1, inSize, outSize);
+    }
+
+    @Test
+    public void encodeHighSurrogateBeforeOtherChar() {
+        ByteBuffer buffer = StandardCharsets.ISO_8859_1.encode("a\uD800b");
+        byte[] result = new byte[buffer.remaining()];
+        buffer.get(result);
+        assertArrayEquals(new byte[] { 97, 63, 98 }, result);
+    }
+
+    @Test
+    public void loneLowSurrogateIsMalformed() {
+        assertTrue(StandardCharsets.ISO_8859_1.newEncoder()
+                .encode(CharBuffer.wrap("\uDC00"), ByteBuffer.allocate(4), true).isMalformed());
     }
 }

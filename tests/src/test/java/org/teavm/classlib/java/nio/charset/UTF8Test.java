@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -239,5 +240,37 @@ public class UTF8Test {
 
     private void runDecode(int inSize, int outSize) {
         CharsetTestCommon.runDecode(hex, CharsetTestCommon.text, StandardCharsets.UTF_8, inSize, outSize);
+    }
+
+    @Test
+    public void decodeMalformedInputWithJdkLengths() {
+        assertEquals("\uFFFD", decode(0xE4, 0xB8));
+        assertEquals("\uFFFDA", decode(0xE4, 0xB8, 0x41));
+        assertEquals("\uFFFD\uFFFD", decode(0xC0, 0x80));
+        assertEquals("\uFFFD\uFFFD\uFFFD", decode(0xE0, 0x80, 0x80));
+        assertEquals("\uFFFD\uFFFD\uFFFD\uFFFD", decode(0xF4, 0x90, 0x80, 0x80));
+    }
+
+    private static String decode(int... bytes) {
+        byte[] array = new byte[bytes.length];
+        for (int i = 0; i < bytes.length; ++i) {
+            array[i] = (byte) bytes[i];
+        }
+        return StandardCharsets.UTF_8.decode(ByteBuffer.wrap(array)).toString();
+    }
+
+    @Test
+    public void encodeLoneLowSurrogate() {
+        assertArrayEquals(new byte[] { 97, 63, 98 }, "a\uDC00b".getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void encodeLeavesHighSurrogateAtEndOfChunk() {
+        CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder();
+        CharBuffer input = CharBuffer.wrap("a\uD83D");
+        ByteBuffer output = ByteBuffer.allocate(16);
+        encoder.encode(input, output, false);
+        assertEquals(1, input.position());
+        assertEquals(1, output.position());
     }
 }
