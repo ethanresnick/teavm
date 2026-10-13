@@ -42,16 +42,18 @@ public final class FloatSynthesizer {
         if (binExp >= 255) {
             return negative ? Float.NEGATIVE_INFINITY : Float.POSITIVE_INFINITY;
         }
+        if (binExp <= 0) {
+            // A subnormal has fewer mantissa bits, so round at its own last bit. A carry out of the top bit gives
+            // the smallest normal value. A shift of 32 or more gives zero (Java uses only the low bits of the count).
+            var shift = -binExp + 1 + 6;
+            var bits = shift >= 32 ? 0 : (binMantissa + (1 << (shift - 1))) >>> shift;
+            return Float.intBitsToFloat(negative ? bits | (1 << 31) : bits);
+        }
         binMantissa += 1 << 5;
         if ((binMantissa & (-1 << 30)) != 0) {
             binMantissa >>>= 1;
             binExp++;
         }
-        if (binExp <= 0) {
-            binMantissa >>= Math.min(-binExp + 1, 32);
-            binExp = 0;
-        }
-
         binMantissa = (binMantissa >>> 6) & (-1 << 9 >>> 9);
         var iee754 = binMantissa | (binExp << 23);
         if (negative) {

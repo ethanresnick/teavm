@@ -204,4 +204,54 @@ public class DoubleTest {
         assertFalse(Double.isFinite(Double.NaN));
         assertFalse(Double.isInfinite(Double.NaN));
     }
+
+    @Test
+    public void subnormalToStringAndParse() {
+        // The rounding interval of a subnormal is half of its own ulp, not of its normalized mantissa.
+        assertEquals("4.9E-324", Double.toString(Double.MIN_VALUE));
+        assertEquals("-4.9E-324", Double.toString(-Double.MIN_VALUE));
+        assertEquals("9.9E-324", Double.toString(2 * Double.MIN_VALUE));
+        assertEquals("1.5E-323", Double.toString(3 * Double.MIN_VALUE));
+        assertEquals("2.0E-323", Double.toString(4 * Double.MIN_VALUE));
+        assertEquals("1.0E-310", Double.toString(1E-310));
+        assertEquals("2.5E-320", Double.toString(2.5E-320));
+        assertEquals("1.0E-308", Double.toString(1E-308));
+        assertEquals("2.225073858507201E-308", Double.toString(Math.nextDown(Double.MIN_NORMAL)));
+        assertEquals("2.2250738585072014E-308", Double.toString(Double.MIN_NORMAL));
+        assertEquals("1.27603E-318", Double.toString(Double.longBitsToDouble(0x3f0dfL)));
+        assertEquals("6.0246141314E-314", Double.toString(Double.longBitsToDouble(0x2d6d0fbc3L)));
+
+        // Parsing rounds a subnormal at its own last bit.
+        assertEquals(Double.MIN_VALUE, Double.parseDouble("4.9E-324"), 0);
+        assertEquals(Double.MIN_VALUE, Double.parseDouble("3E-324"), 0);
+        assertEquals(0, Double.parseDouble("2E-324"), 0);
+        assertEquals(0, Double.parseDouble("1E-330"), 0);
+        assertEquals(3 * Double.MIN_VALUE, Double.parseDouble("1.5E-323"), 0);
+        assertEquals(Math.nextDown(Double.MIN_NORMAL), Double.parseDouble("2.225073858507201E-308"), 0);
+        for (long bits = 1; bits < 100000; bits += 997) {
+            double d = Double.longBitsToDouble(bits);
+            assertEquals(d, Double.parseDouble(Double.toString(d)), 0);
+        }
+    }
+
+    @Test
+    public void toStringOnRoundingIntervalEdge() {
+        // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
+        assertEquals("1.0E23", Double.toString(1E23));
+        assertEquals("1.0000000000000001E23", Double.toString(Math.nextUp(1E23)));
+        assertEquals("3.849937261242046E16", Double.toString(3.849937261242046E16));
+    }
+
+    @Test
+    public void toStringHalfwayTakesEvenDigit() {
+        // 2116974939765710.25 is exactly halfway between ...102 and ...103
+        assertEquals("2.1169749397657102E15", Double.toString(2.1169749397657102E15));
+        assertEquals("2.4333958225460162E14", Double.toString(2.4333958225460162E14));
+    }
+
+    @Test
+    public void toStringBelowPowerOfTwo() {
+        // Below a power of two the next double is closer, so the rounding interval is narrower on that side
+        assertEquals("1.7800590868057611E-307", Double.toString(Math.scalb(1.0, -1019)));
+    }
 }

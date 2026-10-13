@@ -185,4 +185,46 @@ public class FloatTest {
         assertFalse(Float.isFinite(Float.NaN));
         assertFalse(Float.isInfinite(Float.NaN));
     }
+
+    @Test
+    public void subnormalToStringAndParse() {
+        // The rounding interval of a subnormal is half of its own ulp, not of its normalized mantissa.
+        assertEquals("1.4E-45", Float.toString(Float.MIN_VALUE));
+        assertEquals("-1.4E-45", Float.toString(-Float.MIN_VALUE));
+        assertEquals("2.8E-45", Float.toString(2 * Float.MIN_VALUE));
+        assertEquals("4.2E-45", Float.toString(3 * Float.MIN_VALUE));
+        assertEquals("1.0E-40", Float.toString(1E-40f));
+        assertEquals("1.1754942E-38", Float.toString(Math.nextDown(Float.MIN_NORMAL)));
+        assertEquals("1.1754944E-38", Float.toString(Float.MIN_NORMAL));
+
+        // Parsing rounds a subnormal at its own last bit.
+        assertEquals(Float.MIN_VALUE, Float.parseFloat("1.4E-45"), 0);
+        assertEquals(Float.MIN_VALUE, Float.parseFloat("1E-45"), 0);
+        assertEquals(0, Float.parseFloat("7E-46"), 0);
+        assertEquals(0, Float.parseFloat("1E-50"), 0);
+        assertEquals(Math.nextDown(Float.MIN_NORMAL), Float.parseFloat("1.1754942E-38"), 0);
+        for (int bits = 1; bits < 100000; bits += 997) {
+            float f = Float.intBitsToFloat(bits);
+            assertEquals(f, Float.parseFloat(Float.toString(f)), 0);
+        }
+    }
+
+    @Test
+    public void toStringOnRoundingIntervalEdge() {
+        // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
+        assertEquals("5.383987E7", Float.toString(53839872f));
+    }
+
+    @Test
+    public void toStringHalfwayTakesEvenDigit() {
+        // 2831949.25 is exactly halfway between 2831949.2 and 2831949.3
+        assertEquals("2831949.2", Float.toString(2831949.25f));
+    }
+
+    @Test
+    public void toStringBelowPowerOfTwo() {
+        // Below a power of two the next float is closer, so the rounding interval is narrower on that side
+        assertEquals("8.4703295E-22", Float.toString(Math.scalb(1f, -70)));
+        assertEquals("7.1054274E-15", Float.toString(Math.scalb(1f, -47)));
+    }
 }

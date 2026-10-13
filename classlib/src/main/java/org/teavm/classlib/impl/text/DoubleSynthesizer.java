@@ -44,6 +44,13 @@ public final class DoubleSynthesizer {
         }
 
         var mantissaLowerBits = 5;
+        if (binExp <= 0) {
+            // A subnormal has fewer mantissa bits, so round at its own last bit. A carry out of the top bit gives
+            // the smallest normal value. A shift of 64 or more gives zero (Java uses only the low bits of the count).
+            var shift = -binExp + 1 + mantissaLowerBits;
+            var bits = shift >= 64 ? 0 : (binMantissa + (1L << (shift - 1))) >>> shift;
+            return Double.longBitsToDouble(negative ? bits | (1L << 63) : bits);
+        }
         var mantissaLowerPos = 1 << mantissaLowerBits;
         var error = (int) (binMantissa & (mantissaLowerPos - 1));
         var correction = mantissaLowerPos >> 1;
@@ -67,11 +74,6 @@ public final class DoubleSynthesizer {
             binMantissa >>>= 1;
             binExp++;
         }
-        if (binExp <= 0) {
-            binMantissa >>= Math.min(-binExp + 1, 64);
-            binExp = 0;
-        }
-
         binMantissa = (binMantissa >>> mantissaLowerBits) & (-1L << 12 >>> 12);
         var iee754 = binMantissa | ((long) binExp << 52);
         if (negative) {
