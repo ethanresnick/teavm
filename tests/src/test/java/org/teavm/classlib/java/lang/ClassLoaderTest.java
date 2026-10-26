@@ -18,6 +18,8 @@ package org.teavm.classlib.java.lang;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.fail;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -72,6 +74,20 @@ public class ClassLoaderTest {
             return reader.readLine();
         } catch (IOException e) {
             return "";
+        }
+    }
+
+    @Test
+    public void loaderDelegatesToParentFirst() throws ClassNotFoundException {
+        var loader = new ClassLoader() { };
+        assertSame(ClassLoader.getSystemClassLoader(), loader.getParent());
+        assertSame(String.class, loader.loadClass("java.lang.String"));
+        assertSame(ClassLoaderTest.class, loader.loadClass(ClassLoaderTest.class.getName()));
+        try {
+            loader.loadClass("org.teavm.classlib.java.lang.NoSuchClassForLoaderTest");
+            fail();
+        } catch (ClassNotFoundException e) {
+            // ok
         }
     }
 }
