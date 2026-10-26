@@ -17,7 +17,6 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import java.util.Arrays;
-import java.util.ConcurrentModificationException;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -32,22 +31,34 @@ import org.teavm.classlib.java.util.TAbstractCollection;
 import org.teavm.classlib.java.util.TAbstractMap;
 import org.teavm.classlib.java.util.TAbstractSet;
 import org.teavm.classlib.java.util.TCollection;
-import org.teavm.classlib.java.util.TConcurrentModificationException;
 import org.teavm.classlib.java.util.TIterator;
 import org.teavm.classlib.java.util.TMap;
 import org.teavm.classlib.java.util.TNoSuchElementException;
 import org.teavm.classlib.java.util.TSet;
 import org.teavm.interop.Rename;
 
+/**
+ * Follows the JDK's ConcurrentHashMap contract:
+ * <ul>
+ * <li>A null key or value throws NullPointerException.</li>
+ * <li>Iterators are weakly consistent: they never throw ConcurrentModificationException. An iterator returns the
+ * entries that existed when it was created, and skips the ones removed since. So code can remove entries while
+ * it iterates over them.</li>
+ * <li>computeIfAbsent stores nothing when the function returns null, and computeIfPresent removes the entry when it
+ * returns null.</li>
+ * <li>A bucket index uses the JDK's spread hash {@code h ^ (h >>> 16)} ({@link #indexFor}), so keys whose hash codes
+ * differ only in high bits do not share one bucket. The spread also gives the JDK's bucket, so keys that do not
+ * share a bucket iterate in the JDK's order for the same table size.</li>
+ * </ul>
+ */
 public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         implements TConcurrentMap<K, V>, TCloneable, TSerializable {
     private transient int elementCount;
     private transient HashEntry<K, V>[] elementData;
-    private transient int modCount;
     private static final int DEFAULT_SIZE = 16;
     private final float loadFactor;
     private int threshold;
-    private transient TSet<K> cachedKeySet;
+    private transient KeySetView<K, V> cachedKeySet;
     private transient TCollection<V> cachedValues;
 
     static class HashEntry<K, V> extends TMapEntry<K, V> {
@@ -72,73 +83,51 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private static class AbstractMapIterator<K, V>  {
+        // The entries when the iterator was created. A snapshot keeps iteration valid while the map changes.
+        private final HashEntry<K, V>[] snapshot;
         private int position;
-        int expectedModCount;
-        HashEntry<K, V> futureEntry;
         HashEntry<K, V> currentEntry;
-        HashEntry<K, V> prevEntry;
 
         final TConcurrentHashMap<K, V> associatedMap;
 
         AbstractMapIterator(TConcurrentHashMap<K, V> hm) {
             associatedMap = hm;
-            expectedModCount = hm.modCount;
-            futureEntry = null;
+            var table = hm.elementData;
+            int count = 0;
+            for (var entry : table) {
+                for (var e = entry; e != null; e = e.next) {
+                    count++;
+                }
+            }
+            snapshot = hm.newElementArray(count);
+            int i = 0;
+            for (var entry : table) {
+                for (var e = entry; e != null; e = e.next) {
+                    snapshot[i++] = e;
+                }
+            }
         }
 
         public boolean hasNext() {
-            if (futureEntry != null) {
-                return true;
+            while (position < snapshot.length && snapshot[position].removed) {
+                position++;
             }
-            while (position < associatedMap.elementData.length) {
-                if (associatedMap.elementData[position] == null) {
-                    position++;
-                } else {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        final void checkConcurrentMod() throws ConcurrentModificationException {
-            if (expectedModCount != associatedMap.modCount) {
-                throw new TConcurrentModificationException();
-            }
+            return position < snapshot.length;
         }
 
         final void makeNext() {
-            checkConcurrentMod();
             if (!hasNext()) {
                 throw new TNoSuchElementException();
             }
-            if (futureEntry == null) {
-                currentEntry = associatedMap.elementData[position++];
-                futureEntry = currentEntry.next;
-                prevEntry = null;
-            } else {
-                if (currentEntry != null) {
-                    prevEntry = currentEntry;
-                }
-                currentEntry = futureEntry;
-                futureEntry = futureEntry.next;
-            }
+            currentEntry = snapshot[position++];
         }
 
         public final void remove() {
-            checkConcurrentMod();
             if (currentEntry == null) {
                 throw new TIllegalStateException();
             }
-            if (prevEntry == null) {
-                int index = currentEntry.origKeyHash & (associatedMap.elementData.length - 1);
-                associatedMap.elementData[index] = associatedMap.elementData[index].next;
-            } else {
-                prevEntry.next = currentEntry.next;
-            }
+            associatedMap.remove(currentEntry.key);
             currentEntry = null;
-            expectedModCount++;
-            associatedMap.modCount++;
-            associatedMap.elementCount--;
         }
     }
 
@@ -205,6 +194,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         public boolean remove(Object object) {
             if (object instanceof TMap.Entry) {
                 var oEntry = (Entry<?, ?>) object;
+                if (oEntry.getKey() == null || oEntry.getValue() == null) {
+                    return false;
+                }
                 var entry = associatedMap.getEntryByKeyAndValue(oEntry.getKey(), oEntry.getValue());
                 if (entry != null) {
                     associatedMap.removeEntry(entry);
@@ -218,7 +210,8 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         public boolean contains(Object object) {
             if (object instanceof TMap.Entry) {
                 var oEntry = (Entry<?, ?>) object;
-                return associatedMap.getEntryByKeyAndValue(oEntry.getKey(), oEntry.getValue()) != null;
+                return oEntry.getKey() != null && oEntry.getValue() != null
+                        && associatedMap.getEntryByKeyAndValue(oEntry.getKey(), oEntry.getValue()) != null;
             }
             return false;
         }
@@ -282,9 +275,14 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     @Override
     public void clear() {
         if (elementCount > 0) {
+            // An open iterator skips removed entries.
+            for (var entry : elementData) {
+                for (var e = entry; e != null; e = e.next) {
+                    e.removed = true;
+                }
+            }
             elementCount = 0;
             Arrays.fill(elementData, null);
-            modCount++;
         }
     }
 
@@ -314,6 +312,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public boolean containsValue(Object value) {
+        Objects.requireNonNull(value);
         repeatTable: do {
             var table = elementData;
 
@@ -373,6 +372,10 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public boolean remove(Object key, Object value) {
+        Objects.requireNonNull(key);
+        if (value == null) {
+            return false;
+        }
         var entry = getEntryByKeyAndValue(key, value);
         if (entry != null) {
             removeEntry(entry);
@@ -383,6 +386,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public boolean replace(K key, V oldValue, V newValue) {
+        Objects.requireNonNull(key);
+        Objects.requireNonNull(oldValue);
+        Objects.requireNonNull(newValue);
         var entry = getEntryByKeyAndValue(key, oldValue);
         if (entry != null) {
             entry.setValue(newValue);
@@ -393,6 +399,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public V replace(K key, V value) {
+        Objects.requireNonNull(value);
         var entry = getEntry(key);
         if (entry == null) {
             return null;
@@ -425,7 +432,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public V putIfAbsent(K key, V value) {
-        var hash = Objects.hashCode(key);
+        Objects.requireNonNull(key);
+        Objects.requireNonNull(value);
+        var hash = key.hashCode();
         var entry = getEntry(key, hash);
 
         if (entry != null) {
@@ -455,9 +464,10 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+        Objects.requireNonNull(key);
         Objects.requireNonNull(mappingFunction);
 
-        var hash = Objects.hashCode(key);
+        var hash = key.hashCode();
         var entry = getEntry(key, hash);
         if (entry != null) {
             return entry.getValue();
@@ -468,6 +478,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         if (entry != null) {
             return entry.getValue();
         }
+        if (newValue == null) {
+            return null;
+        }
         var index = computeIndex(hash);
         entry = placeHashedEntry(key, index, hash);
         entry.setValue(newValue);
@@ -476,7 +489,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        int hash = Objects.hashCode(key);
+        Objects.requireNonNull(key);
+        Objects.requireNonNull(remappingFunction);
+        int hash = key.hashCode();
 
         V newValue = null;
         var newValueComputed = false;
@@ -495,7 +510,11 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             if (entry == null) {
                 return null;
             } else if (entry.getValue() == oldValue) {
-                entry.setValue(newValue);
+                if (newValue == null) {
+                    removeEntry(entry);
+                } else {
+                    entry.setValue(newValue);
+                }
                 return newValue;
             }
         }
@@ -503,7 +522,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     @Override
     public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        var hash = Objects.hashCode(key);
+        Objects.requireNonNull(key);
+        Objects.requireNonNull(remappingFunction);
+        var hash = key.hashCode();
 
         while (true) {
             var entry = getEntry(key, hash);
@@ -534,17 +555,18 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private HashEntry<K, V> getEntry(Object key) {
-        return getEntry(key, Objects.hashCode(key));
+        Objects.requireNonNull(key);
+        return getEntry(key, key.hashCode());
     }
 
     private HashEntry<K, V> getEntry(Object key, int hash) {
         if (key == null) {
-            return findNullKeyEntry();
+            throw new NullPointerException();
         } else {
             repeatTable:
             do {
                 var table = elementData;
-                int index = hash & (table.length - 1);
+                int index = indexFor(hash, table.length);
 
                 repeatElement:
                 do {
@@ -583,7 +605,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         repeatTable:
         do {
             var table = elementData;
-            int index = hash & (table.length - 1);
+            int index = indexFor(hash, table.length);
 
             repeatElement:
             do {
@@ -623,46 +645,104 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         } while (true);
     }
 
-    private HashEntry<K, V> findNullKeyEntry() {
-        var m = elementData[0];
-        while (m != null && m.key != null) {
-            m = m.next;
-        }
-        return m;
-    }
-
     @Override
     public boolean isEmpty() {
         return elementCount == 0;
     }
 
+    // As in the JDK, keySet() returns ConcurrentHashMap.KeySetView. Code compiled against the JDK calls it with that
+    // return type.
     @Override
-    public TSet<K> keySet() {
+    public KeySetView<K, V> keySet() {
         if (cachedKeySet == null) {
-            cachedKeySet = new TAbstractSet<>() {
-                @Override public boolean contains(Object object) {
-                    return containsKey(object);
-                }
-                @Override public int size() {
-                    return TConcurrentHashMap.this.size();
-                }
-                @Override public void clear() {
-                    TConcurrentHashMap.this.clear();
-                }
-                @Override public boolean remove(Object key) {
-                    HashEntry<K, V> entry = TConcurrentHashMap.this.getEntry(key);
-                    if (entry != null) {
-                        TConcurrentHashMap.this.removeEntry(entry);
-                        return true;
-                    }
-                    return false;
-                }
-                @Override public TIterator<K> iterator() {
-                    return new KeyIterator<>(TConcurrentHashMap.this);
-                }
-            };
+            cachedKeySet = new KeySetView<>(this, null);
         }
         return cachedKeySet;
+    }
+
+    public KeySetView<K, V> keySet(V mappedValue) {
+        if (mappedValue == null) {
+            throw new NullPointerException();
+        }
+        return new KeySetView<>(this, mappedValue);
+    }
+
+    public static <K> KeySetView<K, Boolean> newKeySet() {
+        return new KeySetView<>(new TConcurrentHashMap<>(), Boolean.TRUE);
+    }
+
+    public static <K> KeySetView<K, Boolean> newKeySet(int initialCapacity) {
+        return new KeySetView<>(new TConcurrentHashMap<>(initialCapacity), Boolean.TRUE);
+    }
+
+    public static class KeySetView<K, V> extends TAbstractSet<K> implements TSerializable {
+        private final TConcurrentHashMap<K, V> map;
+        private final V value;
+
+        KeySetView(TConcurrentHashMap<K, V> map, V value) {
+            this.map = map;
+            this.value = value;
+        }
+
+        public TConcurrentHashMap<K, V> getMap() {
+            return map;
+        }
+
+        public V getMappedValue() {
+            return value;
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return map.containsKey(o);
+        }
+
+        @Override
+        public boolean remove(Object o) {
+            return map.remove(o) != null;
+        }
+
+        @Override
+        public TIterator<K> iterator() {
+            return new KeyIterator<>(map);
+        }
+
+        @Override
+        public int size() {
+            return map.size();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return map.isEmpty();
+        }
+
+        @Override
+        public void clear() {
+            map.clear();
+        }
+
+        @Override
+        public boolean add(K e) {
+            if (value == null) {
+                throw new UnsupportedOperationException();
+            }
+            return map.putIfAbsent(e, value) == null;
+        }
+
+        @Override
+        public boolean addAll(TCollection<? extends K> c) {
+            if (value == null) {
+                throw new UnsupportedOperationException();
+            }
+            boolean added = false;
+            for (TIterator<? extends K> it = c.iterator(); it.hasNext();) {
+                if (map.putIfAbsent(it.next(), value) == null) {
+                    added = true;
+                }
+            }
+            return added;
+        }
     }
 
     @Override
@@ -671,7 +751,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private V putImpl(K key, V value) {
-        var hash = Objects.hashCode(key);
+        Objects.requireNonNull(key);
+        Objects.requireNonNull(value);
+        var hash = key.hashCode();
         var entry = getEntry(key, hash);
         var index = computeIndex(hash);
 
@@ -686,7 +768,6 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
     private HashEntry<K, V> placeHashedEntry(K key, int index, int hash) {
         var entry = createHashedEntry(key, index, hash);
-        modCount++;
         if (++elementCount > threshold) {
             rehash();
         }
@@ -726,7 +807,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             var entry = elementData[i];
             elementData[i] = null;
             while (entry != null) {
-                int index = entry.origKeyHash & (length - 1);
+                int index = indexFor(entry.origKeyHash, length);
                 var next = entry.next;
                 entry.next = newData[index];
                 newData[index] = entry;
@@ -752,7 +833,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private void removeEntry(HashEntry<K, V> entry) {
-        var index = entry.origKeyHash & (elementData.length - 1);
+        var index = indexFor(entry.origKeyHash, elementData.length);
         var m = elementData[index];
         if (m == entry) {
             elementData[index] = entry.next;
@@ -762,7 +843,6 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             }
             m.next = entry.next;
         }
-        modCount++;
         elementCount--;
         entry.removed = true;
     }
@@ -802,6 +882,15 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private int computeIndex(int hash) {
-        return (hash & 0x7FFFFFFF) % elementData.length;
+        return indexFor(hash, elementData.length);
+    }
+
+    /**
+     * The bucket of a key's raw hash code in a table of {@code length} buckets (a power of two), as the JDK's
+     * {@code (n - 1) & spread(h)}. The JDK's spread also clears the sign bit, which no index of a table of at most
+     * 2^30 buckets uses.
+     */
+    private static int indexFor(int hash, int length) {
+        return (hash ^ (hash >>> 16)) & (length - 1);
     }
 }

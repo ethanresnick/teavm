@@ -19,9 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
@@ -311,5 +314,123 @@ public class ConcurrentHashMapTest {
         assertNull(map.merge("a", 2, (oldValue, value) -> null));
         assertFalse(map.containsKey("a"));
         assertEquals(0, map.size());
+    }
+
+    @Test
+    public void nullKeysAndValuesThrow() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        assertThrows(NullPointerException.class, () -> map.put(null, 1));
+        assertThrows(NullPointerException.class, () -> map.put("a", null));
+        assertThrows(NullPointerException.class, () -> map.get(null));
+        assertThrows(NullPointerException.class, () -> map.containsKey(null));
+        assertThrows(NullPointerException.class, () -> map.remove(null));
+        assertThrows(NullPointerException.class, () -> map.putIfAbsent("a", null));
+        assertFalse(map.remove("a", null));
+        assertTrue(map.isEmpty());
+    }
+
+    @Test
+    public void computeWithNullResultStoresNothing() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        assertNull(map.computeIfAbsent("x", k -> null));
+        assertFalse(map.containsKey("x"));
+        map.put("y", 1);
+        assertNull(map.computeIfPresent("y", (k, v) -> null));
+        assertFalse(map.containsKey("y"));
+    }
+
+    @Test
+    public void iteratorIsWeaklyConsistent() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        for (var i = 0; i < 100; i++) {
+            map.put("k" + i, i);
+        }
+        var seen = new HashSet<String>();
+        var originals = 0;
+        for (var key : map.keySet()) {
+            assertTrue(seen.add(key));
+            if (key.startsWith("k")) {
+                originals++;
+            }
+            map.remove(key);
+            map.put("new" + key, 0);
+        }
+        assertEquals(100, originals);
+
+        var iterator = map.keySet().iterator();
+        var first = iterator.next();
+        iterator.remove();
+        assertFalse(map.containsKey(first));
+    }
+
+    @Test
+    public void keySetViews() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        map.put("a", 1);
+        ConcurrentHashMap.KeySetView<String, Integer> view = map.keySet(9);
+        assertEquals((Object) 9, view.getMappedValue());
+        assertTrue(view.add("b"));
+        assertFalse(view.add("a"));
+        assertEquals((Object) 9, map.get("b"));
+        assertEquals((Object) 1, map.get("a"));
+
+        var set = ConcurrentHashMap.<String>newKeySet();
+        assertTrue(set.add("x"));
+        assertTrue(set.contains("x"));
+        assertFalse(set.add("x"));
+        assertTrue(set.remove("x"));
+        assertTrue(set.isEmpty());
+    }
+
+    @Test
+    public void keysDifferingInHighBitsIterateInJdkOrder() {
+        var map = new ConcurrentHashMap<FixedHashKey, Integer>();
+        // The hash codes of two keys that a masked raw hash puts in one bucket.
+        map.put(new FixedHashKey("node0", -1775181064), 0);
+        map.put(new FixedHashKey("node1", -1775150312), 1);
+        // The low 16 bits are 0, so a masked raw hash puts these keys in bucket 0.
+        for (var i = 1; i < 8; i++) {
+            map.put(new FixedHashKey("high" + i, i << 16), i);
+        }
+        var order = new ArrayList<String>();
+        for (var key : map.keySet()) {
+            order.add(key.name);
+        }
+        assertEquals(List.of("high1", "high2", "high3", "high4", "high5", "high6", "high7", "node0", "node1"), order);
+
+        // After resizes (to 64 buckets), and after removals.
+        for (var i = 8; i < 40; i++) {
+            map.put(new FixedHashKey("high" + i, i << 16), i);
+        }
+        for (var i = 8; i < 40; i += 2) {
+            map.remove(new FixedHashKey("high" + i, i << 16));
+        }
+        order.clear();
+        for (var key : map.keySet()) {
+            order.add(key.name);
+        }
+        assertEquals(List.of("high1", "high2", "high3", "high4", "high5", "high6", "high7", "node0", "high9", "high11",
+                "high13", "high15", "high17", "high19", "high21", "high23", "high25", "high27", "high29", "high31",
+                "high33", "high35", "high37", "high39", "node1"), order);
+    }
+
+    static final class FixedHashKey {
+        final String name;
+        final int hash;
+
+        FixedHashKey(String name, int hash) {
+            this.name = name;
+            this.hash = hash;
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            return obj instanceof FixedHashKey && ((FixedHashKey) obj).name.equals(name);
+        }
     }
 }
