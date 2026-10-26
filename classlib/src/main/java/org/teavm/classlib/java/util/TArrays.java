@@ -1988,4 +1988,404 @@ public class TArrays extends TObject {
             throw new ArrayIndexOutOfBoundsException();
         }
     }
+
+    // The JDK 9 lexicographic compare and compareUnsigned methods. As in the JDK, a null array sorts first, and a
+    // proper prefix sorts before the longer array.
+
+    public static int compare(byte[] a, byte[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(byte[] a, int aFromIndex, int aLength, byte[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Byte.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(short[] a, short[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(short[] a, int aFromIndex, int aToIndex, short[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(short[] a, int aFromIndex, int aLength, short[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Short.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(char[] a, char[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(char[] a, int aFromIndex, int aToIndex, char[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(char[] a, int aFromIndex, int aLength, char[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Character.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(int[] a, int[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(int[] a, int aFromIndex, int aLength, int[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Integer.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(long[] a, long[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(long[] a, int aFromIndex, int aLength, long[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Long.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(float[] a, float[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(float[] a, int aFromIndex, int aToIndex, float[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(float[] a, int aFromIndex, int aLength, float[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Float.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(double[] a, double[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(double[] a, int aFromIndex, int aToIndex, double[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(double[] a, int aFromIndex, int aLength, double[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Double.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compare(boolean[] a, boolean[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compare(boolean[] a, int aFromIndex, int aToIndex, boolean[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareImpl(boolean[] a, int aFromIndex, int aLength, boolean[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Boolean.compare(a[aFromIndex + i], b[bFromIndex + i]);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compareUnsigned(byte[] a, byte[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareUnsignedImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compareUnsigned(byte[] a, int aFromIndex, int aToIndex, byte[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareUnsignedImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareUnsignedImpl(byte[] a, int aFromIndex, int aLength,
+            byte[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Integer.compare(a[aFromIndex + i] & 0xFF, b[bFromIndex + i] & 0xFF);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compareUnsigned(short[] a, short[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareUnsignedImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compareUnsigned(short[] a, int aFromIndex, int aToIndex,
+            short[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareUnsignedImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareUnsignedImpl(short[] a, int aFromIndex, int aLength,
+            short[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Integer.compare(a[aFromIndex + i] & 0xFFFF, b[bFromIndex + i] & 0xFFFF);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compareUnsigned(int[] a, int[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareUnsignedImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compareUnsigned(int[] a, int aFromIndex, int aToIndex, int[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareUnsignedImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareUnsignedImpl(int[] a, int aFromIndex, int aLength, int[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Integer.compare(a[aFromIndex + i] ^ Integer.MIN_VALUE, b[bFromIndex + i] ^ Integer.MIN_VALUE);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static int compareUnsigned(long[] a, long[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareUnsignedImpl(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static int compareUnsigned(long[] a, int aFromIndex, int aToIndex, long[] b, int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareUnsignedImpl(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static int compareUnsignedImpl(long[] a, int aFromIndex, int aLength,
+            long[] b, int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            int c = Long.compare(a[aFromIndex + i] ^ Long.MIN_VALUE, b[bFromIndex + i] ^ Long.MIN_VALUE);
+            if (c != 0) {
+                return c;
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static <T extends Comparable<? super T>> int compare(T[] a, T[] b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compareComparable(a, 0, a.length, b, 0, b.length);
+    }
+
+    public static <T extends Comparable<? super T>> int compare(T[] a, int aFromIndex, int aToIndex, T[] b,
+            int bFromIndex, int bToIndex) {
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        return compareComparable(a, aFromIndex, aToIndex - aFromIndex, b, bFromIndex, bToIndex - bFromIndex);
+    }
+
+    private static <T extends Comparable<? super T>> int compareComparable(T[] a, int aFromIndex, int aLength, T[] b,
+            int bFromIndex, int bLength) {
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            T oa = a[aFromIndex + i];
+            T ob = b[bFromIndex + i];
+            if (oa != ob) {
+                // A null element sorts first.
+                if (oa == null || ob == null) {
+                    return oa == null ? -1 : 1;
+                }
+                int c = oa.compareTo(ob);
+                if (c != 0) {
+                    return c;
+                }
+            }
+        }
+        return aLength - bLength;
+    }
+
+    public static <T> int compare(T[] a, T[] b, TComparator<? super T> cmp) {
+        Objects.requireNonNull(cmp);
+        if (a == b) {
+            return 0;
+        }
+        if (a == null || b == null) {
+            return a == null ? -1 : 1;
+        }
+        return compare(a, 0, a.length, b, 0, b.length, cmp);
+    }
+
+    public static <T> int compare(T[] a, int aFromIndex, int aToIndex, T[] b, int bFromIndex, int bToIndex,
+            TComparator<? super T> cmp) {
+        Objects.requireNonNull(cmp);
+        checkInBounds(a.length, aFromIndex, aToIndex);
+        checkInBounds(b.length, bFromIndex, bToIndex);
+        int aLength = aToIndex - aFromIndex;
+        int bLength = bToIndex - bFromIndex;
+        int length = Math.min(aLength, bLength);
+        for (int i = 0; i < length; ++i) {
+            T oa = a[aFromIndex + i];
+            T ob = b[bFromIndex + i];
+            if (oa != ob) {
+                int c = cmp.compare(oa, ob);
+                if (c != 0) {
+                    return c;
+                }
+            }
+        }
+        return aLength - bLength;
+    }
 }

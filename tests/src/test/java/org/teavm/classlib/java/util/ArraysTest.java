@@ -281,4 +281,26 @@ public class ArraysTest {
     public void copyOfRangeWithFromPastEndFails() {
         assertThrows(ArrayIndexOutOfBoundsException.class, () -> Arrays.copyOfRange(new String[] { "a", "b" }, 3, 4));
     }
+
+    @Test
+    public void compare() {
+        assertEquals(0, Arrays.compare(new int[] { 1, 2 }, new int[] { 1, 2 }));
+        assertEquals(-1, Integer.signum(Arrays.compare(new int[] { 1, 2 }, new int[] { 1, 3 })));
+        assertEquals(-1, Integer.signum(Arrays.compare(new int[] { 1, 2 }, new int[] { 1, 2, 0 })));
+        assertEquals(1, Integer.signum(Arrays.compare(new long[] { 5 }, new long[] { -5 })));
+        assertEquals(-1, Integer.signum(Arrays.compare((byte[]) null, new byte[0])));
+        assertEquals(1, Integer.signum(Arrays.compare(new double[] { Double.NaN }, new double[] { 1 })));
+        assertEquals(-1, Integer.signum(Arrays.compare(new String[] { "a" }, new String[] { "b" })));
+        assertEquals(1, Integer.signum(Arrays.compare(new boolean[] { true }, new boolean[] { false })));
+        assertEquals(-1, Integer.signum(Arrays.compare(new char[] { 'a' }, new char[] { 'b' })));
+    }
+
+    @Test
+    public void compareUnsigned() {
+        assertEquals(1, Integer.signum(Arrays.compareUnsigned(new byte[] { (byte) 0xff }, new byte[] { 1 })));
+        assertEquals(1, Integer.signum(Arrays.compareUnsigned(new short[] { -1 }, new short[] { 1 })));
+        assertEquals(1, Integer.signum(Arrays.compareUnsigned(new int[] { -1 }, new int[] { 1 })));
+        assertEquals(1, Integer.signum(Arrays.compareUnsigned(new long[] { -1 }, new long[] { 1 })));
+        assertEquals(0, Arrays.compareUnsigned(new byte[] { 1, 2 }, new byte[] { 1, 2 }));
+    }
 }
