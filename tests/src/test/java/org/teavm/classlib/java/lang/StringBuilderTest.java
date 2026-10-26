@@ -17,6 +17,7 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
@@ -285,5 +286,31 @@ public class StringBuilderTest {
         assertArrayEquals(new int[] { 56972, 56178 }, new StringBuilder().append(
                 new char[] { (char) 56972, (char) 56178 }).codePoints().toArray());
         assertArrayEquals(new int[] { 56178 }, new StringBuilder().append((char) 56178).codePoints().toArray());
+    }
+
+    @Test
+    public void nullCharSequenceAppendedAsNull() {
+        CharSequence nullSequence = null;
+        assertEquals("abnull", new StringBuilder("ab").append(nullSequence).toString());
+        assertEquals("abul", new StringBuilder("ab").append(nullSequence, 1, 3).toString());
+        assertEquals("abnull", new StringBuilder("ab").append((StringBuffer) null).toString());
+        assertThrows(IndexOutOfBoundsException.class, () -> new StringBuilder("ab").append(nullSequence, 2, 5));
+    }
+
+    @Test
+    public void nullCharSequenceInsertedAsNull() {
+        CharSequence nullSequence = null;
+        assertEquals("anullb", new StringBuilder("ab").insert(1, nullSequence).toString());
+        assertEquals("anub", new StringBuilder("ab").insert(1, nullSequence, 0, 2).toString());
+    }
+
+    @Test
+    public void nullCharSequenceInStringBuffer() {
+        CharSequence nullSequence = null;
+        assertEquals("abnull", new StringBuffer("ab").append(nullSequence).toString());
+        assertEquals("abul", new StringBuffer("ab").append(nullSequence, 1, 3).toString());
+        assertEquals("abnull", new StringBuffer("ab").append((StringBuffer) null).toString());
+        assertEquals("anullb", new StringBuffer("ab").insert(1, nullSequence).toString());
+        assertEquals("anub", new StringBuffer("ab").insert(1, nullSequence, 0, 2).toString());
     }
 }
