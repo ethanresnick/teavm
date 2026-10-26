@@ -69,6 +69,73 @@ public class AsyncMethodFinderTest {
         instance.callHelper(5);
     }
 
+    @Test
+    public void superInterfaceMethodImplementedByMethodInheritedFromGrandparentIsInFamily() {
+        var vm = build("subInterfaceSnippet");
+        var finder = find(vm);
+        assertTrue(finder.getAsyncMethods().contains(new MethodReference(SuspendingGrandparent.class, "m",
+                int.class, int.class)), "the grandparent method must be async");
+        assertTrue(finder.getAsyncFamilyMethods().contains(
+                new MethodReference(Call.class, "m", int.class, int.class)));
+    }
+
+    @SuppressWarnings("unused")
+    public static void subInterfaceSnippet() throws InterruptedException {
+        Call call = new InheritsFromGrandparent();
+        call.m(2);
+    }
+
+    @Test
+    public void interfaceMethodImplementedThroughAbstractClassIsInFamily() {
+        var vm = build("abstractClassSnippet");
+        var finder = find(vm);
+        assertTrue(finder.getAsyncFamilyMethods().contains(
+                new MethodReference(OtherCall.class, "m", int.class, int.class)));
+    }
+
+    @SuppressWarnings("unused")
+    public static void abstractClassSnippet() throws InterruptedException {
+        OtherCall call = new ConcreteFromAbstract();
+        call.m(2);
+    }
+
+    @Test
+    public void interfaceMethodImplementedByInheritedNonAsyncMethodIsNotInFamily() {
+        var vm = build("nonAsyncSnippet");
+        var finder = find(vm);
+        assertTrue(finder.getAsyncMethods().contains(new MethodReference(UnrelatedSuspending.class, "m",
+                int.class, int.class)), "a method with the same descriptor must be async elsewhere");
+        assertFalse(finder.getAsyncFamilyMethods().contains(
+                new MethodReference(PlainCall.class, "m", int.class, int.class)));
+    }
+
+    @SuppressWarnings("unused")
+    public static void nonAsyncSnippet() throws InterruptedException {
+        PlainCall call = new InheritsPlain();
+        call.m(2);
+        new UnrelatedSuspending().m(3);
+    }
+
+    @Test
+    public void staticInterfaceMethodIsNotInFamily() {
+        var vm = build("staticInterfaceMethodSnippet");
+        var finder = find(vm);
+        var helper = new MethodReference(WithStaticHelper.class, "helper", int.class, int.class);
+        assertTrue(finder.getAsyncMethods().contains(new MethodReference(SuspendingHelperBase.class, "helper",
+                int.class, int.class)), "the superclass method with the same descriptor must be async");
+        var helperClass = vm.getWrittenClasses().get(WithStaticHelper.class.getName());
+        assertNotNull(helperClass.getMethod(helper.getDescriptor()), "the static method must be compiled");
+        assertFalse(finder.getAsyncFamilyMethods().contains(helper));
+    }
+
+    @SuppressWarnings("unused")
+    public static void staticInterfaceMethodSnippet() throws InterruptedException {
+        var instance = new UsesStaticHelper();
+        instance.helper(5);
+        WithStaticHelper.helper(5);
+        instance.marker();
+    }
+
     private TeaVM build(String methodName, ClassHolderTransformer... transformers) {
         var target = new JavaScriptTarget();
         target.setStrict(true);
@@ -144,5 +211,63 @@ public class AsyncMethodFinderTest {
     }
 
     static final class UsesPrivateHelper extends SuspendingHelperBase implements WithPrivateHelper {
+    }
+
+    interface SubCall extends Call {
+    }
+
+    static class SuspendingGrandparent {
+        public int m(int x) throws InterruptedException {
+            Thread.sleep(5);
+            return x * 3;
+        }
+    }
+
+    static class SuspendingParent extends SuspendingGrandparent {
+    }
+
+    static final class InheritsFromGrandparent extends SuspendingParent implements SubCall {
+    }
+
+    interface OtherCall {
+        int m(int x) throws InterruptedException;
+    }
+
+    abstract static class AbstractInheritsSuspending extends SuspendingGrandparent implements OtherCall {
+    }
+
+    static final class ConcreteFromAbstract extends AbstractInheritsSuspending {
+    }
+
+    interface PlainCall {
+        int m(int x) throws InterruptedException;
+    }
+
+    static class PlainBase {
+        public int m(int x) {
+            return x + 1;
+        }
+    }
+
+    static final class InheritsPlain extends PlainBase implements PlainCall {
+    }
+
+    static final class UnrelatedSuspending {
+        int m(int x) throws InterruptedException {
+            Thread.sleep(1);
+            return x;
+        }
+    }
+
+    interface WithStaticHelper {
+        static int helper(int x) {
+            return x - 1;
+        }
+
+        default void marker() {
+        }
+    }
+
+    static final class UsesStaticHelper extends SuspendingHelperBase implements WithStaticHelper {
     }
 }
