@@ -324,4 +324,23 @@ public class IntegerTest {
     public void toUnsignedLong() {
         assertEquals(0xFFFFFFFFL, Integer.toUnsignedLong(-1));
     }
+
+    @Test
+    public void parseUnsignedInt() {
+        assertEquals(-1, Integer.parseUnsignedInt("4294967295"));
+        assertEquals("3000000000", Integer.toUnsignedString(Integer.parseUnsignedInt("3000000000")));
+        assertEquals(255, Integer.parseUnsignedInt("ff", 16));
+        try {
+            Integer.parseUnsignedInt("4294967296");
+            fail();
+        } catch (NumberFormatException e) {
+            // ok
+        }
+        try {
+            Integer.parseUnsignedInt("-1");
+            fail();
+        } catch (NumberFormatException e) {
+            // ok
+        }
+    }
 }
