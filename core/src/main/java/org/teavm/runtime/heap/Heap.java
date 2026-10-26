@@ -75,6 +75,11 @@ public final class Heap {
 
     @Export(name = "teavm.malloc")
     public static Address alloc(int bytes) {
+        // A request larger than the heap can ever be fails here. Without this check, alignSize overflows for a size
+        // near Integer.MAX_VALUE and returns a small block.
+        if (bytes < 0 || bytes > maxSize) {
+            return null;
+        }
         bytes = alignSize(bytes);
         var result = tryAlloc(bytes);
         if (result == null) {
@@ -91,6 +96,9 @@ public final class Heap {
 
     @Export(name = "teavm.realloc")
     public static Address realloc(Address address, int newSize) {
+        if (newSize < 0 || newSize > maxSize) {
+            return null;
+        }
         newSize = alignSize(newSize);
 
         var record = HeapRecord.recordOf(address);
@@ -158,6 +166,9 @@ public final class Heap {
             return HeapRecord.dataOf(record);
         } else {
             var newRegion = alloc(newSize);
+            if (newRegion == null) {
+                return null;
+            }
             var oldAddress = HeapRecord.dataOf(record);
             Address.moveMemoryBlock(oldAddress, newRegion, oldSize);
             release(oldAddress);
@@ -190,7 +201,8 @@ public final class Heap {
     }
 
     private static boolean tryExtend(int bytes, HeapRecord last) {
-        if (currentSize + bytes > maxSize) {
+        // Written as a subtraction: currentSize + bytes can overflow int.
+        if (bytes > maxSize - currentSize) {
             return false;
         }
         var grownBytes = grow(bytes);

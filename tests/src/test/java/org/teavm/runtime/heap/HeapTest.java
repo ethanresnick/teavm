@@ -259,6 +259,36 @@ public class HeapTest {
         check();
     }
 
+    @Test
+    public void allocLargerThanMaxSizeFails() {
+        var a = Heap.alloc(256);
+        assertEquals(0, Heap.alloc(Integer.MAX_VALUE).toInt());
+        assertEquals(0, Heap.alloc(Integer.MAX_VALUE - 7).toInt());
+        assertEquals(0, Heap.alloc(-1).toInt());
+        if (Heap.getMaxSize() < Integer.MAX_VALUE) {
+            assertEquals(0, Heap.alloc(Heap.getMaxSize() + 1).toInt());
+        }
+        assertEquals(0, Heap.realloc(a, Integer.MAX_VALUE).toInt());
+        check();
+        var b = Heap.alloc(256);
+        assertTrue(b.toInt() != 0);
+        Heap.release(a);
+        Heap.release(b);
+        check();
+    }
+
+    @Test
+    public void growReportsFailure() {
+        // 32767 pages on top of the current memory (at least 2 pages) exceed the Wasm GC module's maximum of 32768
+        // pages, so memory.grow fails. Heap.grow must then report 0 bytes. The heap itself does not change.
+        assertEquals(0, Heap.grow(32767 * 65536));
+        check();
+        var a = Heap.alloc(256);
+        assertTrue(a.toInt() != 0);
+        Heap.release(a);
+        check();
+    }
+
     // This test is not stable, so I would not add it to CI.
     // Instead, it's useful to uncomment and run it when things should be updated in Heap
     public void randomAlloc() {
