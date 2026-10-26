@@ -423,4 +423,11 @@ public class StringTest {
         assertEquals("", " ".stripIndent());
         assertEquals("\n", " \n ".stripIndent());
     }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    public void hibyteConstructor() {
+        assertEquals("Hi", new String(new byte[] { 72, 105 }, 0, 0, 2));
+        assertEquals("Łł", new String(new byte[] { 65, 66 }, 1, 0, 2));
+    }
 }
