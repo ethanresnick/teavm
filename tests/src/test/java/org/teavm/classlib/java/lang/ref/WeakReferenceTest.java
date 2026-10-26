@@ -18,6 +18,7 @@ package org.teavm.classlib.java.lang.ref;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -48,7 +49,6 @@ public class WeakReferenceTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT})
     public void deref() {
         var ref = createAndTestRef(null);
         GCSupport.tryToTriggerGC(ref);
@@ -56,7 +56,6 @@ public class WeakReferenceTest {
     }
 
     @Test
-    @SkipPlatform({TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT})
     public void refQueue() {
         var queue = new ReferenceQueue<>();
         var ref = createAndTestRef(queue);
@@ -84,7 +83,9 @@ public class WeakReferenceTest {
     }
 
     @Test
-    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC, TestPlatform.JAVASCRIPT })
+    // On Wasm GC, ReferenceQueue.supply does not call reportNext, so a thread in remove() never wakes up.
+    // On C, ReferenceQueueGenerator generates an empty body for remove(), so remove() returns garbage.
+    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC })
     public void queueRemove() throws InterruptedException {
         var queue = new ReferenceQueue<>();
         var ref = createAndTestRef(queue);
@@ -104,11 +105,17 @@ public class WeakReferenceTest {
         assertSame(ref, result);
     }
 
-    private WeakReference<Object> createAndTestRef(ReferenceQueue<Object> queue) {
-        var obj = new Object();
-        var ref = new WeakReference<>(obj, queue);
-        assertSame(obj, ref.get());
-        return ref;
+    private static WeakReference<Object> createAndTestRef(ReferenceQueue<Object> queue) {
+        var refs = new ArrayList<WeakReference<Object>>();
+        var referentReturned = new boolean[1];
+        runInAnotherThread(() -> {
+            var obj = new Object();
+            var ref = new WeakReference<>(obj, queue);
+            referentReturned[0] = ref.get() == obj;
+            refs.add(ref);
+        });
+        assertTrue(referentReturned[0]);
+        return refs.get(0);
     }
 
     @Test
