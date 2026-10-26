@@ -381,6 +381,28 @@ public class SimpleDateFormatTest {
         assertTrue(position.getErrorIndex() >= 0, text);
     }
 
+    @Test
+    public void gmtFollowedByTextParsed() {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
+        ParsePosition position = new ParsePosition(0);
+        Date date = format.parse("2014-06-24 09:33:49 GMT rest", position);
+        assertEquals(-1, position.getErrorIndex());
+        assertEquals(23, position.getIndex());
+        assertEquals(1403602429000L, date.getTime());
+    }
+
+    @Test
+    public void gmtBeforeOtherFieldsParsed() {
+        assertEquals(1403602429000L, parseFully(new SimpleDateFormat("z yyyy-MM-dd HH:mm:ss", Locale.ENGLISH),
+                "GMT 2014-06-24 09:33:49"));
+    }
+
+    @Test
+    public void gmtBeforeLiteralTextParsed() {
+        assertEquals(1403602429000L, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z '(x)'", Locale.ENGLISH),
+                "2014-06-24 09:33:49 GMT (x)"));
+    }
+
     private long parseFully(SimpleDateFormat format, String text) {
         ParsePosition position = new ParsePosition(0);
         Date date = format.parse(text, position);
