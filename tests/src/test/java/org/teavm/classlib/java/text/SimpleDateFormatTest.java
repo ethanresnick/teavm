@@ -190,6 +190,19 @@ public class SimpleDateFormatTest {
         assertEquals(1403602429000L - 1800_000L, parseFully(format, "2014-06-24 09:33:49 +00:30"));
     }
 
+    @Test
+    public void lowerCaseGmtWithOffsetParsed() {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
+        assertEquals(1403602429000L - 5 * 3600_000L - 1800_000L, parseFully(format, "2014-06-24 09:33:49 gmt+05:30"));
+    }
+
+    @Test
+    public void mixedCaseGmtWithOffsetParsed() {
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
+        assertEquals(1403602429000L + 3600_000L, parseFully(format, "2014-06-24 09:33:49 Gmt-01:00"));
+        assertEquals(1403602429000L - 3600_000L, parseFully(format, "2014-06-24 09:33:49 gMT+1:00"));
+    }
+
     private long parseFully(SimpleDateFormat format, String text) {
         ParsePosition position = new ParsePosition(0);
         Date date = format.parse(text, position);
