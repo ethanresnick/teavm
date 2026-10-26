@@ -28,6 +28,9 @@ public class TInflater implements TAutoCloseable {
     int inLength;
     int inRead;
     private boolean needsDictionary;
+    // The zlib header's two bytes, kept as inflate consumes them (see the Z_NEED_DICT case).
+    private final byte[] header = new byte[2];
+    private int headerLength;
     private Inflater impl;
 
     public TInflater() {
@@ -112,7 +115,29 @@ public class TInflater implements TAutoCloseable {
         needsDictionary = false;
         impl.setOutput(buf, off, nbytes);
 
+        byte[] inArray = impl.next_in;
+        int inIndex = impl.next_in_index;
         int errCode = impl.inflate(0);
+        if (!nowrap && headerLength < 2) {
+            long upTo = Math.min(2, impl.total_in);
+            for (long k = Math.max(lastInSize, headerLength); k < upTo; k++) {
+                header[(int) k] = inArray[inIndex + (int) (k - lastInSize)];
+            }
+            headerLength = (int) upTo;
+            // Zlib's header checks, in zlib's order. jzlib checks none of them before it inflates.
+            if (headerLength == 2) {
+                int cmf = header[0] & 0xFF;
+                if (((cmf << 8) | (header[1] & 0xFF)) % 31 != 0) {
+                    throw new TDataFormatException();
+                }
+                if ((cmf & 0x0F) != 8) {
+                    throw new TDataFormatException();
+                }
+                if ((cmf >> 4) + 8 > 15) {
+                    throw new TDataFormatException();
+                }
+            }
+        }
         switch (errCode) {
             case JZlib.Z_OK:
                 break;
@@ -121,6 +146,10 @@ public class TInflater implements TAutoCloseable {
                 break;
             case JZlib.Z_STREAM_END:
                 finished = true;
+                break;
+            case JZlib.Z_BUF_ERROR:
+                // Zlib reports "no progress possible" this way. The JDK's Inflater returns 0 bytes for it, not an
+                // error.
                 break;
             default:
                 throw new TDataFormatException("Error occurred: " + errCode);
@@ -143,6 +172,7 @@ public class TInflater implements TAutoCloseable {
     }
 
     public void reset() {
+        headerLength = 0;
         if (impl == null) {
             throw new NullPointerException();
         }
