@@ -212,4 +212,35 @@ public class RandomTest {
         assertEquals(0.7308781907032909, rand.nextDouble(), 1e-5);
         assertEquals(0.41008081149220166, rand.nextDouble(), 1e-5);
     }
+
+    @Test
+    public void seededBoundedIntsAreTheJdkOnes() {
+        Random rand = new Random(42);
+        assertArrayEquals(new int[] { 6, 41, 34, 54, 2, 59, 3, 32 },
+                IntStream.range(0, 8).map(i -> rand.nextInt(62)).toArray());
+        Random rand2 = new Random(42);
+        assertArrayEquals(new int[] { 130, 763, 248, 884, 970 },
+                IntStream.range(0, 5).map(i -> rand2.nextInt(1000)).toArray());
+        Random rand3 = new Random(42);
+        assertArrayEquals(new int[] { 46, 3, 43, 3, 19 }, IntStream.range(0, 5).map(i -> rand3.nextInt(64)).toArray());
+        Random rand4 = new Random(42);
+        assertArrayEquals(new int[] { 7, 8, 5, 13, 11 },
+                IntStream.range(0, 5).map(i -> rand4.nextInt(5, 17)).toArray());
+        Random rand5 = new Random(42);
+        assertArrayEquals(new int[] { 234785527, 205897768, 1325939940 },
+                IntStream.range(0, 3).map(i -> rand5.nextInt(-3, Integer.MAX_VALUE)).toArray());
+    }
+
+    @Test
+    public void seededBoundedLongsAreTheJdkOnes() {
+        Random rand = new Random(42);
+        assertArrayEquals(new long[] { 891, 940, 997, 398, 717 },
+                IntStream.range(0, 5).mapToLong(i -> rand.nextLong(1000)).toArray());
+        Random rand2 = new Random(42);
+        assertArrayEquals(new long[] { 227868052215L, 966573539368L, 979003751243L },
+                IntStream.range(0, 3).mapToLong(i -> rand2.nextLong(1L << 40)).toArray());
+        Random rand3 = new Random(42);
+        assertArrayEquals(new long[] { 340114562, 114286899, 86493332 },
+                IntStream.range(0, 3).mapToLong(i -> rand3.nextLong(-5, 1_000_000_007L)).toArray());
+    }
 }

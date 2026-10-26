@@ -58,6 +58,128 @@ public class TRandom extends TObject implements TRandomGenerator, TSerializable 
         return ((long) nextInt() << 32) + nextInt();
     }
 
+    // The JDK's algorithms for the methods below, so a seeded Random gives the JDK's sequences. The RandomGenerator
+    // defaults differ. The default nextInt(bound) masks the low bits of nextInt(), and the low bits of a linear
+    // congruential generator have a short period.
+
+    @Override
+    public int nextInt(int bound) {
+        if (bound <= 0) {
+            throw new IllegalArgumentException();
+        }
+        int r = next(31);
+        int m = bound - 1;
+        if ((bound & m) == 0) {
+            r = (int) ((bound * (long) r) >> 31);
+        } else {
+            int u = r;
+            while (true) {
+                r = u % bound;
+                if (u - r + m >= 0) {
+                    break;
+                }
+                // rejected: u was in the incomplete last range
+                u = next(31);
+            }
+        }
+        return r;
+    }
+
+    /** The JDK's RandomSupport.boundedNextInt. */
+    @Override
+    public int nextInt(int origin, int bound) {
+        if (origin >= bound) {
+            throw new IllegalArgumentException();
+        }
+        int r = nextInt();
+        int n = bound - origin;
+        int m = n - 1;
+        if ((n & m) == 0) {
+            r = (r & m) + origin;
+        } else if (n > 0) {
+            int u = r >>> 1;
+            while (true) {
+                r = u % n;
+                if (u + m - r >= 0) {
+                    break;
+                }
+                u = nextInt() >>> 1;
+            }
+            r += origin;
+        } else {
+            while (r < origin || r >= bound) {
+                r = nextInt();
+            }
+        }
+        return r;
+    }
+
+    /** The JDK's RandomSupport.boundedNextLong(rng, bound). */
+    @Override
+    public long nextLong(long bound) {
+        if (bound <= 0) {
+            throw new IllegalArgumentException();
+        }
+        long m = bound - 1;
+        long r = nextLong();
+        if ((bound & m) == 0L) {
+            r &= m;
+        } else {
+            long u = r >>> 1;
+            while (true) {
+                r = u % bound;
+                if (u + m - r >= 0L) {
+                    break;
+                }
+                u = nextLong() >>> 1;
+            }
+        }
+        return r;
+    }
+
+    /** The JDK's RandomSupport.boundedNextLong(rng, origin, bound). */
+    @Override
+    public long nextLong(long origin, long bound) {
+        if (origin >= bound) {
+            throw new IllegalArgumentException();
+        }
+        long r = nextLong();
+        long n = bound - origin;
+        long m = n - 1;
+        if ((n & m) == 0L) {
+            r = (r & m) + origin;
+        } else if (n > 0L) {
+            long u = r >>> 1;
+            while (true) {
+                r = u % n;
+                if (u + m - r >= 0L) {
+                    break;
+                }
+                u = nextLong() >>> 1;
+            }
+            r += origin;
+        } else {
+            while (r < origin || r >= bound) {
+                r = nextLong();
+            }
+        }
+        return r;
+    }
+
+    @Override
+    public boolean nextBoolean() {
+        return next(1) != 0;
+    }
+
+    @Override
+    public void nextBytes(byte[] bytes) {
+        for (int i = 0, len = bytes.length; i < len;) {
+            for (int rnd = nextInt(), n = Math.min(len - i, Integer.SIZE / Byte.SIZE); n-- > 0; rnd >>= Byte.SIZE) {
+                bytes[i++] = (byte) rnd;
+            }
+        }
+    }
+
     @Override
     public float nextFloat() {
         return next(24) * 0x1p-24f;
