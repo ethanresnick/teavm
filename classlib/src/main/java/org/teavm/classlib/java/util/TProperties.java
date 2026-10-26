@@ -441,7 +441,15 @@ public class TProperties extends THashtable<Object, Object> {
         if (defaults != null) {
             defaults.selectProperties(selected);
         }
-        selected.putAll(this);
+        // As in the JDK, propertyNames() (and list(), which uses it) throws ClassCastException when a
+        // key is not a String.
+        for (TIterator<TMap.Entry<Object, Object>> iter = entrySet().iterator(); iter.hasNext();) {
+            TMap.Entry<Object, Object> entry = iter.next();
+            if (!(entry.getKey() instanceof String)) {
+                throw new ClassCastException();
+            }
+            selected.put(entry.getKey(), entry.getValue());
+        }
     }
 
     @Deprecated
@@ -516,11 +524,11 @@ public class TProperties extends THashtable<Object, Object> {
             defaults.selectPropertyNames(selected);
         }
 
-        TEnumeration<Object> e = keys();
-        while (e.hasMoreElements()) {
-            Object key = e.nextElement();
-            if (key instanceof String) {
-                selected.add((String) key);
+        // As in the JDK, a key counts only when both it and its value are Strings.
+        for (TIterator<TMap.Entry<Object, Object>> iter = entrySet().iterator(); iter.hasNext();) {
+            TMap.Entry<Object, Object> entry = iter.next();
+            if (entry.getKey() instanceof String && entry.getValue() instanceof String) {
+                selected.add((String) entry.getKey());
             }
         }
     }
