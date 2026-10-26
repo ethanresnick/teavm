@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -256,5 +257,64 @@ public class FloatTest {
         assertEquals(314576016f, Float.parseFloat("314576016"), 0);
         assertEquals(19379349f, Float.parseFloat("19379349"), 0);
         assertEquals(4.5666056E8f, Float.parseFloat("4.5666056E8"), 0);
+    }
+
+    // Known gap: FloatAnalyzer multiplies by truncated 32-bit powers of ten, so a decimal very close to an edge
+    // of the rounding interval, or to the midpoint between two candidates, can go to the wrong side. Each value
+    // below is written differently from the JDK, and most are written as a decimal that does not parse back.
+    // Expected strings are the JDK's.
+    @Test
+    @Disabled("Known gap: precision of the power-of-ten table in FloatAnalyzer")
+    public void toStringNearIntervalEdgeKnownGap() {
+        var failures = new StringBuilder();
+        checkToString(failures, 6.9255703E-20f, "6.9255703E-20");
+        checkToString(failures, 6.1547434E29f, "6.1547434E29");
+        checkToString(failures, 5.0565014E-16f, "5.0565014E-16");
+        checkToString(failures, 2.3443956E15f, "2.3443956E15");
+        checkToString(failures, 1.37940825E32f, "1.37940825E32");
+        checkToString(failures, 2.1088571E-8f, "2.1088571E-8");
+        checkToString(failures, 4.4242392E28f, "4.4242392E28");
+        checkToString(failures, 5.48341E-40f, "5.48341E-40");
+        checkToString(failures, 6.10071E-40f, "6.10071E-40");
+        checkToString(failures, 7.55331E-40f, "7.55331E-40");
+        if (failures.length() > 0) {
+            fail(failures.toString());
+        }
+    }
+
+    private static void checkToString(StringBuilder failures, float f, String expected) {
+        var actual = Float.toString(f);
+        if (!actual.equals(expected)) {
+            failures.append("expected ").append(expected).append(" but was ").append(actual).append("; ");
+        }
+    }
+
+    // Known gap: FloatSynthesizer has the same table-precision limit, so these decimals, which the JDK writes,
+    // parse to a neighbor of the float the JDK gives. Float.valueOf(String): the exact value "is then
+    // conceptually converted to an 'infinitely precise' binary value that is then rounded to type float by the
+    // usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
+    @Test
+    @Disabled("Known gap: precision of the power-of-ten table in FloatSynthesizer")
+    public void parseNearMidpointKnownGap() {
+        var failures = new StringBuilder();
+        checkParse(failures, "1.1159609E-10", 1.1159609E-10f);
+        checkParse(failures, "4.499237E-34", 4.499237E-34f);
+        checkParse(failures, "6.10193E34", 6.10193E34f);
+        checkParse(failures, "1.687857E-32", 1.687857E-32f);
+        checkParse(failures, "1.3436E-40", 1.3436E-40f);
+        checkParse(failures, "4.0308E-40", 4.0308E-40f);
+        checkParse(failures, "6.718E-40", 6.718E-40f);
+        checkParse(failures, "9.4052E-40", 9.4052E-40f);
+        if (failures.length() > 0) {
+            fail(failures.toString());
+        }
+    }
+
+    private static void checkParse(StringBuilder failures, String s, float expected) {
+        var actual = Float.parseFloat(s);
+        if (actual != expected) {
+            failures.append(s).append(" parsed to bits ").append(Integer.toHexString(Float.floatToIntBits(actual)))
+                    .append(" instead of ").append(Integer.toHexString(Float.floatToIntBits(expected))).append("; ");
+        }
     }
 }

@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.Random;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -293,6 +294,65 @@ public class DoubleTest {
         for (var i = 0; i < 20000; ++i) {
             var d = Math.scalb(1 + random.nextDouble(), 53 + random.nextInt(12));
             assertEquals(d, Double.parseDouble(Double.toString(d)), 0);
+        }
+    }
+
+    // Known gap: DoubleAnalyzer multiplies by truncated 64-bit powers of ten, so a decimal very close to an edge
+    // of the rounding interval, or to the midpoint between two candidates, can go to the wrong side. Each value
+    // below is written differently from the JDK, and the subnormal ones and 1.6439167945475462E-67 are written as
+    // a decimal that does not parse back. Expected strings are the JDK's.
+    @Test
+    @Disabled("Known gap: precision of the power-of-ten table in DoubleAnalyzer")
+    public void toStringNearIntervalEdgeKnownGap() {
+        var failures = new StringBuilder();
+        checkToString(failures, 1E126, "1.0E126");
+        checkToString(failures, 2.9866777770622487E-68, "2.9866777770622487E-68");
+        checkToString(failures, 8.149551566440249E-118, "8.149551566440249E-118");
+        checkToString(failures, 2.9362303787435153E153, "2.9362303787435153E153");
+        checkToString(failures, 1.6439167945475462E-67, "1.6439167945475462E-67");
+        checkToString(failures, 9.539897001926882E-309, "9.539897001926882E-309");
+        checkToString(failures, 1.0436252483415902E-308, "1.0436252483415902E-308");
+        checkToString(failures, 1.5238698338848862E-308, "1.5238698338848862E-308");
+        checkToString(failures, 2.2250738584111362E-308, "2.2250738584111362E-308");
+        if (failures.length() > 0) {
+            fail(failures.toString());
+        }
+    }
+
+    private static void checkToString(StringBuilder failures, double d, String expected) {
+        var actual = Double.toString(d);
+        if (!actual.equals(expected)) {
+            failures.append("expected ").append(expected).append(" but was ").append(actual).append("; ");
+        }
+        if (Double.parseDouble(actual) != d) {
+            failures.append(actual).append(" does not parse back to ").append(expected).append("; ");
+        }
+    }
+
+    // Known gap: DoubleSynthesizer has the same table-precision limit, so these decimals, which the JDK writes,
+    // parse to a neighbor of the double the JDK gives. Double.valueOf(String): the exact value "is then
+    // conceptually converted to an 'infinitely precise' binary value that is then rounded to type double by the
+    // usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
+    @Test
+    @Disabled("Known gap: precision of the power-of-ten table in DoubleSynthesizer")
+    public void parseNearMidpointKnownGap() {
+        var failures = new StringBuilder();
+        checkParse(failures, "2.807569972855083E137", 2.807569972855083E137);
+        checkParse(failures, "3.185971058067586E202", 3.185971058067586E202);
+        checkParse(failures, "3.093933428094499E-10", 3.093933428094499E-10);
+        checkParse(failures, "1.6161557140473E217", 1.6161557140473E217);
+        checkParse(failures, "1.654925151066461E-139", 1.654925151066461E-139);
+        checkParse(failures, "1.276790740084915E228", 1.276790740084915E228);
+        if (failures.length() > 0) {
+            fail(failures.toString());
+        }
+    }
+
+    private static void checkParse(StringBuilder failures, String s, double expected) {
+        var actual = Double.parseDouble(s);
+        if (actual != expected) {
+            failures.append(s).append(" parsed to bits ").append(Long.toHexString(Double.doubleToLongBits(actual)))
+                    .append(" instead of ").append(Long.toHexString(Double.doubleToLongBits(expected))).append("; ");
         }
     }
 }
