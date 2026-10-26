@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.OnlyPlatform;
@@ -36,5 +37,19 @@ public class SecureRandomTest {
         for (var elem : array) {
             assertTrue(elem > 0, "Each number must be generated at least once");
         }
+    }
+
+    @Test
+    public void strongInstanceGivesRandomBytes() throws NoSuchAlgorithmException {
+        var random = SecureRandom.getInstanceStrong();
+        var bytes = new byte[64];
+        random.nextBytes(bytes);
+        var nonZero = 0;
+        for (var b : bytes) {
+            if (b != 0) {
+                nonZero++;
+            }
+        }
+        assertTrue(nonZero > 32);
     }
 }

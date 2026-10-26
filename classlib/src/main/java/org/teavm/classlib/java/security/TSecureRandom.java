@@ -47,6 +47,11 @@ public class TSecureRandom extends TRandom {
         return new TSecureRandom();
     }
 
+    // crypto.getRandomValues is the strongest source available, the same one that getInstance("NativePRNG") uses.
+    public static TSecureRandom getInstanceStrong() throws TNoSuchAlgorithmException {
+        return getInstance("NativePRNGBlocking");
+    }
+
     public String getAlgorithm() {
         return "NativePRNG";
     }
