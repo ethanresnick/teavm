@@ -87,6 +87,7 @@ import org.teavm.backend.wasm.model.instruction.WasmFloatType;
 import org.teavm.backend.wasm.model.instruction.WasmFragmentBuilder;
 import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
 import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
+import org.teavm.backend.wasm.model.instruction.WasmInt32Constant;
 import org.teavm.backend.wasm.model.instruction.WasmInt32Subtype;
 import org.teavm.backend.wasm.model.instruction.WasmInt64Subtype;
 import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
@@ -97,6 +98,7 @@ import org.teavm.backend.wasm.model.instruction.WasmNullCondition;
 import org.teavm.backend.wasm.model.instruction.WasmReturn;
 import org.teavm.backend.wasm.model.instruction.WasmSignedType;
 import org.teavm.backend.wasm.runtime.StringInternPool;
+import org.teavm.backend.wasm.runtime.WasmGCSupport;
 import org.teavm.backend.wasm.types.PreciseTypeInference;
 import org.teavm.model.ElementModifier;
 import org.teavm.model.FieldReference;
@@ -887,6 +889,7 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
         builder.pushLocation(expr.getLocation());
         WasmGCGenerationUtil.emitClassInfoLiteral(context.classInfoProvider(), builder, expr.getType());
         accept(expr.getLength(), builder, WasmType.INT32);
+        checkArrayLength();
         builder.call(context.classInfoProvider().getArrayConstructor(expr.getType()));
         builder.popLocation();
     }
@@ -901,6 +904,7 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
                 ((ValueType.Array) expr.getType()).getItemType());
         for (var dimension : expr.getDimensions()) {
             accept(dimension, builder, WasmType.INT32);
+            checkArrayLength();
         }
         builder.call(context.classInfoProvider().getMultiArrayConstructor(expr.getDimensions().size()));
         builder.popLocation();
@@ -1780,6 +1784,32 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
         } else {
             virtualCall(expr);
         }
+    }
+
+    /**
+     * Throws NegativeArraySizeException when the array length on the stack is negative, as the JVM does,
+     * and leaves the length on the stack. array.new_default takes the length as unsigned, so a negative length
+     * trapped with "requested new array is too large", which no Java code can catch, and the process ended. A
+     * constant length that is not negative needs no check.
+     */
+    private void checkArrayLength() {
+        var last = builder.list.isEmpty() ? null : builder.list.getLast();
+        if (last instanceof WasmInt32Constant && ((WasmInt32Constant) last).getValue() >= 0) {
+            return;
+        }
+        var length = valueCache.create(WasmType.INT32, builder);
+        builder.drop();
+        var block = builder.block();
+        block
+                .append(length)
+                .i32Const(0)
+                .intBinary(WasmIntType.INT32, WasmIntBinaryOperation.GE_SIGNED)
+                .branch(block.list);
+        block.call(context.functions().forStaticMethod(new MethodReference(WasmGCSupport.class, "nase",
+                NegativeArraySizeException.class)));
+        block.throw_(context.getExceptionTag());
+        builder.append(length);
+        length.release();
     }
 
     private void generateThrowNpe(WasmInstructionBuilder target) {

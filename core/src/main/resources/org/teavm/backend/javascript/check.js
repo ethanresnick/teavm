@@ -33,6 +33,12 @@ let $rt_checkLowerBound = index => {
     }
     return index;
 }
+let $rt_checkArrayLength = length => {
+    if (length < 0) {
+        $rt_throwNASE();
+    }
+    return length;
+}
 
 let $rt_nullCheck = val => {
     if (val === null) {

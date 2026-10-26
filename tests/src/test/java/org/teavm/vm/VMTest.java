@@ -19,8 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -927,5 +929,30 @@ public class VMTest {
         static String value() {
             return VALUE;
         }
+    }
+
+    // Each array goes to a field: the optimizer removes an allocation whose result nothing uses, and with it the
+    // length check.
+    private static Object arraySink;
+
+    // The C backend does not check array lengths: it throws nothing for a negative length.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void negativeArrayLengthThrows() {
+        int[] lengths = { -1, Integer.MIN_VALUE };
+        for (var length : lengths) {
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new byte[length]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new long[length]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new Object[length]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new int[length][2]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new int[2][length]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = Array.newInstance(String.class, length));
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = Arrays.copyOf(new byte[1], length));
+        }
+        assertEquals(0, new int[zeroLength()].length);
+    }
+
+    private static int zeroLength() {
+        return 0;
     }
 }
