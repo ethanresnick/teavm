@@ -205,4 +205,13 @@ public class SystemTest {
             assertNotNull(System.getProperty(name), name);
         }
     }
+
+    @Test
+    public void getenvMapAgreesWithGetenv() {
+        var env = System.getenv();
+        assertNotNull(env);
+        for (var entry : env.entrySet()) {
+            assertEquals(entry.getValue(), System.getenv(entry.getKey()));
+        }
+    }
 }

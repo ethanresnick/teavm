@@ -336,6 +336,11 @@ public final class TSystem extends TObject {
         return null;
     }
 
+    // The environment is empty, as getenv(String) says.
+    public static java.util.Map<String, String> getenv() {
+        return java.util.Collections.emptyMap();
+    }
+
     public static Logger getLogger(String name) {
         return ConsoleLogger.INSTANCE;
     }
