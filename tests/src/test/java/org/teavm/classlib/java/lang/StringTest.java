@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -422,5 +423,11 @@ public class StringTest {
         assertEquals("abc\n\ndef\n", " abc\r\n \n def\r ".stripIndent());
         assertEquals("", " ".stripIndent());
         assertEquals("\n", " \n ".stripIndent());
+    }
+
+    @Test
+    public void utf8DecodingOfTruncatedSequences() {
+        assertEquals("��", new String(new byte[] { (byte) 0xF5, (byte) 0xB0 }, StandardCharsets.UTF_8));
+        assertEquals("�", new String(new byte[] { (byte) 0xE4, (byte) 0xB8 }, StandardCharsets.UTF_8));
     }
 }

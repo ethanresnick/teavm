@@ -128,6 +128,10 @@ public final class TString extends TObject implements TSerializable, TComparable
     }
 
     private void initWithBytes(byte[] bytes, int offset, int length, TCharset charset) {
+        if (charset == TUTF8Charset.INSTANCE) {
+            takeCharArray(decodeUtf8(bytes, offset, length));
+            return;
+        }
         TCharBuffer buffer = charset.decode(TByteBuffer.wrap(bytes, offset, length));
         char[] characters;
         if (buffer.hasArray() && buffer.position() == 0 && buffer.limit() == buffer.capacity()) {
@@ -137,6 +141,107 @@ public final class TString extends TObject implements TSerializable, TComparable
             buffer.get(characters);
         }
         takeCharArray(characters);
+    }
+
+    // The JDK's String decoding of UTF-8 (String.decodeUTF8_UTF16 with replacement). It differs from the JDK's
+    // CharsetDecoder at the end of the input: for example, F5 B0 at the end is two U+FFFD here and one from the
+    // decoder. It also avoids the decoder's buffers on this common path.
+    private static char[] decodeUtf8(byte[] src, int offset, int length) {
+        char[] dst = new char[length];
+        int sp = offset;
+        int sl = offset + length;
+        int dp = 0;
+        char repl = '\ufffd';
+        while (sp < sl) {
+            int b1 = src[sp++];
+            if (b1 >= 0) {
+                dst[dp++] = (char) b1;
+            } else if ((b1 >> 5) == -2 && (b1 & 0x1e) != 0) {
+                if (sp < sl) {
+                    int b2 = src[sp++];
+                    if (utf8NotContinuation(b2)) {
+                        dst[dp++] = repl;
+                        sp--;
+                    } else {
+                        dst[dp++] = (char) (((b1 & 0x1F) << 6) | (b2 & 0x3F));
+                    }
+                    continue;
+                }
+                dst[dp++] = repl;
+                break;
+            } else if ((b1 >> 4) == -2) {
+                if (sp + 1 < sl) {
+                    int b2 = src[sp++];
+                    int b3 = src[sp++];
+                    if (utf8Malformed3Prefix(b1, b2) || utf8NotContinuation(b3)) {
+                        dst[dp++] = repl;
+                        sp -= 3;
+                        sp += utf8Malformed3Prefix(b1, b2) ? 1 : 2;
+                    } else {
+                        char c = (char) (((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F));
+                        dst[dp++] = Character.isSurrogate(c) ? repl : c;
+                    }
+                    continue;
+                }
+                if (sp < sl && utf8Malformed3Prefix(b1, src[sp])) {
+                    dst[dp++] = repl;
+                    continue;
+                }
+                dst[dp++] = repl;
+                break;
+            } else if ((b1 >> 3) == -2) {
+                if (sp + 2 < sl) {
+                    int b2 = src[sp++];
+                    int b3 = src[sp++];
+                    int b4 = src[sp++];
+                    int uc = ((b1 & 0x07) << 18) | ((b2 & 0x3F) << 12) | ((b3 & 0x3F) << 6) | (b4 & 0x3F);
+                    if (utf8NotContinuation(b2) || utf8NotContinuation(b3) || utf8NotContinuation(b4)
+                            || !Character.isSupplementaryCodePoint(uc)) {
+                        dst[dp++] = repl;
+                        sp -= 4;
+                        int c1 = src[sp] & 0xff;
+                        int c2 = src[sp + 1] & 0xff;
+                        if (c1 > 0xf4 || utf8Malformed4Prefix(c1, c2)) {
+                            sp += 1;
+                        } else if (utf8NotContinuation(src[sp + 2])) {
+                            sp += 2;
+                        } else {
+                            sp += 3;
+                        }
+                    } else {
+                        dst[dp++] = Character.highSurrogate(uc);
+                        dst[dp++] = Character.lowSurrogate(uc);
+                    }
+                    continue;
+                }
+                b1 &= 0xff;
+                if (b1 > 0xf4 || sp < sl && utf8Malformed4Prefix(b1, src[sp] & 0xff)) {
+                    dst[dp++] = repl;
+                    continue;
+                }
+                sp++;
+                dst[dp++] = repl;
+                if (sp < sl && utf8NotContinuation(src[sp])) {
+                    continue;
+                }
+                break;
+            } else {
+                dst[dp++] = repl;
+            }
+        }
+        return dp == dst.length ? dst : TArrays.copyOf(dst, dp);
+    }
+
+    private static boolean utf8NotContinuation(int b) {
+        return (b & 0xc0) != 0x80;
+    }
+
+    private static boolean utf8Malformed3Prefix(int b1, int b2) {
+        return (b1 == (byte) 0xe0 && (b2 & 0xe0) == 0x80) || (b2 & 0xc0) != 0x80;
+    }
+
+    private static boolean utf8Malformed4Prefix(int b1, int b2) {
+        return (b1 == 0xf0 && (b2 < 0x90 || b2 > 0xbf)) || (b1 == 0xf4 && (b2 & 0xf0) != 0x80) || (b2 & 0xc0) != 0x80;
     }
 
     public TString(TStringBuffer sb) {
