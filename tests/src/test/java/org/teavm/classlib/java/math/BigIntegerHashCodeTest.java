@@ -36,6 +36,7 @@
 
 package org.teavm.classlib.java.math;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
@@ -93,5 +94,31 @@ public class BigIntegerHashCodeTest {
         if (!aNumber1.equals(aNumber2)) {
             assertTrue(code1 != code2, "hash codes for unequal objects are equal");
         }
+    }
+
+    @Test
+    public void equalValuesBuiltDifferentlyHashAlike() {
+        BigInteger p = new BigInteger("115792089210356248762697446949407573530086143415290314195533631308867097853951");
+        BigInteger[] equal = {
+                new BigInteger(p.toString(16), 16),
+                new BigInteger(1, p.toByteArray()),
+                BigInteger.ONE.shiftLeft(256).subtract(BigInteger.ONE.shiftLeft(224)).add(BigInteger.ONE.shiftLeft(192))
+                        .add(BigInteger.ONE.shiftLeft(96)).subtract(BigInteger.ONE),
+                p.add(BigInteger.TEN).subtract(BigInteger.TEN)
+        };
+        for (BigInteger x : equal) {
+            assertEquals(p, x);
+            assertEquals(p.hashCode(), x.hashCode());
+        }
+        BigInteger twoTo100 = BigInteger.ONE.shiftLeft(100);
+        assertEquals(3, twoTo100.add(BigInteger.valueOf(3)).subtract(twoTo100).hashCode());
+        assertEquals(0, twoTo100.subtract(twoTo100).hashCode());
+    }
+
+    @Test
+    public void hashCodeIsTheJdkOne() {
+        assertEquals(-1, BigInteger.ONE.negate().hashCode());
+        assertEquals(16 * 31 * 31 * 31, BigInteger.ONE.shiftLeft(100).hashCode());
+        assertEquals(31 * 7 + 5, new BigInteger("30064771077").hashCode());
     }
 }
