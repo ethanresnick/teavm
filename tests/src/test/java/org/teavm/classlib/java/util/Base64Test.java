@@ -300,4 +300,37 @@ public class Base64Test {
         assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(bad));
         assertEquals(0, bad.position());
     }
+
+    @Test
+    public void mimeEncoderWrapsLines() {
+        var bytes = new byte[60];
+        for (var i = 0; i < bytes.length; ++i) {
+            bytes[i] = (byte) (i * 7);
+        }
+        assertEquals("AAcOFRwjKjE4P0ZNVFtiaXB3foWMk5qhqK+2vcTL0tng5+71/AMKERgfJi00O0JJUFdeZWxzeoGI\r\nj5ad",
+                Base64.getMimeEncoder().encodeToString(bytes));
+        // 57 bytes fill one line of 76 characters exactly, and no separator follows the last line.
+        assertEquals(76, Base64.getMimeEncoder().encodeToString(new byte[57]).length());
+        var tenBytes = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+        // The line length rounds down to a multiple of 4.
+        assertEquals("AQIDBAUG\nBwgJCg==", Base64.getMimeEncoder(10, new byte[] { '\n' }).encodeToString(tenBytes));
+        // A line length under 4 means no line breaks.
+        assertEquals("AQIDBAUGBwgJCg==", Base64.getMimeEncoder(3, new byte[] { '\n' }).encodeToString(tenBytes));
+        assertEquals("AQIDBAUG\nBwgJCg", Base64.getMimeEncoder(10, new byte[] { '\n' }).withoutPadding()
+                .encodeToString(tenBytes));
+        assertThrows(IllegalArgumentException.class, () -> Base64.getMimeEncoder(76, new byte[] { 'A' }));
+    }
+
+    @Test
+    public void mimeDecoderSkipsCharactersOutsideAlphabet() {
+        assertEquals("ABCDEF", new String(Base64.getMimeDecoder().decode("QU*J\r\nDR EVG"),
+                StandardCharsets.ISO_8859_1));
+        assertEquals("ABCDEFG", new String(Base64.getMimeDecoder().decode("QUJD\r\nREVG\r\nRw=="),
+                StandardCharsets.ISO_8859_1));
+        var bytes = new byte[100];
+        for (var i = 0; i < bytes.length; ++i) {
+            bytes[i] = (byte) (i * 13);
+        }
+        assertArrayEquals(bytes, Base64.getMimeDecoder().decode(Base64.getMimeEncoder().encode(bytes)));
+    }
 }
