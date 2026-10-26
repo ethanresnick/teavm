@@ -50,6 +50,36 @@ public class TRuntime {
         return GC.getFreeMemory();
     }
 
+    // The heap has no fixed limit that a program can read, so maxMemory reports Long.MAX_VALUE, as the JDK does
+    // when there is no limit.
+    public long maxMemory() {
+        return Long.MAX_VALUE;
+    }
+
+    public void halt(int status) {
+        exit(status);
+    }
+
+    // The hooks are kept with the JDK's null and duplicate checks, but nothing runs them: the program ends without
+    // a Java shutdown sequence.
+    private final java.util.Set<Thread> shutdownHooks = new java.util.LinkedHashSet<>();
+
+    public void addShutdownHook(Thread hook) {
+        if (hook == null) {
+            throw new NullPointerException();
+        }
+        if (!shutdownHooks.add(hook)) {
+            throw new IllegalArgumentException();
+        }
+    }
+
+    public boolean removeShutdownHook(Thread hook) {
+        if (hook == null) {
+            throw new NullPointerException();
+        }
+        return shutdownHooks.remove(hook);
+    }
+
     /**
      * Runs the garbage collector. Calling this method suggests that the Java
      * Virtual Machine expend effort toward recycling unused objects in order to
