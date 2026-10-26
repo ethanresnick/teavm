@@ -111,4 +111,13 @@ public class Base64Test {
     private String encodeNoPad(String text) {
         return Base64.getEncoder().withoutPadding().encodeToString(text.getBytes(StandardCharsets.UTF_8));
     }
+
+    @Test
+    public void urlEncoderPads() {
+        var bytes = new byte[] { (byte) 0xFB, (byte) 0xFF };
+        assertEquals("-_8=", Base64.getUrlEncoder().encodeToString(bytes));
+        assertEquals("-w==", Base64.getUrlEncoder().encodeToString(new byte[] { (byte) 0xFB }));
+        assertEquals("-_8", Base64.getUrlEncoder().withoutPadding().encodeToString(bytes));
+        assertEquals("cXdlcnQ=", Base64.getUrlEncoder().encodeToString("qwert".getBytes(StandardCharsets.UTF_8)));
+    }
 }
