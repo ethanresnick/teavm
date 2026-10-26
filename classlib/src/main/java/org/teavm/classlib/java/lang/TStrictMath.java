@@ -60,7 +60,112 @@ public final class TStrictMath extends TObject {
     }
 
     public static double log(double a) {
-        return TMath.log(a);
+        return FdlibmLog.compute(a);
+    }
+
+    /**
+     * StrictMath.log must give fdlibm's results bit for bit, as the JDK's does. Math.log calls the host's
+     * Math.log, and a host's results can differ in the last bit (V8 in Node 24 does for some inputs).
+     * This is a port of __ieee754_log from fdlibm 5.3's e_log.c ("@(#)e_log.c 1.3 95/01/18", netlib.org/fdlibm),
+     * with the same constants and steps, and with that file's notice:
+     *
+     * <p>Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+     *
+     * <p>Developed at SunSoft, a Sun Microsystems, Inc. business. Permission to use, copy, modify, and distribute
+     * this software is freely granted, provided that this notice is preserved.
+     */
+    private static final class FdlibmLog {
+        private static final double LN2_HI = 6.93147180369123816490e-01;
+        private static final double LN2_LO = 1.90821492927058770002e-10;
+        private static final double TWO54 = 1.80143985094819840000e+16;
+        private static final double LG1 = 6.666666666666735130e-01;
+        private static final double LG2 = 3.999999999940941908e-01;
+        private static final double LG3 = 2.857142874366239149e-01;
+        private static final double LG4 = 2.222219843214978396e-01;
+        private static final double LG5 = 1.818357216161805012e-01;
+        private static final double LG6 = 1.531383769920937332e-01;
+        private static final double LG7 = 1.479819860511658591e-01;
+
+        private FdlibmLog() {
+        }
+
+        private static int high(double x) {
+            return (int) (Double.doubleToRawLongBits(x) >>> 32);
+        }
+
+        private static int low(double x) {
+            return (int) Double.doubleToRawLongBits(x);
+        }
+
+        private static double withHigh(double x, int high) {
+            return Double.longBitsToDouble(((long) high << 32) | (Double.doubleToRawLongBits(x) & 0xFFFFFFFFL));
+        }
+
+        static double compute(double x) {
+            int hx = high(x);
+            int lx = low(x);
+            int k = 0;
+            if (hx < 0x00100000) {
+                // x < 2**-1022
+                if (((hx & 0x7fffffff) | lx) == 0) {
+                    return -TWO54 / 0.0; // log(+-0) = -inf
+                }
+                if (hx < 0) {
+                    return (x - x) / 0.0; // log(-#) = NaN
+                }
+                k -= 54;
+                x *= TWO54; // subnormal number, scale up x
+                hx = high(x);
+            }
+            if (hx >= 0x7ff00000) {
+                return x + x;
+            }
+            k += (hx >> 20) - 1023;
+            hx &= 0x000fffff;
+            int i = (hx + 0x95f64) & 0x100000;
+            x = withHigh(x, hx | (i ^ 0x3ff00000)); // normalize x or x/2
+            k += i >> 20;
+            double f = x - 1.0;
+            double dk;
+            double r;
+            if ((0x000fffff & (2 + hx)) < 3) {
+                // |f| < 2**-20
+                if (f == 0.0) {
+                    if (k == 0) {
+                        return 0.0;
+                    }
+                    dk = k;
+                    return dk * LN2_HI + dk * LN2_LO;
+                }
+                r = f * f * (0.5 - 0.33333333333333333 * f);
+                if (k == 0) {
+                    return f - r;
+                }
+                dk = k;
+                return dk * LN2_HI - ((r - dk * LN2_LO) - f);
+            }
+            double s = f / (2.0 + f);
+            dk = k;
+            double z = s * s;
+            i = hx - 0x6147a;
+            double w = z * z;
+            int j = 0x6b851 - hx;
+            double t1 = w * (LG2 + w * (LG4 + w * LG6));
+            double t2 = z * (LG1 + w * (LG3 + w * (LG5 + w * LG7)));
+            i |= j;
+            r = t2 + t1;
+            if (i > 0) {
+                double hfsq = 0.5 * f * f;
+                if (k == 0) {
+                    return f - (hfsq - s * (hfsq + r));
+                }
+                return dk * LN2_HI - ((hfsq - (s * (hfsq + r) + dk * LN2_LO)) - f);
+            }
+            if (k == 0) {
+                return f - s * (f - r);
+            }
+            return dk * LN2_HI - ((s * (f - r) - dk * LN2_LO) - f);
+        }
     }
 
     public static double log10(double a) {
