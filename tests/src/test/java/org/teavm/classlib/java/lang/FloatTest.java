@@ -186,6 +186,9 @@ public class FloatTest {
         assertFalse(Float.isInfinite(Float.NaN));
     }
 
+    // Float.toString: "When p >= 2, let T be the set of all decimals in R with length p. Otherwise, let T be the
+    // set of all decimals in R with length 1 or 2." Float.valueOf(String): the exact decimal value "is then
+    // rounded to type float by the usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
     @Test
     public void subnormalToStringAndParse() {
         // The rounding interval of a subnormal is half of its own ulp, not of its normalized mantissa.
@@ -203,24 +206,39 @@ public class FloatTest {
         assertEquals(0, Float.parseFloat("7E-46"), 0);
         assertEquals(0, Float.parseFloat("1E-50"), 0);
         assertEquals(Math.nextDown(Float.MIN_NORMAL), Float.parseFloat("1.1754942E-38"), 0);
-        for (int bits = 1; bits < 100000; bits += 997) {
+    }
+
+    // Float.toString: "Let R be the set of all decimals that round to m according to the usual round to nearest
+    // rounding policy of IEEE 754 floating-point arithmetic." The selected decimal is in R, so it parses back.
+    @Test
+    public void smallSubnormalsRoundTrip() {
+        for (int bits = 1; bits <= 65536; ++bits) {
             float f = Float.intBitsToFloat(bits);
-            assertEquals(f, Float.parseFloat(Float.toString(f)), 0);
+            String s = Float.toString(f);
+            if (Float.floatToRawIntBits(Float.parseFloat(s)) != bits) {
+                fail("Float with bits " + bits + " is written as " + s + ", which does not parse back");
+            }
         }
     }
 
+    // Float.toString: "Let R be the set of all decimals that round to m according to the usual round to nearest
+    // rounding policy of IEEE 754 floating-point arithmetic." Round to nearest breaks a tie to the even
+    // significand, so a decimal on the edge of the interval is in R exactly when m has an even significand.
     @Test
     public void toStringOnRoundingIntervalEdge() {
         // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
         assertEquals("5.383987E7", Float.toString(53839872f));
     }
 
+    // Float.toString: "Define d_m as the decimal in T that is closest to m. Or if there are two such decimals in
+    // T, select the one with the even significand."
     @Test
     public void toStringHalfwayTakesEvenDigit() {
         // 2831949.25 is exactly halfway between 2831949.2 and 2831949.3
         assertEquals("2831949.2", Float.toString(2831949.25f));
     }
 
+    // Float.toString: R is the set of decimals that round to m, and below a power of two the neighbor is closer
     @Test
     public void toStringBelowPowerOfTwo() {
         // Below a power of two the next float is closer, so the rounding interval is narrower on that side
@@ -228,6 +246,9 @@ public class FloatTest {
         assertEquals("7.1054274E-15", Float.toString(Math.scalb(1f, -47)));
     }
 
+    // Float.valueOf(String): the exact value "is then conceptually converted to an 'infinitely precise' binary
+    // value that is then rounded to type float by the usual round-to-nearest rule of IEEE 754 floating-point
+    // arithmetic". That rule breaks a tie to the even significand.
     @Test
     public void parseExactMidpointTakesEvenFloat() {
         // Each decimal is exactly halfway between two floats, and the JDK takes the float with the even mantissa
