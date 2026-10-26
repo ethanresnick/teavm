@@ -49,17 +49,59 @@ public final class FloatSynthesizer {
             var bits = shift >= 32 ? 0 : (binMantissa + (1 << (shift - 1))) >>> shift;
             return Float.intBitsToFloat(negative ? bits | (1 << 31) : bits);
         }
-        binMantissa += 1 << 5;
+        var correction = 1 << 5;
+        var error = binMantissa & ((1 << 6) - 1);
+        if (Math.abs(error - (1 << 5)) <= 2) {
+            var lowerBits = toBits(binMantissa & (-1 << 6), binExp);
+            if (isMidpoint(lowerBits, mantissa, exp)) {
+                // Round half to even, as the JDK does
+                correction = (lowerBits & 1) == 0 ? -error : (1 << 6) - error;
+            }
+        }
+        var iee754 = toBits(binMantissa + correction, binExp);
+        if (negative) {
+            iee754 ^= 1 << 31;
+        }
+        return Float.intBitsToFloat(iee754);
+    }
+
+    private static int toBits(int binMantissa, int binExp) {
         if ((binMantissa & (-1 << 30)) != 0) {
             binMantissa >>>= 1;
             binExp++;
         }
         binMantissa = (binMantissa >>> 6) & (-1 << 9 >>> 9);
-        var iee754 = binMantissa | (binExp << 23);
-        if (negative) {
-            iee754 ^= 1 << 31;
+        return binMantissa | (binExp << 23);
+    }
+
+    // Whether mantissa * 10^(exp - 8) is exactly the midpoint between the normal float with the given bits and
+    // the next float. See DoubleSynthesizer.isMidpoint.
+    private static boolean isMidpoint(int bits, int mantissa, int exp) {
+        long oddMid = ((((long) bits & ((1 << 23) - 1)) | (1 << 23)) << 1) | 1;
+        var midExp2 = (bits >>> 23) - 150 - 1;
+        var decExp = exp - 8;
+        while (mantissa % 10 == 0) {
+            mantissa /= 10;
+            decExp++;
         }
-        return Float.intBitsToFloat(iee754);
+        var zeros = Integer.numberOfTrailingZeros(mantissa);
+        long oddDec = mantissa >>> zeros;
+        if (midExp2 != zeros + decExp) {
+            return false;
+        }
+        if (decExp >= 0) {
+            // oddMid == oddDec * 5^decExp
+            for (var i = 0; i < decExp && oddDec <= oddMid; ++i) {
+                oddDec *= 5;
+            }
+            return oddDec == oddMid;
+        } else {
+            // oddMid * 5^-decExp == oddDec
+            for (var i = 0; i < -decExp && oddMid <= oddDec; ++i) {
+                oddMid *= 5;
+            }
+            return oddMid == oddDec;
+        }
     }
 
     private static final int[] mantissa10Table = {

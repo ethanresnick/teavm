@@ -227,4 +227,13 @@ public class FloatTest {
         assertEquals("8.4703295E-22", Float.toString(Math.scalb(1f, -70)));
         assertEquals("7.1054274E-15", Float.toString(Math.scalb(1f, -47)));
     }
+
+    @Test
+    public void parseExactMidpointTakesEvenFloat() {
+        // Each decimal is exactly halfway between two floats, and the JDK takes the float with the even mantissa
+        assertEquals(494621968f, Float.parseFloat("494621968"), 0);
+        assertEquals(314576016f, Float.parseFloat("314576016"), 0);
+        assertEquals(19379349f, Float.parseFloat("19379349"), 0);
+        assertEquals(4.5666056E8f, Float.parseFloat("4.5666056E8"), 0);
+    }
 }
