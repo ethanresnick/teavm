@@ -344,6 +344,10 @@ public class AnnotationGenerationHelper {
                 }
                 outputNode.getClassValueNode().propagate(agent.getType(value.getJavaClass()));
                 outputNode.propagate(agent.getType(ValueType.object("java.lang.Class")));
+                // A class that an annotation value or default names is reflective data, so it keeps its name.
+                var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
+                getName.getVariable(0).propagate(agent.getType(ValueType.object("java.lang.Class")));
+                getName.getVariable(0).getClassValueNode().propagate(agent.getType(value.getJavaClass()));
                 break;
             }
             case AnnotationValue.ANNOTATION:
