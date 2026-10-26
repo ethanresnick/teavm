@@ -18,6 +18,7 @@ package org.teavm.classlib.java.util;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
@@ -177,5 +178,36 @@ public class Base64Test {
             sb.append('=');
         }
         return sb.toString();
+    }
+
+    @Test
+    public void arrayAndBufferOverloads() {
+        var abcd = new byte[] { 'A', 'B', 'C', 'D' };
+        var encoded = new byte[10];
+        assertEquals(8, Base64.getEncoder().encode(abcd, encoded));
+        assertEquals("QUJDRA==", new String(encoded, 0, 8, StandardCharsets.ISO_8859_1));
+        assertThrows(IllegalArgumentException.class, () -> Base64.getEncoder().encode(abcd, new byte[7]));
+
+        var decoded = new byte[5];
+        assertEquals(4, Base64.getDecoder().decode("QUJDRA==".getBytes(StandardCharsets.ISO_8859_1), decoded));
+        assertArrayEquals(new byte[] { 'A', 'B', 'C', 'D', 0 }, decoded);
+        assertThrows(IllegalArgumentException.class,
+                () -> Base64.getDecoder().decode("QUJDRA==".getBytes(StandardCharsets.ISO_8859_1), new byte[3]));
+
+        var encodedBuffer = Base64.getEncoder().encode(ByteBuffer.wrap(abcd));
+        assertEquals(0, encodedBuffer.position());
+        assertEquals(8, encodedBuffer.remaining());
+        var source = ByteBuffer.wrap("xQUJD".getBytes(StandardCharsets.ISO_8859_1));
+        source.get();
+        var decodedBuffer = Base64.getDecoder().decode(source);
+        assertEquals(5, source.position());
+        assertEquals(0, decodedBuffer.position());
+        assertEquals(3, decodedBuffer.remaining());
+        assertEquals('A', decodedBuffer.get());
+
+        // On an error, the source buffer's position does not move.
+        var bad = ByteBuffer.wrap("QU*D".getBytes(StandardCharsets.ISO_8859_1));
+        assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(bad));
+        assertEquals(0, bad.position());
     }
 }
