@@ -34,6 +34,10 @@ public final class Allocator {
     }
 
     public static Address allocateArray(RuntimeClass tag, int size) {
+        // As in the JVM. Without the check, a negative size gave a too small allocation and a negative length.
+        if (size < 0) {
+            ExceptionHandling.throwNegativeArraySizeException();
+        }
         int itemSize = RuntimeClass.isPrimitive(tag.itemType) ? tag.itemType.size : Address.sizeOf();
         int sizeInBytes = Address.align(Address.fromInt(Structure.sizeOf(RuntimeArray.class)), itemSize).toInt();
         sizeInBytes += itemSize * size;
@@ -49,6 +53,13 @@ public final class Allocator {
     }
 
     public static RuntimeArray allocateMultiArray(RuntimeClass tag, Address dimensions, int dimensionCount) {
+        // The JVM checks every dimension before it allocates. An inner dimension is not allocated when an outer
+        // one is 0, so allocateArray alone would not see it.
+        for (int i = 0; i < dimensionCount; ++i) {
+            if (dimensions.add(i * 4).getInt() < 0) {
+                ExceptionHandling.throwNegativeArraySizeException();
+            }
+        }
         int size = dimensions.getInt();
         RuntimeArray array = allocateArray(tag, dimensions.getInt()).toStructure();
         if (dimensionCount > 1) {

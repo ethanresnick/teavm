@@ -935,9 +935,7 @@ public class VMTest {
     // length check.
     private static Object arraySink;
 
-    // The C backend does not check array lengths: it throws nothing for a negative length.
     @Test
-    @SkipPlatform(TestPlatform.C)
     public void negativeArrayLengthThrows() {
         int[] lengths = { -1, Integer.MIN_VALUE };
         for (var length : lengths) {
@@ -946,6 +944,7 @@ public class VMTest {
             assertThrows(NegativeArraySizeException.class, () -> arraySink = new Object[length]);
             assertThrows(NegativeArraySizeException.class, () -> arraySink = new int[length][2]);
             assertThrows(NegativeArraySizeException.class, () -> arraySink = new int[2][length]);
+            assertThrows(NegativeArraySizeException.class, () -> arraySink = new int[0][length]);
             assertThrows(NegativeArraySizeException.class, () -> arraySink = Array.newInstance(String.class, length));
             assertThrows(NegativeArraySizeException.class, () -> arraySink = Arrays.copyOf(new byte[1], length));
         }
