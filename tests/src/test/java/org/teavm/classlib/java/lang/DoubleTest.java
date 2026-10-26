@@ -254,4 +254,24 @@ public class DoubleTest {
         // Below a power of two the next double is closer, so the rounding interval is narrower on that side
         assertEquals("1.7800590868057611E-307", Double.toString(Math.scalb(1.0, -1019)));
     }
+
+    @Test
+    public void parseExactMidpointTakesEvenDouble() {
+        // Each decimal is exactly halfway between two doubles, and the JDK takes the double with the even mantissa
+        assertEquals(2.238987874235451E16, Double.parseDouble("2.238987874235451E16"), 0);
+        assertEquals(5.741072488841486E16, Double.parseDouble("5.741072488841486E16"), 0);
+        assertEquals(1.60448237089496E18, Double.parseDouble("1.60448237089496E18"), 0);
+        assertEquals(9007199254740992.0, Double.parseDouble("9007199254740993"), 0);
+        assertEquals(9007199254740996.0, Double.parseDouble("9007199254740995"), 0);
+    }
+
+    @Test
+    public void largeDoublesRoundTrip() {
+        // Double.toString writes such doubles as the decimal halfway to a neighbor when that decimal is shortest
+        var random = new Random(4);
+        for (var i = 0; i < 20000; ++i) {
+            var d = Math.scalb(1 + random.nextDouble(), 53 + random.nextInt(12));
+            assertEquals(d, Double.parseDouble(Double.toString(d)), 0);
+        }
+    }
 }
