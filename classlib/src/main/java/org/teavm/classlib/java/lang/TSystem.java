@@ -200,7 +200,7 @@ public final class TSystem extends TObject {
             defaults.put("file.separator", VirtualFileSystemProvider.getInstance().isWindows() ? "\\" : "/");
             defaults.put("path.separator", VirtualFileSystemProvider.getInstance().isWindows() ? ";" : ":");
             defaults.put("line.separator", lineSeparator());
-            defaults.put("java.io.tmpdir", getTempDir());
+            defaults.put("java.io.tmpdir", defaultTempDir());
             defaults.put("java.vm.version", "21");
             defaults.put("user.home", getHomeDir());
             // More properties that the JDK always defines. Code saves and restores them with System.setProperty,
@@ -223,9 +223,16 @@ public final class TSystem extends TObject {
         }
     }
 
+    // As in the JDK, File.createTempFile and Files.createTempFile use java.io.tmpdir, so a program can move its
+    // temporary files with System.setProperty. Its default comes from the file system.
     public static String getTempDir() {
+        String dir = getProperty("java.io.tmpdir");
+        return dir != null ? dir : defaultTempDir();
+    }
+
+    private static String defaultTempDir() {
         if (!PlatformDetector.isC()) {
-            return "/tmp";
+            return VirtualFileSystemProvider.getInstance().tempDirectory();
         }
         Address resultPtr = Memory.malloc(Address.sizeOf());
         int length = CFileSystem.tempDirectory(resultPtr);

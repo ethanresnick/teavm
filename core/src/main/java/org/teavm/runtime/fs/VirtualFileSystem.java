@@ -29,4 +29,11 @@ public interface VirtualFileSystem {
     String canonicalize(String path);
 
     String[] getRoots();
+
+    /**
+     * Returns the directory for temporary files: the default of the {@code java.io.tmpdir} system property.
+     */
+    default String tempDirectory() {
+        return "/tmp";
+    }
 }
