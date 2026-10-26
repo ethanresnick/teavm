@@ -17,6 +17,7 @@ package org.teavm.classlib.java.text;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
@@ -228,6 +229,53 @@ public class SimpleDateFormatTest {
                 assertEquals(20, position.getErrorIndex(), text);
             }
         }
+    }
+
+    @Test
+    public void numericGeneralTimeZoneHoursOver23Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss z", "2014-06-24 09:33:49 GMT+24:00");
+    }
+
+    @Test
+    public void numericGeneralTimeZoneMinutesOver59Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss z", "2014-06-24 09:33:49 GMT+05:60");
+    }
+
+    @Test
+    public void rfc822TimeZoneHoursOver23Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss Z", "2014-06-24 09:33:49 +2400");
+    }
+
+    @Test
+    public void rfc822TimeZoneMinutesOver59Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss Z", "2014-06-24 09:33:49 +0560");
+    }
+
+    @Test
+    public void iso8601TimeZoneHoursOver23Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss XXX", "2014-06-24 09:33:49 +24:00");
+    }
+
+    @Test
+    public void iso8601TimeZoneMinutesOver59Rejected() {
+        assertNotParsed("yyyy-MM-dd HH:mm:ss XXX", "2014-06-24 09:33:49 +05:60");
+    }
+
+    @Test
+    public void largestNumericTimeZoneParsed() {
+        long expected = 1403602429000L - 23 * 3600_000L - 59 * 60_000L;
+        assertEquals(expected, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH),
+                "2014-06-24 09:33:49 GMT+23:59"));
+        assertEquals(expected, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.ENGLISH),
+                "2014-06-24 09:33:49 +2359"));
+        assertEquals(expected, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss XXX", Locale.ENGLISH),
+                "2014-06-24 09:33:49 +23:59"));
+    }
+
+    private void assertNotParsed(String pattern, String text) {
+        ParsePosition position = new ParsePosition(0);
+        new SimpleDateFormat(pattern, Locale.ENGLISH).parse(text, position);
+        assertTrue(position.getErrorIndex() >= 0, text);
     }
 
     private long parseFully(SimpleDateFormat format, String text) {
