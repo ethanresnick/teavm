@@ -183,6 +183,15 @@ public class AsyncTest {
     }
 
     @Test
+    public void primitiveArrayElementsAfterSuspension() throws InterruptedException {
+        var doubles = new double[] { 1.5 };
+        var longs = new long[] { 3 };
+        Thread.sleep(1);
+        assertEquals(1.5, doubles[0], 0);
+        assertEquals(3L, longs[0]);
+    }
+
+    @Test
     public void monitorTest() {
         dummySyncStaticMethod();
     }
