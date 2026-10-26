@@ -887,4 +887,18 @@ public class ByteBufferTest {
             }
         }
     }
+
+    @Test
+    public void toStringIsTheJdkOne() {
+        assertEquals("java.nio.HeapByteBuffer[pos=0 lim=0 cap=0]", ByteBuffer.allocate(0).toString());
+        var buffer = ByteBuffer.allocate(16);
+        buffer.position(3).limit(10);
+        assertEquals("java.nio.HeapByteBuffer[pos=3 lim=10 cap=16]", buffer.toString());
+        assertEquals("java.nio.HeapByteBufferR[pos=0 lim=4 cap=4]",
+                ByteBuffer.allocate(4).asReadOnlyBuffer().toString());
+        assertEquals("java.nio.HeapByteBuffer[pos=1 lim=3 cap=5]", ByteBuffer.wrap(new byte[5], 1, 2).toString());
+        assertEquals("java.nio.DirectByteBuffer[pos=0 lim=8 cap=8]", ByteBuffer.allocateDirect(8).toString());
+        assertEquals("java.nio.DirectByteBufferR[pos=0 lim=8 cap=8]",
+                ByteBuffer.allocateDirect(8).asReadOnlyBuffer().toString());
+    }
 }
