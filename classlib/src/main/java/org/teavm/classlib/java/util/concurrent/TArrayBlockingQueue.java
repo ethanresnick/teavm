@@ -453,6 +453,10 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         boolean complete;
         int timerId;
 
+        // The waiting thread. complete() can run on another thread (interrupt) or at the top of the JS stack
+        // (timeout), where TThread.currentThread() is not the waiter.
+        final TThread thread = TThread.currentThread();
+
         WaitHandler(AsyncCallback<Boolean> callback) {
             this.callback = callback;
         }
@@ -470,7 +474,15 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
             if (complete()) {
                 return;
             }
-            callback.error(new TInterruptedException());
+            // interrupted() runs on the interrupting thread, inside Thread.interrupt(). Resuming the waiter there
+            // failed on JS ("Another thread is running" in TeaVMThread.resume). Post the error instead, as TObject's
+            // wait listener and TThread's sleep handler do.
+            var callback = this.callback;
+            if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+                EventQueue.offer(() -> callback.error(new TInterruptedException()));
+            } else {
+                Platform.postpone(() -> callback.error(new TInterruptedException()));
+            }
         }
 
         private boolean complete() {
@@ -486,7 +498,9 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
                 }
                 timerId = -1;
             }
-            TThread.currentThread().interruptHandler = null;
+            if (thread.interruptHandler == this) {
+                thread.interruptHandler = null;
+            }
             return false;
         }
 

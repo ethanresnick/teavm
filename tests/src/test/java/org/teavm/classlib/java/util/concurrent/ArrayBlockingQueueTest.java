@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
@@ -242,5 +243,30 @@ public class ArrayBlockingQueueTest {
             queue.add(i);
         }
         return queue;
+    }
+
+    @Test
+    public void takeCanBeInterruptedAgain() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        // An AtomicInteger, not an int[] local: with an int[] local, the C backend generated code that did not
+        // compile (the local holding the array was reused for an int).
+        var interrupts = new AtomicInteger();
+        var thread = new Thread(() -> {
+            for (var i = 0; i < 2; ++i) {
+                try {
+                    queue.take();
+                } catch (InterruptedException e) {
+                    interrupts.incrementAndGet();
+                }
+            }
+        });
+        thread.start();
+        Thread.sleep(50);
+        thread.interrupt();
+        Thread.sleep(50);
+        thread.interrupt();
+        thread.join(2000);
+        assertEquals(2, interrupts.get());
+        assertFalse(thread.isAlive());
     }
 }

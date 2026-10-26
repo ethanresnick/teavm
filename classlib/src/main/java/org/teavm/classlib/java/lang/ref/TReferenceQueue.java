@@ -81,6 +81,9 @@ public class TReferenceQueue<T> {
         int id;
         AsyncCallback<TReference<T>> callback;
 
+        // The waiting thread (see TArrayBlockingQueue.WaitHandler).
+        final TThread thread = TThread.currentThread();
+
         RemoveCallback(AsyncCallback<TReference<T>> callback) {
             this.callback = callback;
         }
@@ -118,12 +121,20 @@ public class TReferenceQueue<T> {
             var callback = this.callback;
             if (callback != null) {
                 remove();
-                callback.error(new InterruptedException());
+                // Post the error, as TArrayBlockingQueue.WaitHandler.interrupted() does. A direct call resumed the
+                // waiter inside Thread.interrupt(), which fails on JS.
+                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+                    EventQueue.offer(() -> callback.error(new InterruptedException()));
+                } else {
+                    Platform.postpone(() -> callback.error(new InterruptedException()));
+                }
             }
         }
 
         private void remove() {
-            TThread.currentThread().interruptHandler = null;
+            if (thread.interruptHandler == this) {
+                thread.interruptHandler = null;
+            }
             callback = null;
             if (prev != null) {
                 prev.next = next;
