@@ -15,6 +15,9 @@
  */
 package org.teavm.classlib.java.security;
 
+import org.teavm.classlib.java.lang.TException;
+import org.teavm.classlib.java.lang.TRuntimeException;
+
 public final class TAccessController {
     private TAccessController() {
     }
@@ -23,7 +26,24 @@ public final class TAccessController {
         return action.run();
     }
 
-    public static <T> T doPrivileged(TPrivilegedExceptionAction<T> action) {
-        return action.run();
+    // As in the JDK, a checked exception from the action comes wrapped in PrivilegedActionException.
+    // TPrivilegedExceptionAction.run declares no exception, but the action is Java code that may throw one.
+    public static <T> T doPrivileged(TPrivilegedExceptionAction<T> action) throws TPrivilegedActionException {
+        try {
+            return action.run();
+        } catch (TRuntimeException e) {
+            throw e;
+        } catch (TException e) {
+            throw new TPrivilegedActionException(e);
+        }
+    }
+
+    // There is no security manager. The JDK then denies every permission: checkPermission throws
+    // AccessControlException.
+    public static void checkPermission(TPermission permission) {
+        if (permission == null) {
+            throw new NullPointerException();
+        }
+        throw new TAccessControlException(null, permission);
     }
 }
