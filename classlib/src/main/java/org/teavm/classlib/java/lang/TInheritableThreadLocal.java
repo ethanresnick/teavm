@@ -15,8 +15,47 @@
  */
 package org.teavm.classlib.java.lang;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.WeakHashMap;
+
 public class TInheritableThreadLocal<T> extends TThreadLocal<T> {
+    // Each instance registers here, and a new thread takes its creator's values (TThread#inherited). The set
+    // is weak, so an instance that nothing else holds can be collected. It stays null until the first instance:
+    // TThread reads it in its constructor, and a field initializer here would run inside Thread's class
+    // initialization.
+    private static Set<TInheritableThreadLocal<?>> all;
+
+    public TInheritableThreadLocal() {
+        if (all == null) {
+            all = Collections.newSetFromMap(new WeakHashMap<>());
+        }
+        all.add(this);
+    }
+
     protected T childValue(T parentValue) {
         return parentValue;
+    }
+
+    /**
+     * The values a new thread inherits from the current thread, as pairs (instance, child value), or null if
+     * there are none. Only values the current thread has set count, as in the JDK.
+     */
+    @SuppressWarnings("unchecked")
+    static Object[] snapshot() {
+        if (all == null || all.isEmpty()) {
+            return null;
+        }
+        List<Object> pairs = new ArrayList<>();
+        for (TInheritableThreadLocal<?> local : all) {
+            Object v = local.rawValue();
+            if (v != ABSENT) {
+                pairs.add(local);
+                pairs.add(((TInheritableThreadLocal<Object>) local).childValue(v));
+            }
+        }
+        return pairs.isEmpty() ? null : pairs.toArray();
     }
 }

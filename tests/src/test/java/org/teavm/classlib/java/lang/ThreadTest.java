@@ -17,8 +17,10 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -167,5 +169,59 @@ public class ThreadTest {
 
     abstract class A {
         abstract int foo();
+    }
+
+    @Test
+    public void threadStates() throws InterruptedException {
+        var thread = new Thread(() -> { });
+        assertEquals(Thread.State.NEW, thread.getState());
+        thread.start();
+        thread.join();
+        assertEquals(Thread.State.TERMINATED, thread.getState());
+        assertEquals(Thread.State.RUNNABLE, Thread.currentThread().getState());
+    }
+
+    @Test
+    public void sleepOverloadsAndSpinWait() throws InterruptedException {
+        long start = System.currentTimeMillis();
+        Thread.sleep(20, 500);
+        Thread.sleep(Duration.ofMillis(20));
+        Thread.onSpinWait();
+        assertTrue(System.currentTimeMillis() - start >= 40);
+    }
+
+    @Test
+    public void joinWithLongMaxValueWaits() throws InterruptedException {
+        var done = new boolean[1];
+        var thread = new Thread(() -> {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                // ignore
+            }
+            done[0] = true;
+        });
+        thread.start();
+        thread.join(Long.MAX_VALUE);
+        assertTrue(done[0]);
+        assertFalse(thread.isAlive());
+    }
+
+    @Test
+    public void contextClassLoaderIsKeptAndInherited() throws InterruptedException {
+        var current = Thread.currentThread();
+        var original = current.getContextClassLoader();
+        var loader = new ClassLoader() { };
+        try {
+            current.setContextClassLoader(loader);
+            assertSame(loader, current.getContextClassLoader());
+            var seen = new ClassLoader[1];
+            var thread = new Thread(() -> seen[0] = Thread.currentThread().getContextClassLoader());
+            thread.start();
+            thread.join();
+            assertSame(loader, seen[0]);
+        } finally {
+            current.setContextClassLoader(original);
+        }
     }
 }

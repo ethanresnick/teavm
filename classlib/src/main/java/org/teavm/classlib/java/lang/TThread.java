@@ -24,7 +24,7 @@ import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 
 public class TThread extends TObject implements TRunnable {
-    private static TThread mainThread = new TThread("main");
+    private static TThread mainThread = createMainThread();
     private static TThread currentThread = mainThread;
     private static int nextId = 1;
     private static int activeCount = 1;
@@ -41,11 +41,41 @@ public class TThread extends TObject implements TRunnable {
     public Object key;
 
     private String name;
-    private boolean alive = true;
+    // As in the JDK, isAlive() is false before start(). started and alive give the NEW, RUNNABLE and TERMINATED
+    // states.
+    private boolean alive;
+    /**
+     * The InheritableThreadLocal values this thread takes from its creator, as pairs (instance, value), or null.
+     * They are read when the thread is created, as in the JDK, and set when it starts: a ThreadLocal keys its
+     * values by {@link #key}, which exists only then.
+     */
+    private Object[] inherited;
+    private boolean started;
+    // The context class loader once set (null is a valid value); until then, the system loader. A new thread
+    // copies both from the thread that creates it, as in the JDK.
+    private Object contextClassLoader;
+    private boolean contextClassLoaderSet;
     TRunnable target;
+
+    private static TThread createMainThread() {
+        TThread main = new TThread("main", true);
+        main.alive = true;
+        main.started = true;
+        return main;
+    }
 
     public TThread() {
         this(null, null);
+    }
+
+    /**
+     * The main thread's constructor. It has no creator, so it copies nothing. It must not reach
+     * the public constructor's inheritance snapshot: Thread's class initializer creates the main thread, and
+     * currentThread() runs that initializer, so code reachable from here would make currentThread() suspendable.
+     */
+    private TThread(String name, boolean mainThread) {
+        this.name = name;
+        id = nextId++;
     }
 
     public TThread(String name) {
@@ -60,9 +90,46 @@ public class TThread extends TObject implements TRunnable {
         this.name = name;
         this.target = target;
         id = nextId++;
+        // As in the JDK, a new thread takes its creator's context class loader and inheritable thread locals.
+        TThread creator = currentThread;
+        if (creator != null) {
+            contextClassLoader = creator.contextClassLoader;
+            contextClassLoaderSet = creator.contextClassLoaderSet;
+            inherited = TInheritableThreadLocal.snapshot();
+        }
+    }
+
+    public enum State {
+        NEW,
+        RUNNABLE,
+        BLOCKED,
+        WAITING,
+        TIMED_WAITING,
+        TERMINATED
+    }
+
+    public State getState() {
+        if (!started) {
+            return State.NEW;
+        }
+        return alive ? State.RUNNABLE : State.TERMINATED;
+    }
+
+    public void setContextClassLoader(TClassLoader loader) {
+        contextClassLoader = loader;
+        contextClassLoaderSet = true;
+    }
+
+    public static void onSpinWait() {
+        // A spin loop waits for another thread; with green threads that thread runs only if this one yields.
+        TThread current = currentThread();
+        current.yieldCount = 0;
+        switchContext(current);
     }
 
     public void start() {
+        started = true;
+        alive = true;
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
             boolean daemon = this.daemon;
             if (!daemon) {
@@ -79,17 +146,30 @@ public class TThread extends TObject implements TRunnable {
             activeCount++;
             setCurrentThread(TThread.this);
             key = new Object();
+            applyInherited();
             TThread.this.run();
         } catch (Throwable t) {
             getUncaughtExceptionHandler().uncaughtException(this, t);
         } finally {
+            // Clear alive under finishedLock, before the notify, so join() sees both together.
             synchronized (finishedLock) {
+                alive = false;
                 finishedLock.notifyAll();
             }
-            alive = false;
             activeCount--;
             key = null;
             setCurrentThread(mainThread);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyInherited() {
+        Object[] pairs = inherited;
+        inherited = null;
+        if (pairs != null) {
+            for (int i = 0; i < pairs.length; i += 2) {
+                ((TThreadLocal<Object>) pairs[i]).set(pairs[i + 1]);
+            }
         }
     }
 
@@ -132,11 +212,30 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void join(long millis, int nanos) throws InterruptedException {
-        if (currentThread() == this || !alive) {
+        // A thread that was never started has nothing to wait for.
+        if (currentThread() == this || !started) {
             return;
         }
+        // Check and wait under the lock, in a loop. monitorEnter can switch threads, so a check outside the lock can
+        // miss the thread's end, and a wake with time left can come while the thread is still alive. started never
+        // goes back to false, so the early return above cannot race with the thread's end.
         synchronized (finishedLock) {
-            finishedLock.wait(millis, nanos);
+            // A timeout over about 292 years (Long.MAX_VALUE ns) waits without a deadline, because
+            // millis * 1_000_000 overflows for it.
+            if (millis == 0 && nanos == 0 || millis >= (Long.MAX_VALUE - nanos) / 1_000_000L) {
+                while (alive) {
+                    finishedLock.wait();
+                }
+            } else {
+                long deadline = System.nanoTime() + millis * 1_000_000L + nanos;
+                while (alive) {
+                    long left = deadline - System.nanoTime();
+                    if (left <= 0) {
+                        break;
+                    }
+                    finishedLock.wait(left / 1_000_000L, (int) (left % 1_000_000L));
+                }
+            }
         }
     }
 
@@ -214,6 +313,27 @@ public class TThread extends TObject implements TRunnable {
     @Async
     public static native void sleep(long millis) throws TInterruptedException;
 
+    // The JDK's sleep(millis, nanos) and sleep(Duration). The clock has millisecond resolution, so a part of a
+    // millisecond rounds up, as in the JDK before 21.
+    public static void sleep(long millis, int nanos) throws TInterruptedException {
+        if (millis < 0) {
+            throw new IllegalArgumentException();
+        }
+        if (nanos < 0 || nanos > 999999) {
+            throw new IllegalArgumentException();
+        }
+        sleep(nanos > 0 && millis < Long.MAX_VALUE ? millis + 1 : millis);
+    }
+
+    public static void sleep(java.time.Duration duration) throws TInterruptedException {
+        long nanos = duration.toNanos();
+        if (nanos < 0) {
+            return;
+        }
+        long millis = nanos / 1_000_000;
+        sleep(millis, (int) (nanos % 1_000_000));
+    }
+
     private static void sleep(long millis, AsyncCallback<Void> callback) {
         TThread current = currentThread();
         SleepHandler handler = new SleepHandler(current, callback);
@@ -278,7 +398,7 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public TClassLoader getContextClassLoader() {
-        return TClassLoader.getSystemClassLoader();
+        return contextClassLoaderSet ? (TClassLoader) contextClassLoader : TClassLoader.getSystemClassLoader();
     }
     
     public UncaughtExceptionHandler getUncaughtExceptionHandler() {

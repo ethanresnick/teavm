@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
@@ -87,5 +88,29 @@ public class ThreadLocalTest {
 
     private static void sleepInJs(AsyncCallback<Void> callback) {
         Window.setTimeout(() -> callback.complete(null), 0);
+    }
+
+    @Test
+    public void inheritableThreadLocalPassesValueToNewThread() throws InterruptedException {
+        var local = new InheritableThreadLocal<String>() {
+            @Override
+            protected String childValue(String parentValue) {
+                return parentValue + "-child";
+            }
+        };
+        var plain = new ThreadLocal<String>();
+        local.set("parent");
+        plain.set("parent");
+        var seen = new String[2];
+        var thread = new Thread(() -> {
+            seen[0] = local.get();
+            seen[1] = plain.get();
+        });
+        local.set("changed after create");
+        thread.start();
+        thread.join();
+        assertEquals("parent-child", seen[0]);
+        assertNull(seen[1]);
+        assertEquals("changed after create", local.get());
     }
 }
