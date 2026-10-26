@@ -59,6 +59,7 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -69,6 +70,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -846,6 +848,47 @@ public class TreeMapTest {
             empty.values().iterator().next();
             fail();
         } catch (NoSuchElementException e) {
+            // ok
+        }
+    }
+
+    @Test
+    public void replacingValueDuringIterationIsNotStructural() {
+        var map = new TreeMap<String, Integer>();
+        map.put("a", 1);
+        map.put("b", 2);
+        map.put("c", 3);
+        var sum = 0;
+        for (var entry : map.entrySet()) {
+            map.put(entry.getKey(), entry.getValue() * 10);
+            sum += entry.getValue();
+        }
+        assertEquals(60, sum);
+        assertEquals(List.of(10, 20, 30), List.copyOf(map.values()));
+
+        map.putAll(map);
+        assertEquals(Map.of("a", 10, "b", 20, "c", 30), map);
+        for (var key : map.keySet()) {
+            map.replace(key, 7);
+            map.merge(key, 1, Integer::sum);
+            map.compute(key, (k, v) -> v + 1);
+        }
+        assertEquals(Map.of("a", 9, "b", 9, "c", 9), map);
+        var sub = map.subMap("a", "c");
+        for (var key : sub.keySet()) {
+            sub.put(key, 1);
+        }
+        assertEquals(Map.of("a", 1, "b", 1, "c", 9), map);
+        var set = new TreeSet<>(List.of("x", "y"));
+        for (var element : set) {
+            assertFalse(set.add(element));
+        }
+        try {
+            for (var key : map.keySet()) {
+                map.put(key + "-new", 0);
+            }
+            fail();
+        } catch (ConcurrentModificationException e) {
             // ok
         }
     }
