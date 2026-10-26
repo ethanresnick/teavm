@@ -74,6 +74,64 @@ public class WeakReferenceTest {
         assertSame(ref, value);
     }
 
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void queueRemoveWakesWaitingThread() throws InterruptedException {
+        var queue = new ReferenceQueue<>();
+        // The referent is created in another thread, so that no variable of this method keeps it reachable.
+        var refs = new WeakReference<?>[1];
+        var creator = new Thread(() -> refs[0] = new WeakReference<>(new Object(), queue));
+        creator.start();
+        creator.join();
+
+        var removed = new ArrayBlockingQueue<Object>(1);
+        var waiter = new Thread(() -> {
+            try {
+                removed.add(queue.remove());
+            } catch (InterruptedException e) {
+                // The test has ended.
+            }
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+
+        GCSupport.tryToTriggerGC(refs[0]);
+        var result = removed.poll(5, TimeUnit.SECONDS);
+        waiter.interrupt();
+        assertSame(refs[0], result);
+        // The waiting thread took the reference, so the queue does not hold it as well.
+        assertNull(queue.poll());
+    }
+
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void queueRemoveWithTimeoutWakesBeforeTimeout() throws InterruptedException {
+        var queue = new ReferenceQueue<>();
+        var refs = new WeakReference<?>[1];
+        var creator = new Thread(() -> refs[0] = new WeakReference<>(new Object(), queue));
+        creator.start();
+        creator.join();
+
+        var removed = new ArrayBlockingQueue<Object>(1);
+        var waiter = new Thread(() -> {
+            try {
+                var ref = queue.remove(30000);
+                if (ref != null) {
+                    removed.add(ref);
+                }
+            } catch (InterruptedException e) {
+                // The test has ended.
+            }
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+
+        GCSupport.tryToTriggerGC(refs[0]);
+        var result = removed.poll(5, TimeUnit.SECONDS);
+        waiter.interrupt();
+        assertSame(refs[0], result);
+    }
+
     private static void waitInJVM() {
         if (!PlatformDetector.isTeaVM()) {
             try {
