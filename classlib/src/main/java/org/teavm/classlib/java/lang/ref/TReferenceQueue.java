@@ -44,6 +44,11 @@ public class TReferenceQueue<T> {
         if (ref != null) {
             callback.complete(ref);
         } else {
+            // As in the JDK, a thread interrupted before it waits throws, and the throw clears its interrupt status.
+            if (TThread.interrupted()) {
+                postInterruptedException(callback);
+                return;
+            }
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
                 callbackWrapper.id = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
@@ -52,6 +57,16 @@ public class TReferenceQueue<T> {
             }
             TThread.currentThread().interruptHandler = callbackWrapper;
             registerCallback(callbackWrapper);
+        }
+    }
+
+    // Post the error, as TArrayBlockingQueue.WaitHandler.interrupted() does. A direct call resumed the waiter inside
+    // Thread.interrupt(), which fails on JS.
+    private static void postInterruptedException(AsyncCallback<?> callback) {
+        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+            EventQueue.offer(() -> callback.error(new InterruptedException()));
+        } else {
+            Platform.postpone(() -> callback.error(new InterruptedException()));
         }
     }
 
@@ -78,8 +93,12 @@ public class TReferenceQueue<T> {
             TThreadInterruptHandler {
         RemoveCallback next;
         RemoveCallback prev;
-        int id;
+        // -1 while no timer is scheduled. On C, event ids start at 0.
+        int id = -1;
         AsyncCallback<TReference<T>> callback;
+
+        // The waiting thread (see TArrayBlockingQueue.WaitHandler).
+        final TThread thread = TThread.currentThread();
 
         RemoveCallback(AsyncCallback<TReference<T>> callback) {
             this.callback = callback;
@@ -87,11 +106,6 @@ public class TReferenceQueue<T> {
 
         @Override
         public void run() {
-            if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                EventQueue.kill(id);
-            } else {
-                Platform.killSchedule(id);
-            }
             complete(null);
         }
 
@@ -118,12 +132,25 @@ public class TReferenceQueue<T> {
             var callback = this.callback;
             if (callback != null) {
                 remove();
-                callback.error(new InterruptedException());
+                thread.clearInterruptStatus();
+                postInterruptedException(callback);
             }
         }
 
         private void remove() {
-            TThread.currentThread().interruptHandler = null;
+            // A wait that got a reference or was interrupted does not keep its timer, which would keep the
+            // callback, and with it the waiting thread, until the timeout.
+            if (id >= 0) {
+                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+                    EventQueue.kill(id);
+                } else {
+                    Platform.killSchedule(id);
+                }
+                id = -1;
+            }
+            if (thread.interruptHandler == this) {
+                thread.interruptHandler = null;
+            }
             callback = null;
             if (prev != null) {
                 prev.next = next;
