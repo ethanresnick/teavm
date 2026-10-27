@@ -125,7 +125,7 @@ public final class TFiles {
 
     public static TPath createTempFile(String prefix, String suffix, TFileAttribute<?>... attrs)
             throws IOException {
-        return createTempFile(TPath.of(TSystem.getTempDir()), prefix, suffix, attrs);
+        return createTempFile(defaultTempDir(), prefix, suffix, attrs);
     }
 
     public static TPath createTempDirectory(TPath dir, String prefix, TFileAttribute<?>... attrs)
@@ -139,7 +139,13 @@ public final class TFiles {
     }
 
     public static TPath createTempDirectory(String prefix, TFileAttribute<?>... attrs) throws IOException {
-        return createTempDirectory(TPath.of(TSystem.getTempDir()), prefix, attrs);
+        return createTempDirectory(defaultTempDir(), prefix, attrs);
+    }
+
+    // The default temporary-file directory need not exist yet, for example in the in-memory file system. As
+    // File.createTempFile does, create it.
+    private static TPath defaultTempDir() throws IOException {
+        return createDirectories(TPath.of(TSystem.getTempDir()));
     }
 
     private static void generateRandomName(StringBuilder sb) {
