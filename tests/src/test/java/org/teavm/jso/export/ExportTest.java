@@ -63,9 +63,11 @@ public class ExportTest {
     @BeforeAll
     public static void start() {
         if (jsNeeded) {
+            jsRunner.setTestTimeout(Long.getLong("teavm.junit.timeout", 300) * 1000);
             jsRunner.start();
         }
         if (wasmGCNeeded) {
+            wasmGCRunner.setTestTimeout(Long.getLong("teavm.junit.timeout", 300) * 1000);
             wasmGCRunner.start();
         }
     }

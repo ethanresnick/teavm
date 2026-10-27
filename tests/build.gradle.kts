@@ -100,6 +100,9 @@ tasks.withType<Test>().configureEach {
     systemProperty("teavm.junit.c.shortFileNames", providers.gradleProperty("teavm.tests.c.shortFileNames")
         .getOrElse(isWindowsOs.toString()))
 
+    // per-run limit, in seconds, for test code running in a browser or as a native process; 0 disables it
+    providers.gradleProperty("teavm.tests.timeout").orNull?.let { systemProperty("teavm.junit.timeout", it) }
+
     val dependencies = configurations.testRuntimeClasspath.get()
             .incoming.resolutionResult.allDependencies
             .asSequence()

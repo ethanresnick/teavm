@@ -27,14 +27,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.teavm.browserrunner.ProcessTree;
 
 class CRunStrategy implements TestRunStrategy {
     private String compilerCommand;
     private String wrapperCommand;
     private String envScript;
     private Map<String, String> capturedEnvironment;
+    private final long timeoutMillis = TestTimeout.millis();
     private ConcurrentMap<String, Compilation> compilationMap = new ConcurrentHashMap<>();
 
     CRunStrategy(String compilerCommand, String wrapperCommand, String envScript) {
@@ -92,6 +95,16 @@ class CRunStrategy implements TestRunStrategy {
                     var stderrBytes = new ByteArrayOutputStream();
                     var stdoutThread = captureStream(process.getInputStream(), stdoutBytes);
                     var stderrThread = captureStream(process.getErrorStream(), stderrBytes);
+                    if (timeoutMillis > 0 && !process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)) {
+                        ProcessTree.kill(process, 10, TimeUnit.SECONDS);
+                        // A descendant that survived the kill may hold the output pipes open
+                        stdoutThread.join(5000);
+                        stderrThread.join(5000);
+                        printCaptured(System.out, stdoutBytes);
+                        printCaptured(System.err, stderrBytes);
+                        throw TestTimeout.exception(run, "the run did not finish within " + timeoutMillis
+                                + " ms, so its process was killed");
+                    }
                     int exitCode = process.waitFor();
                     stdoutThread.join();
                     stderrThread.join();
