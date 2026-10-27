@@ -41,6 +41,8 @@ import org.teavm.model.ValueType;
 import org.teavm.model.VariableReader;
 import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.model.instructions.ArrayElementType;
+import org.teavm.model.instructions.BinaryOperation;
+import org.teavm.model.instructions.NumericOperandType;
 import org.teavm.model.text.ListingBuilder;
 
 class DependencyGraphBuilder {
@@ -256,6 +258,19 @@ class DependencyGraphBuilder {
             DependencyNode receiverNode = nodes[receiver.getIndex()];
             if (valueNode != null && receiverNode != null) {
                 valueNode.connect(receiverNode);
+            }
+        }
+
+        // The division check is inserted after this analysis, so no instruction here throws the exception yet.
+        @Override
+        public void binary(BinaryOperation op, VariableReader receiver, VariableReader first, VariableReader second,
+                NumericOperandType type) {
+            super.binary(op, receiver, first, second, type);
+            if (dependencyAnalyzer.integerDivisionChecked
+                    && (op == BinaryOperation.DIVIDE || op == BinaryOperation.MODULO)
+                    && (type == NumericOperandType.INT || type == NumericOperandType.LONG)) {
+                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                        ArithmeticException.class.getName()));
             }
         }
 

@@ -157,6 +157,7 @@ import org.teavm.model.lowlevel.WriteBarrierInsertion;
 import org.teavm.model.optimization.InliningFilterFactory;
 import org.teavm.model.transformation.BoundCheckInsertion;
 import org.teavm.model.transformation.ClassPatch;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.transformation.NullCheckInsertion;
 import org.teavm.model.util.AsyncMethodFinder;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
@@ -207,6 +208,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     private ShadowStackTransformer shadowStackTransformer;
     private WriteBarrierInsertion writeBarrierInsertion;
     private NullCheckInsertion nullCheckInsertion;
+    private DivisionCheckInsertion divisionCheckInsertion;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
     private ExportDependencyListener exportDependencyListener = new ExportDependencyListener();
     private int minHeapSize = 4 * 1024 * 1024;
@@ -287,7 +289,9 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         classInitializerEliminator = new ClassInitializerEliminator(controller.getUnprocessedClassSource());
         classInitializerTransformer = new ClassInitializerTransformer();
         shadowStackTransformer = new ShadowStackTransformer(characteristics);
-        nullCheckInsertion = new NullCheckInsertion(new LowLevelNullCheckFilter(characteristics));
+        var nullCheckFilter = new LowLevelNullCheckFilter(characteristics);
+        nullCheckInsertion = new NullCheckInsertion(nullCheckFilter);
+        divisionCheckInsertion = new DivisionCheckInsertion(nullCheckFilter::apply);
         writeBarrierInsertion = new WriteBarrierInsertion(characteristics);
 
         controller.addVirtualMethods(m -> VIRTUAL_METHODS.contains(m) || reflection.isVirtual(m));
@@ -341,6 +345,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
                 "throwArrayIndexOutOfBoundsException", void.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(ExceptionHandling.class, "throwNoClassDefFoundError",
                 void.class)).use();
+        DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.MARK_FAILED).use();
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.INITIALIZER_ERROR)
                 .propagateClass(1, Throwable.class.getName())
@@ -416,6 +421,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     @Override
     public void beforeInlining(Program program, MethodReader method) {
         nullCheckInsertion.transformProgram(program, method.getReference());
+        divisionCheckInsertion.transformProgram(program, method.getReference());
     }
 
     @Override

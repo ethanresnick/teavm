@@ -90,6 +90,7 @@ import org.teavm.model.lowlevel.Characteristics;
 import org.teavm.model.lowlevel.LowLevelNullCheckFilter;
 import org.teavm.model.optimization.InliningFilterFactory;
 import org.teavm.model.transformation.BoundCheckInsertion;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.transformation.NullCheckInsertion;
 import org.teavm.model.util.AsyncMethodFinder;
 import org.teavm.model.util.VariableCategoryProvider;
@@ -107,6 +108,7 @@ import org.teavm.vm.spi.TeaVMHostExtension;
 public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
     private TeaVMTargetController controller;
     private NullCheckInsertion nullCheckInsertion;
+    private DivisionCheckInsertion divisionCheckInsertion;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
     private boolean strict;
     private boolean obfuscated;
@@ -184,7 +186,9 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
     @Override
     public void setController(TeaVMTargetController controller) {
         var characteristics = new Characteristics(controller.getUnprocessedClassSource());
-        nullCheckInsertion = new NullCheckInsertion(new LowLevelNullCheckFilter(characteristics));
+        var nullCheckFilter = new LowLevelNullCheckFilter(characteristics);
+        nullCheckInsertion = new NullCheckInsertion(nullCheckFilter);
+        divisionCheckInsertion = new DivisionCheckInsertion(nullCheckFilter::apply);
         this.controller = controller;
         controller.addVirtualMethods(reflection::isVirtual);
     }
@@ -220,6 +224,9 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
         var deps = new WasmGCDependencies(dependencyAnalyzer);
         deps.contribute();
         deps.contributeStandardExports();
+        if (strict) {
+            DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
+        }
 
         var reflectionSuppliers = new ArrayList<ReflectionSupplier>();
         for (var supplier : ServiceLoader.load(ReflectionSupplier.class, dependencyAnalyzer.getClassLoader())) {
@@ -238,6 +245,7 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
     public void beforeInlining(Program program, MethodReader method) {
         if (strict) {
             nullCheckInsertion.transformProgram(program, method.getReference());
+            divisionCheckInsertion.transformProgram(program, method.getReference());
         }
     }
 
