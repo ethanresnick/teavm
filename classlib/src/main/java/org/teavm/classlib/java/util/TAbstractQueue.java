@@ -56,6 +56,9 @@ public abstract class TAbstractQueue<E> extends TAbstractCollection<E> implement
 
     @Override
     public boolean addAll(TCollection<? extends E> c) {
+        if (c == this) {
+            throw new IllegalArgumentException();
+        }
         boolean oneAdded = false;
         for (TIterator<? extends E> iter = c.iterator(); iter.hasNext();) {
             oneAdded |= add(iter.next());

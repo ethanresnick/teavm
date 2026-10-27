@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.WeakReference;
@@ -313,6 +314,24 @@ public class ArrayBlockingQueueTest {
         }
         for (var i = 0; i < refs.size(); ++i) {
             assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
+        }
+    }
+
+    // AbstractQueue.addAll: "Attempts to addAll of a queue to itself result in IllegalArgumentException."
+    // Throws: "IllegalArgumentException - ... or if the specified collection is this queue"
+    @Test
+    public void addAllOfItselfThrows() {
+        // Empty, partly filled, and full queues of capacity 3.
+        for (int size = 0; size <= 3; ++size) {
+            ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(3);
+            List<Integer> expected = new ArrayList<>();
+            for (int i = 0; i < size; ++i) {
+                queue.add(i);
+                expected.add(i);
+            }
+            assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+            assertEquals(expected, new ArrayList<>(queue));
+            assertEquals(3 - size, queue.remainingCapacity());
         }
     }
 
