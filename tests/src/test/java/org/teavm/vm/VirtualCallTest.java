@@ -16,6 +16,7 @@
 package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -254,6 +255,41 @@ public class VirtualCallTest {
 
         String foo() {
             return "A.foo";
+        }
+    }
+
+    // Describer.describe receives an Integer and an Integer[]. Only Integer overrides toString, but an array is
+    // still a receiver of Object.toString, so the call must not be devirtualized to Integer.toString.
+    @Test
+    public void objectMethodCalledOnArray() {
+        Integer[] array = new Integer[0];
+        Describer[] describers = { new PlainDescriber(), new PrefixDescriber() };
+        var sb = new StringBuilder();
+        for (var describer : describers) {
+            sb.append(describer.describe(5)).append(";");
+        }
+        assertEquals("5;prefix 5;", sb.toString());
+        for (var describer : describers) {
+            var description = describer.describe(array);
+            assertTrue(description.contains("[Ljava.lang.Integer;@"), description);
+        }
+    }
+
+    interface Describer {
+        String describe(Object o);
+    }
+
+    static class PlainDescriber implements Describer {
+        @Override
+        public String describe(Object o) {
+            return String.valueOf(o);
+        }
+    }
+
+    static class PrefixDescriber implements Describer {
+        @Override
+        public String describe(Object o) {
+            return "prefix " + o;
         }
     }
 }
