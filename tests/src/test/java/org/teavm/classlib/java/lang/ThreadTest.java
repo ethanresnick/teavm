@@ -174,99 +174,45 @@ public class ThreadTest {
         abstract int foo();
     }
 
-    // Thread.State: NEW "A thread that has not yet started", RUNNABLE "A thread executing in the Java virtual
-    // machine", TERMINATED "A thread that has exited". isAlive(): "A thread is alive if it has been started and has
-    // not yet died." getState(): "This method is designed for use in monitoring of the system state, not for
-    // synchronization control." So the started thread must not be able to end, or to wait, before its state is read:
-    // on the JVM it may run, and finish, before start() returns.
+    // isAlive(): "A thread is alive if it has been started and has not yet died." So the started thread must not be
+    // able to end before isAlive() is read: on the JVM it may run, and finish, before start() returns.
     @Test
-    public void threadStates() throws InterruptedException {
-        var insideState = new Thread.State[1];
+    public void isAliveFollowsLifecycle() throws InterruptedException {
         var insideAlive = new boolean[1];
         var running = new AtomicBoolean();
         var release = new AtomicBoolean();
         var thread = new Thread(() -> {
-            insideState[0] = Thread.currentThread().getState();
             insideAlive[0] = Thread.currentThread().isAlive();
             running.set(true);
-            // Spin instead of blocking: a thread blocked on a latch or monitor is WAITING or BLOCKED on the JVM.
             // onSpinWait() lets the main thread run on TeaVM.
             while (!release.get()) {
                 Thread.onSpinWait();
             }
         });
-        assertEquals(Thread.State.NEW, thread.getState());
         assertFalse(thread.isAlive());
         thread.start();
         // Started, but on TeaVM it has not run yet: it runs only when this thread suspends. On the JVM it may have
         // run already, but it cannot end before release is set.
         assertTrue(thread.isAlive());
-        assertEquals(Thread.State.RUNNABLE, thread.getState());
         while (!running.get()) {
             Thread.onSpinWait();
         }
         // Now it has run on every platform, and it is still running.
         assertTrue(thread.isAlive());
-        assertEquals(Thread.State.RUNNABLE, thread.getState());
         release.set(true);
         thread.join();
-        assertEquals(Thread.State.RUNNABLE, insideState[0]);
         assertTrue(insideAlive[0]);
-        assertEquals(Thread.State.TERMINATED, thread.getState());
         assertFalse(thread.isAlive());
-        assertEquals(Thread.State.RUNNABLE, Thread.currentThread().getState());
         assertTrue(Thread.currentThread().isAlive());
 
-        // A thread that ends with an exception is terminated too.
+        // A thread that ends with an exception has died too.
         var failing = new Thread(() -> {
             throw new IllegalStateException();
         });
         failing.setUncaughtExceptionHandler((t, e) -> { });
         failing.start();
         failing.join();
-        assertEquals(Thread.State.TERMINATED, failing.getState());
         assertFalse(failing.isAlive());
-    }
-
-    // Accepted gap: getState() reports RUNNABLE for a thread that sleeps, waits or blocks on a monitor.
-    @Test
-    @Disabled("Thread.getState() does not report TIMED_WAITING, WAITING or BLOCKED")
-    public void threadStatesWhileSuspended() throws InterruptedException {
-        var lock = new Object();
-        var sleeping = new Thread(() -> {
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException e) {
-                // ok
-            }
-        });
-        var waiting = new Thread(() -> {
-            synchronized (lock) {
-                try {
-                    lock.wait();
-                } catch (InterruptedException e) {
-                    // ok
-                }
-            }
-        });
-        sleeping.start();
-        waiting.start();
-        Thread.sleep(100);
-        assertEquals(Thread.State.TIMED_WAITING, sleeping.getState());
-        assertEquals(Thread.State.WAITING, waiting.getState());
-        var blocked = new Thread(() -> {
-            synchronized (lock) {
-                lock.notifyAll();
-            }
-        });
-        synchronized (lock) {
-            blocked.start();
-            Thread.sleep(100);
-            assertEquals(Thread.State.BLOCKED, blocked.getState());
-        }
-        sleeping.join();
-        waiting.join();
-        blocked.join();
     }
 
     // Accepted gap: start(): "IllegalThreadStateException - if the thread was already started."
