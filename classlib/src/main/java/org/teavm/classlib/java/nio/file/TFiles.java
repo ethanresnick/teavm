@@ -27,7 +27,6 @@ import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystemException;
 import java.nio.file.NoSuchFileException;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -96,7 +95,7 @@ public final class TFiles {
             }
         }
         if (index > dir.getNameCount() && !isDirectory(dir)) {
-            throw new FileSystemException(dir.toString());
+            throw new FileAlreadyExistsException(dir.toString());
         }
         while (index <= dir.getNameCount()) {
             createDirectory(prefix(dir, index++));
