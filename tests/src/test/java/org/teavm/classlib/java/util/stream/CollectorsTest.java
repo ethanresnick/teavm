@@ -47,6 +47,17 @@ public class CollectorsTest {
         assertEquals("[1]", Stream.of(1).map(Object::toString).collect(Collectors.joining(",", "[", "]")));
     }
 
+    // joining(delimiter): "the input elements, separated by the specified delimiter, in encounter order".
+    // An empty element is still an element, so it is still separated from its neighbors.
+    @Test
+    public void joiningKeepsDelimitersAroundEmptyElements() {
+        assertEquals(",a", Stream.of("", "a").collect(Collectors.joining(",")));
+        assertEquals("a,,b", Stream.of("a", "", "b").collect(Collectors.joining(",")));
+        assertEquals("[,]", Stream.of("", "").collect(Collectors.joining(",", "[", "]")));
+        assertEquals("[]", Stream.of("").collect(Collectors.joining(",", "[", "]")));
+        assertEquals("a,null", Stream.of("a", null).collect(Collectors.joining(",")));
+    }
+
     @Test
     public void toList() {
         assertEquals(Arrays.asList(1, 2, 3), Stream.of(1, 2, 3).collect(Collectors.toList()));

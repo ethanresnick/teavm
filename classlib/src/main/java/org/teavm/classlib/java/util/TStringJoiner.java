@@ -15,16 +15,15 @@
  */
 package org.teavm.classlib.java.util;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public final class TStringJoiner {
     private final String delimiter;
     private final String prefix;
     private final String suffix;
     // Null until setEmptyValue is called; then toString uses it while no element exists.
     private String emptyValue;
-    private final List<String> elements = new ArrayList<>();
+    // The added elements separated by the delimiter, without prefix and suffix.
+    // Null while no element exists, so that an added empty string still counts as an element.
+    private StringBuilder joined;
 
     public TStringJoiner(CharSequence delimiter) {
         this(delimiter, "", "");
@@ -48,7 +47,8 @@ public final class TStringJoiner {
     }
 
     public TStringJoiner add(CharSequence newElement) {
-        elements.add(String.valueOf(newElement));
+        // String.valueOf gives "null" for null, and a String argument itself, which StringBuilder copies fastest.
+        appendElement(String.valueOf(newElement));
         return this;
     }
 
@@ -56,33 +56,37 @@ public final class TStringJoiner {
         if (other == null) {
             throw new NullPointerException();
         }
-        if (!other.elements.isEmpty()) {
-            // Join first, so a merge of this joiner into itself reads a stable snapshot.
-            elements.add(other.joinElements());
+        if (other.joined != null) {
+            // Take the string first, so a merge of this joiner into itself reads a stable snapshot.
+            appendElement(other.joined.toString());
         }
         return this;
     }
 
+    private void appendElement(String element) {
+        if (joined == null) {
+            joined = new StringBuilder();
+        } else {
+            joined.append(delimiter);
+        }
+        joined.append(element);
+    }
+
     public int length() {
-        return toString().length();
+        if (joined == null) {
+            return emptyValue != null ? emptyValue.length() : prefix.length() + suffix.length();
+        }
+        return prefix.length() + joined.length() + suffix.length();
     }
 
     @Override
     public String toString() {
-        if (elements.isEmpty()) {
+        if (joined == null) {
             return emptyValue != null ? emptyValue : prefix + suffix;
         }
-        return prefix + joinElements() + suffix;
-    }
-
-    private String joinElements() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < elements.size(); i++) {
-            if (i > 0) {
-                sb.append(delimiter);
-            }
-            sb.append(elements.get(i));
+        if (prefix.isEmpty() && suffix.isEmpty()) {
+            return joined.toString();
         }
-        return sb.toString();
+        return new StringBuilder(length()).append(prefix).append(joined).append(suffix).toString();
     }
 }
