@@ -16,7 +16,6 @@
 
 package org.teavm.classlib.java.util.concurrent;
 
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -268,13 +267,13 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     public void clear() {
         if (elementCount > 0) {
             // An open iterator skips removed entries.
-            for (var entry : elementData) {
-                for (var e = entry; e != null; e = e.next) {
+            for (var i = 0; i < elementData.length; ++i) {
+                for (var e = elementData[i]; e != null; e = e.next) {
                     e.removed = true;
                 }
+                elementData[i] = null;
             }
             elementCount = 0;
-            Arrays.fill(elementData, null);
         }
     }
 
@@ -307,42 +306,29 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         Objects.requireNonNull(value);
         repeatTable: do {
             var table = elementData;
+            for (var i = 0; i < table.length; i++) {
+                do {
+                    var first = table[i];
+                    if (first == null) {
+                        break;
+                    }
+                    var entry = first;
 
-            if (value != null) {
-                for (var i = 0; i < table.length; i++) {
-                    do {
-                        var first = table[i];
-                        if (first == null) {
-                            break;
-                        }
-                        var entry = first;
-
-                        while (entry != null) {
-                            boolean equal = areEqualValues(value, entry.value);
-                            if (table != elementData) {
-                                continue repeatTable;
-                            }
-                            if (equal) {
-                                return true;
-                            }
-                            entry = entry.next;
-                        }
-
-                        if (first == table[i]) {
-                            break;
-                        }
-                    } while (true);
-                }
-            } else {
-                for (var i = 0; i < elementData.length; i++) {
-                    var entry = elementData[i];
                     while (entry != null) {
-                        if (entry.value == null) {
+                        boolean equal = areEqualValues(value, entry.value);
+                        if (table != elementData) {
+                            continue repeatTable;
+                        }
+                        if (equal) {
                             return true;
                         }
                         entry = entry.next;
                     }
-                }
+
+                    if (first == table[i]) {
+                        break;
+                    }
+                } while (true);
             }
             return false;
         } while (true);
@@ -555,48 +541,44 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     private HashEntry<K, V> getEntry(Object key, int hash) {
-        if (key == null) {
-            throw new NullPointerException();
-        } else {
-            repeatTable:
+        repeatTable:
+        do {
+            var table = elementData;
+            int index = indexFor(hash, table.length);
+
+            repeatElement:
             do {
-                var table = elementData;
-                int index = indexFor(hash, table.length);
+                var first = table[index];
+                if (first == null) {
+                    return null;
+                }
+                var m = first;
 
-                repeatElement:
-                do {
-                    var first = table[index];
-                    if (first == null) {
-                        return null;
-                    }
-                    var m = first;
-
-                    while (m != null) {
-                        if (!m.removed && m.origKeyHash == hash) {
-                            var equal = areEqualKeys(key, m.key);
-                            if (table != elementData) {
-                                continue repeatTable;
-                            }
-                            if (equal) {
-                                if (m.removed) {
-                                    continue repeatElement;
-                                }
-                                return m;
-                            }
+                while (m != null) {
+                    if (!m.removed && m.origKeyHash == hash) {
+                        var equal = areEqualKeys(key, m.key);
+                        if (table != elementData) {
+                            continue repeatTable;
                         }
-                        m = m.next;
+                        if (equal) {
+                            if (m.removed) {
+                                continue repeatElement;
+                            }
+                            return m;
+                        }
                     }
+                    m = m.next;
+                }
 
-                    if (first == table[index]) {
-                        return null;
-                    }
-                } while (true);
+                if (first == table[index]) {
+                    return null;
+                }
             } while (true);
-        }
+        } while (true);
     }
 
     private HashEntry<K, V> getEntryByKeyAndValue(Object key, Object value) {
-        var hash = Objects.hashCode(key);
+        var hash = key.hashCode();
         repeatTable:
         do {
             var table = elementData;
@@ -612,7 +594,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
                 while (m != null) {
                     if (m.origKeyHash == hash) {
-                        boolean equal = key != null ? areEqualKeys(key, m.key) : m.key == null;
+                        boolean equal = areEqualKeys(key, m.key);
                         if (table != elementData) {
                             continue repeatTable;
                         }
@@ -656,10 +638,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     }
 
     public KeySetView<K, V> keySet(V mappedValue) {
-        if (mappedValue == null) {
-            throw new NullPointerException();
-        }
-        return new KeySetView<>(this, mappedValue);
+        return new KeySetView<>(this, Objects.requireNonNull(mappedValue));
     }
 
     public static <K> KeySetView<K, Boolean> newKeySet() {
@@ -708,11 +687,6 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         }
 
         @Override
-        public boolean isEmpty() {
-            return map.isEmpty();
-        }
-
-        @Override
         public void clear() {
             map.clear();
         }
@@ -730,13 +704,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             if (value == null) {
                 throw new UnsupportedOperationException();
             }
-            boolean added = false;
-            for (TIterator<? extends K> it = c.iterator(); it.hasNext();) {
-                if (map.putIfAbsent(it.next(), value) == null) {
-                    added = true;
-                }
-            }
-            return added;
+            return super.addAll(c);
         }
     }
 
