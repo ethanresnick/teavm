@@ -182,6 +182,20 @@ public class ClassInference {
         return subclassListProvider.getMethods(descriptor);
     }
 
+    /**
+     * Returns the class whose methods a virtual call on a value of the given type resolves against, or
+     * {@code null} if the type cannot be a call receiver. Arrays inherit the methods of {@code java.lang.Object}.
+     */
+    public static String receiverClassName(ValueType type) {
+        if (type instanceof ValueType.Object) {
+            return ((ValueType.Object) type).getClassName();
+        }
+        if (type instanceof ValueType.Array) {
+            return "java.lang.Object";
+        }
+        return null;
+    }
+
     public ValueType[] typesOf(int variableIndex) {
         IntHashSet typeSet = types[nodeMapping[packNodeAndDegree(variableIndex, 0)]];
         if (typeSet == null) {
@@ -606,9 +620,9 @@ public class ClassInference {
                     if (callSite.knownClasses.contains(type.value)) {
                         continue;
                     }
-                    var valueType = typeList.get(type.value);
-                    if (valueType instanceof ValueType.Object) {
-                        instanceNodeTypes.add(((ValueType.Object) valueType).getClassName());
+                    var className = receiverClassName(typeList.get(type.value));
+                    if (className != null) {
+                        instanceNodeTypes.add(className);
                     }
                 }
                 receiverTypes = instanceNodeTypes;
