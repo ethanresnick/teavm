@@ -15,6 +15,8 @@
  */
 package org.teavm.classlib.java.util;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.io.TSerializable;
 import org.teavm.classlib.java.lang.TComparable;
@@ -44,38 +46,48 @@ public final class TUUID implements TComparable<TUUID>, TSerializable {
     }
 
     public static TUUID randomUUID() {
-        int b0;
-        int b1;
-        int b2;
-        int b3;
-        if (!PlatformDetector.isC() && Crypto.isSupported()) {
-            var buffer = RandomBuffer.BUFFER;
-            Crypto.current().getRandomValues(buffer);
-            b0 = buffer.get(0);
-            b1 = buffer.get(1);
-            b2 = buffer.get(2);
-            b3 = buffer.get(3);
-        } else {
-            b0 = weakRandomInt();
-            b1 = weakRandomInt();
-            b2 = weakRandomInt();
-            b3 = weakRandomInt();
+        if (!PlatformDetector.isC() && RandomSource.CRYPTO != null) {
+            var buffer = RandomSource.BUFFER;
+            RandomSource.CRYPTO.getRandomValues(buffer);
+            return withVersion(buffer.get(0), buffer.get(1), buffer.get(2), buffer.get(3), 4);
         }
-        // Version 4 in the high nibble of time_hi_and_version, IETF variant (binary 10) on top of
-        // clock_seq_hi_and_reserved.
-        b1 = (b1 & 0xffff0fff) | 0x00004000;
-        b2 = (b2 & 0x3fffffff) | 0x80000000;
-        return new TUUID(b0, b1, b2, b3);
+        // C has no secure random source (issue #119).
+        return withVersion(weakRandomInt(), weakRandomInt(), weakRandomInt(), weakRandomInt(), 4);
+    }
+
+    // A type 3 (name-based) UUID: the MD5 hash of the name, with version 3 and the IETF variant.
+    public static TUUID nameUUIDFromBytes(byte[] name) {
+        byte[] hash;
+        try {
+            hash = MessageDigest.getInstance("MD5").digest(name);
+        } catch (NoSuchAlgorithmException e) {
+            throw new InternalError(e);
+        }
+        return withVersion(bigEndianInt(hash, 0), bigEndianInt(hash, 4), bigEndianInt(hash, 8),
+                bigEndianInt(hash, 12), 3);
+    }
+
+    // Puts the version in the high nibble of time_hi_and_version, and the IETF variant (binary 10)
+    // on top of clock_seq_hi_and_reserved.
+    private static TUUID withVersion(int b0, int b1, int b2, int b3, int version) {
+        return new TUUID(b0, (b1 & 0xffff0fff) | (version << 12), (b2 & 0x3fffffff) | 0x80000000, b3);
+    }
+
+    private static int bigEndianInt(byte[] bytes, int offset) {
+        return (bytes[offset] << 24) | ((bytes[offset + 1] & 0xff) << 16) | ((bytes[offset + 2] & 0xff) << 8)
+                | (bytes[offset + 3] & 0xff);
     }
 
     private static int weakRandomInt() {
         return ((int) (Math.random() * 0x10000) << 16) | (int) (Math.random() * 0x10000);
     }
 
-    static final class RandomBuffer {
+    // Looked up once; only reached off C, so C never links the JS types.
+    private static final class RandomSource {
+        static final Crypto CRYPTO = Crypto.isSupported() ? Crypto.current() : null;
         static final Int32Array BUFFER = new Int32Array(4);
 
-        private RandomBuffer() {
+        private RandomSource() {
         }
     }
 
@@ -219,18 +231,15 @@ public final class TUUID implements TComparable<TUUID>, TSerializable {
     @Override
     public int compareTo(TUUID other) {
         // A signed comparison of the most significant halves, then of the least significant ones.
-        if (bits0 != other.bits0) {
-            return bits0 < other.bits0 ? -1 : 1;
+        int result = compareHalves(bits0, bits1, other.bits0, other.bits1);
+        return result != 0 ? result : compareHalves(bits2, bits3, other.bits2, other.bits3);
+    }
+
+    // Compares two longs given as (high, low) ints, as signed values; returns -1, 0 or 1.
+    private static int compareHalves(int hi, int lo, int otherHi, int otherLo) {
+        if (hi != otherHi) {
+            return hi < otherHi ? -1 : 1;
         }
-        if (bits1 != other.bits1) {
-            return Integer.compareUnsigned(bits1, other.bits1) < 0 ? -1 : 1;
-        }
-        if (bits2 != other.bits2) {
-            return bits2 < other.bits2 ? -1 : 1;
-        }
-        if (bits3 != other.bits3) {
-            return Integer.compareUnsigned(bits3, other.bits3) < 0 ? -1 : 1;
-        }
-        return 0;
+        return lo == otherLo ? 0 : Integer.compareUnsigned(lo, otherLo) < 0 ? -1 : 1;
     }
 }

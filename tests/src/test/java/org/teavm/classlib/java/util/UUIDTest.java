@@ -17,8 +17,10 @@ package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.UUID;
@@ -245,7 +247,7 @@ public class UUIDTest {
             assertEquals(expectedException, e.getClass(), s);
             return;
         }
-        assertEquals(null, expectedException, s);
+        assertNull(expectedException, s);
         assertEquals(expected[0], actual.getMostSignificantBits(), s);
         assertEquals(expected[1], actual.getLeastSignificantBits(), s);
     }
@@ -307,6 +309,34 @@ public class UUIDTest {
         int actual = new UUID(msb1, lsb1).compareTo(new UUID(msb2, lsb2));
         assertEquals(Integer.signum(expected), Integer.signum(actual));
         assertEquals(expected == 0, new UUID(msb1, lsb1).equals(new UUID(msb2, lsb2)));
+    }
+
+    // nameUUIDFromBytes(): "Static factory to retrieve a type 3 (name based) UUID based on the specified
+    // byte array." The JDK takes the MD5 hash of the name and sets the version and IETF variant bits.
+    @Test
+    public void nameUUIDFromBytesMatchesModel() throws Exception {
+        var random = new Random(3737373);
+        var lengths = new int[] { 0, 1, 15, 16, 55, 56, 63, 64, 65, 200 };
+        for (var i = 0; i < 300; ++i) {
+            var name = new byte[i < lengths.length ? lengths[i] : random.nextInt(130)];
+            random.nextBytes(name);
+            var hash = MessageDigest.getInstance("MD5").digest(name);
+            long msb = 0;
+            long lsb = 0;
+            for (var j = 0; j < 8; ++j) {
+                msb = (msb << 8) | (hash[j] & 0xff);
+                lsb = (lsb << 8) | (hash[8 + j] & 0xff);
+            }
+            msb = (msb & ~0xf000L) | 0x3000L;
+            lsb = (lsb & 0x3fffffffffffffffL) | Long.MIN_VALUE;
+            var uuid = UUID.nameUUIDFromBytes(name);
+            assertEquals(new UUID(msb, lsb), uuid);
+            assertEquals(3, uuid.version());
+            assertEquals(2, uuid.variant());
+            assertEquals(uuid, UUID.nameUUIDFromBytes(name.clone()));
+        }
+        // MD5("") = d41d8cd98f00b204e9800998ecf8427e, with the version and variant bits set.
+        assertEquals("d41d8cd9-8f00-3204-a980-0998ecf8427e", UUID.nameUUIDFromBytes(new byte[0]).toString());
     }
 
     // randomUUID(): "The UUID is generated using a cryptographically strong pseudo random number
