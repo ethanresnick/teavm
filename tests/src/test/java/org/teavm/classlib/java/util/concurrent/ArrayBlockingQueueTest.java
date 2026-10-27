@@ -317,13 +317,22 @@ public class ArrayBlockingQueueTest {
         }
     }
 
+    // AbstractQueue.addAll: "Attempts to addAll of a queue to itself result in IllegalArgumentException."
+    // Throws: "IllegalArgumentException - ... or if the specified collection is this queue"
     @Test
     public void addAllOfItselfThrows() {
-        ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(10);
-        queue.add(1);
-        queue.add(2);
-        assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
-        assertEquals(2, queue.size());
+        // Empty, partly filled, and full queues of capacity 3.
+        for (int size = 0; size <= 3; ++size) {
+            ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(3);
+            List<Integer> expected = new ArrayList<>();
+            for (int i = 0; i < size; ++i) {
+                queue.add(i);
+                expected.add(i);
+            }
+            assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+            assertEquals(expected, new ArrayList<>(queue));
+            assertEquals(3 - size, queue.remainingCapacity());
+        }
     }
 
     interface WaitAction {
