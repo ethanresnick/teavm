@@ -153,7 +153,7 @@ public class TThread extends TObject implements TRunnable {
         if (currentThread != thread) {
             currentThread = thread;
         }
-        currentThread.timeSliceStart = System.currentTimeMillis();
+        currentThread.timeSliceStart = EventQueue.now();
     }
 
     static TThread getMainThread() {
@@ -232,7 +232,7 @@ public class TThread extends TObject implements TRunnable {
             return;
         }
         currentThread().yieldCount = 0;
-        if (currentThread.timeSliceStart + 100 < System.currentTimeMillis()) {
+        if (currentThread.timeSliceStart + 100 < EventQueue.now()) {
             switchContext(currentThread);
         }
     }
@@ -331,7 +331,7 @@ public class TThread extends TObject implements TRunnable {
         // Integer.MAX_VALUE ms, about 24.8 days. This also keeps the deadline below from overflowing.
         int intMillis = millis < Integer.MAX_VALUE ? (int) millis : Integer.MAX_VALUE;
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-            handler.scheduleId = EventQueue.offer(handler, System.currentTimeMillis() + intMillis);
+            handler.scheduleId = EventQueue.offerAfter(handler, intMillis);
         } else {
             handler.scheduleId = Platform.schedule(handler, intMillis);
         }

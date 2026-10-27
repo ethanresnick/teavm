@@ -52,8 +52,10 @@ public class TReferenceQueue<T> {
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
                 callbackWrapper.id = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                        ? EventQueue.offer(callbackWrapper, timeout + System.currentTimeMillis())
-                        : Platform.schedule(callbackWrapper, (int) timeout);
+                        ? EventQueue.offerAfter(callbackWrapper, timeout)
+                        // A host timer takes an int delay, so a timeout over Integer.MAX_VALUE ms (about 24.8 days)
+                        // ends after that delay, as in Thread.sleep.
+                        : Platform.schedule(callbackWrapper, (int) Math.min(timeout, Integer.MAX_VALUE));
             }
             TThread.currentThread().interruptHandler = callbackWrapper;
             registerCallback(callbackWrapper);

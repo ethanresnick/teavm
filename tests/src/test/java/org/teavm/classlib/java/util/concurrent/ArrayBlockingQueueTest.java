@@ -534,4 +534,30 @@ public class ArrayBlockingQueueTest {
         watchdog.start();
         return watchdog;
     }
+
+    // poll(timeout, unit): "waiting up to the specified wait time if necessary for an element to become available".
+    // A timeout longer than a host timer can hold (2^31 - 1 ms) must not end the wait at once.
+    @Test
+    public void pollWithTimeoutBeyondIntRangeWaits() throws InterruptedException {
+        pollWaits(3_000_000_000L);
+    }
+
+    private static void pollWaits(long timeoutMillis) throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        var result = new Object[] { "not ended" };
+        var waiter = new Thread(() -> {
+            try {
+                result[0] = queue.poll(timeoutMillis, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                result[0] = e;
+            }
+        });
+        waiter.start();
+        Thread.sleep(100);
+        assertTrue(waiter.isAlive(), "poll(" + timeoutMillis + " ms) ended at once with " + result[0]);
+        queue.add(1);
+        waiter.join(2000);
+        assertFalse(waiter.isAlive(), "the waiter did not take the element");
+        assertEquals(1, result[0]);
+    }
 }

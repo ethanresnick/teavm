@@ -153,7 +153,7 @@ public final class TLockSupport {
             // early, which park allows.
             int delay = timeoutMillis < Integer.MAX_VALUE ? (int) timeoutMillis : Integer.MAX_VALUE;
             s.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.offer(s, System.currentTimeMillis() + delay)
+                    ? EventQueue.offerAfter(s, delay)
                     : Platform.schedule(s, delay);
         }
         s.thread.interruptHandler = s;
