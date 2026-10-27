@@ -42,6 +42,7 @@ import org.teavm.classlib.java.lang.TSystem;
 import org.teavm.classlib.java.nio.file.attribute.TBasicFileAttributes;
 import org.teavm.classlib.java.nio.file.attribute.TFileAttribute;
 import org.teavm.classlib.java.nio.file.attribute.TFileTime;
+import org.teavm.classlib.java.nio.file.impl.TDefaultFileSystemProvider;
 
 public final class TFiles {
     private TFiles() {
@@ -283,12 +284,8 @@ public final class TFiles {
     }
 
     public static TPath setLastModifiedTime(TPath path, TFileTime time) throws IOException {
-        if (!exists(path)) {
-            throw new NoSuchFileException(path.toString());
-        }
-        if (!path.toFile().setLastModified(time.toMillis())) {
-            throw new IOException();
-        }
+        Objects.requireNonNull(time);
+        ((TDefaultFileSystemProvider) path.getFileSystem().provider()).setLastModifiedTime(path, time);
         return path;
     }
 

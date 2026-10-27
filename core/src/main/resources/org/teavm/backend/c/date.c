@@ -132,7 +132,11 @@ int64_t teavm_date_timeToTimestamp(time_t t) {
 }
 
 time_t teavm_date_timestampToTime(int64_t timestamp) {
-    int64_t seconds = (timestamp / 1000);
+    // time_t has whole seconds: drop the milliseconds, rounding towards the past
+    int64_t seconds = timestamp / 1000;
+    if (timestamp % 1000 < 0) {
+        seconds--;
+    }
     struct tm t = {
         .tm_year = 70,
         .tm_mon = 0,
@@ -143,9 +147,9 @@ time_t teavm_date_timestampToTime(int64_t timestamp) {
         .tm_isdst = -1
     };
 #if TEAVM_PSP
-    return mktime(&t) + timestamp % 1000;  // Approximate with mktime for PSP
+    return mktime(&t);  // Approximate with mktime for PSP
 #else
-    return timegm(&t) + timestamp % 1000;
+    return timegm(&t);
 #endif
 }
 
