@@ -387,7 +387,7 @@ public class TObject {
         } else {
             RuntimeArray array = (RuntimeArray) self;
             copy = Allocator.allocateArray(cls, array.size).toStructure();
-            int itemSize = RuntimeClass.isPrimitive(cls) ? cls.itemType.size : Address.sizeOf();
+            int itemSize = RuntimeClass.isPrimitive(cls.itemType) ? cls.itemType.size : Address.sizeOf();
             Address headerSize = Address.align(Address.fromInt(Structure.sizeOf(RuntimeArray.class)), itemSize);
             size = itemSize * array.size + headerSize.toInt();
         }

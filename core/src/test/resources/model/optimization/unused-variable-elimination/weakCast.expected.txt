@@ -1,0 +1,5 @@
+var @this as this
+
+$start
+    invokeStatic `Foo.obj()Ljava/lang/Object;`
+    return

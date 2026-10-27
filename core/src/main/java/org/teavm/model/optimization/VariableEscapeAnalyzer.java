@@ -15,30 +15,120 @@
  */
 package org.teavm.model.optimization;
 
+import java.util.ArrayList;
+import java.util.List;
 import org.teavm.model.*;
 import org.teavm.model.instructions.*;
+import org.teavm.model.optimization.UnusedVariableElimination.ImplicitExceptions;
 
 public final class VariableEscapeAnalyzer {
     private VariableEscapeAnalyzer() {
     }
 
-    public static boolean[] findEscapingVariables(Program program) {
+    /**
+     * @param implicitExceptions which instructions that can throw by themselves to mark as escaping, so that they
+     *                           are kept even when nothing uses their result.
+     */
+    public static boolean[] findEscapingVariables(Program program, ImplicitExceptions implicitExceptions) {
         boolean[] escaping = new boolean[program.variableCount()];
-        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping);
+        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping, implicitExceptions);
         for (int i = 0; i < program.basicBlockCount(); ++i) {
             BasicBlock block = program.basicBlockAt(i);
             for (Instruction insn : block) {
                 insn.acceptVisitor(analyzer);
             }
         }
+        analyzer.markArraysOfPossiblyNegativeSize();
         return escaping;
     }
 
     private static class InstructionAnalyzer extends AbstractInstructionVisitor {
         private boolean[] escaping;
+        private ImplicitExceptions implicitExceptions;
+        private boolean[] nonNegativeConstant;
+        private List<Instruction> arrayAllocations;
 
-        InstructionAnalyzer(boolean[] escaping) {
+        InstructionAnalyzer(boolean[] escaping, ImplicitExceptions implicitExceptions) {
             this.escaping = escaping;
+            this.implicitExceptions = implicitExceptions;
+            if (implicitExceptions != ImplicitExceptions.REMOVE) {
+                nonNegativeConstant = new boolean[escaping.length];
+                arrayAllocations = new ArrayList<>();
+            }
+        }
+
+        // A size may be defined in a block that comes later than the allocation, so the sizes are checked after
+        // all instructions are visited. An allocation of a non-negative constant size can't throw.
+        void markArraysOfPossiblyNegativeSize() {
+            if (arrayAllocations == null) {
+                return;
+            }
+            for (Instruction insn : arrayAllocations) {
+                Variable receiver;
+                List<Variable> sizes;
+                if (insn instanceof ConstructArrayInstruction) {
+                    receiver = ((ConstructArrayInstruction) insn).getReceiver();
+                    sizes = List.of(((ConstructArrayInstruction) insn).getSize());
+                } else {
+                    receiver = ((ConstructMultiArrayInstruction) insn).getReceiver();
+                    sizes = ((ConstructMultiArrayInstruction) insn).getDimensions();
+                }
+                for (Variable size : sizes) {
+                    if (!nonNegativeConstant[size.getIndex()]) {
+                        escaping[receiver.getIndex()] = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void keep(Variable receiver, ImplicitExceptions minimalMode) {
+            if (implicitExceptions.compareTo(minimalMode) >= 0) {
+                escaping[receiver.getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(IntegerConstantInstruction insn) {
+            if (nonNegativeConstant != null && insn.getConstant() >= 0) {
+                nonNegativeConstant[insn.getReceiver().getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(ConstructArrayInstruction insn) {
+            if (arrayAllocations != null) {
+                arrayAllocations.add(insn);
+            }
+        }
+
+        @Override
+        public void visit(ConstructMultiArrayInstruction insn) {
+            if (arrayAllocations != null) {
+                arrayAllocations.add(insn);
+            }
+        }
+
+        @Override
+        public void visit(CloneArrayInstruction insn) {
+            keep(insn.getReceiver(), ImplicitExceptions.KEEP_ALL);
+        }
+
+        @Override
+        public void visit(ArrayLengthInstruction insn) {
+            keep(insn.getReceiver(), ImplicitExceptions.KEEP_UNCHECKED);
+        }
+
+        @Override
+        public void visit(GetElementInstruction insn) {
+            keep(insn.getReceiver(), ImplicitExceptions.KEEP_UNCHECKED);
+        }
+
+        @Override
+        public void visit(GetFieldInstruction insn) {
+            if (insn.getInstance() != null) {
+                keep(insn.getReceiver(), ImplicitExceptions.KEEP_ALL);
+            }
         }
 
         @Override
@@ -121,6 +211,13 @@ public final class VariableEscapeAnalyzer {
             }
             if (insn.getReceiver() != null) {
                 escaping[insn.getReceiver().getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(CastInstruction insn) {
+            if (!insn.isWeak()) {
+                keep(insn.getReceiver(), ImplicitExceptions.KEEP_UNCHECKED);
             }
         }
 

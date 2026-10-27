@@ -1,0 +1,18 @@
+var @this as this
+
+$start
+    @obj := invokeStatic `Foo.obj()Ljava/lang/Object;`
+    @arr := invokeStatic `Foo.arr()[I`
+    @n := invokeStatic `Foo.n()I`
+    @four := 4
+    @zero := 0
+    @minusOne := 1
+    @cast := cast @obj to `Ljava/lang/String;`
+    @length := lengthOf @arr
+    @element := @arr[@zero] as int
+    @clone := clone @arr
+    @castClone := cast @clone to `[I`
+    @varSized := newArray I[@n]
+    @negativeSized := newArray I[@minusOne]
+    @multiVarSized := newArray I[@four, @n]
+    return
