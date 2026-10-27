@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
+import java.util.Arrays;
 import java.util.Collection;
 import org.teavm.extension.Autoregistered;
 import org.teavm.extension.spi.resources.DefaultResourcesPolicy;
@@ -27,6 +28,8 @@ public class TestResourcesPolicy extends DefaultResourcesPolicy {
         for (int i = 0; i < names.length; ++i) {
             names[i] = "resources-for-test/" + names[i];
         }
+        names = Arrays.copyOf(names, names.length + 1);
+        names[names.length - 1] = "org/teavm/classlib/java/lang/class-relative-resource";
         return names;
     }
 }

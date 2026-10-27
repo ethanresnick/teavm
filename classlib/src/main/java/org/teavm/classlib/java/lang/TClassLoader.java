@@ -16,9 +16,18 @@
 package org.teavm.classlib.java.lang;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import org.teavm.backend.javascript.spi.InjectedBy;
 import org.teavm.classlib.impl.Base64Impl;
+import org.teavm.classlib.java.net.TMalformedURLException;
+import org.teavm.classlib.java.net.TURL;
+import org.teavm.classlib.java.net.TURLConnection;
+import org.teavm.classlib.java.net.TURLStreamHandler;
+import org.teavm.classlib.java.util.TCollections;
+import org.teavm.classlib.java.util.TEnumeration;
+import org.teavm.classlib.java.util.TList;
 import org.teavm.interop.NoSideEffects;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSIndexer;
@@ -121,6 +130,54 @@ public abstract class TClassLoader extends TObject {
 
     public static InputStream getSystemResourceAsStream(String name) {
         return getSystemClassLoader().getResourceAsStream(name);
+    }
+
+    // The program's resources live in one embedded container, so a URL with the "resource" scheme names one, and
+    // opening it reads the container. A missing resource gives null, as in the JDK.
+    public TURL getResource(String name) {
+        if (getResourceAsStream(name) == null) {
+            return null;
+        }
+        try {
+            return new TURL("resource", null, -1, "/" + name, ResourceHandler.INSTANCE);
+        } catch (TMalformedURLException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public TEnumeration<TURL> getResources(String name) {
+        TURL url = getResource(name);
+        return TCollections.enumeration(url == null ? TList.of() : TList.of(url));
+    }
+
+    public static TURL getSystemResource(String name) {
+        return getSystemClassLoader().getResource(name);
+    }
+
+    public static TEnumeration<TURL> getSystemResources(String name) {
+        return getSystemClassLoader().getResources(name);
+    }
+
+    static final class ResourceHandler extends TURLStreamHandler {
+        static final ResourceHandler INSTANCE = new ResourceHandler();
+
+        @Override
+        protected TURLConnection openConnection(TURL u) {
+            return new TURLConnection(u) {
+                @Override
+                public void connect() {
+                }
+
+                @Override
+                public InputStream getInputStream() throws IOException {
+                    InputStream in = getSystemResourceAsStream(u.getPath().substring(1));
+                    if (in == null) {
+                        throw new FileNotFoundException();
+                    }
+                    return in;
+                }
+            };
+        }
     }
 
     @JSBody(params = "resource", script = "return resource !== null && resource !== void 0 ? resource : null;")

@@ -35,6 +35,7 @@ import org.teavm.classlib.java.lang.reflect.TModifier;
 import org.teavm.classlib.java.lang.reflect.TType;
 import org.teavm.classlib.java.lang.reflect.TTypeVariable;
 import org.teavm.classlib.java.lang.reflect.TTypeVariableImpl;
+import org.teavm.classlib.java.net.TURL;
 import org.teavm.dependency.PluggableDependency;
 import org.teavm.runtime.reflect.AnnotationInfoUtil;
 import org.teavm.runtime.reflect.ClassInfo;
@@ -713,22 +714,25 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         }
     }
 
-    public InputStream getResourceAsStream(String name) {
-        if (name.startsWith("/")) {
-            return getClassLoader().getResourceAsStream(name.substring(1));
-        }
+    public TURL getResource(String name) {
+        return getClassLoader().getResource(resolveResourceName(name));
+    }
 
+    private String resolveResourceName(String name) {
+        if (name.startsWith("/")) {
+            return name.substring(1);
+        }
         TClass<?> cls = this;
         while (cls.isArray()) {
             cls = cls.getComponentType();
         }
         String prefix = cls.getName().toString();
         int index = prefix.lastIndexOf('.');
-        if (index >= 0) {
-            name = prefix.substring(0, index + 1).replace('.', '/') + name;
-        }
+        return index >= 0 ? prefix.substring(0, index + 1).replace('.', '/') + name : name;
+    }
 
-        return getClassLoader().getResourceAsStream(name);
+    public InputStream getResourceAsStream(String name) {
+        return getClassLoader().getResourceAsStream(resolveResourceName(name));
     }
 
     public TPackage getPackage() {

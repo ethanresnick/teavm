@@ -18,10 +18,12 @@ package org.teavm.classlib.java.lang;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.io.IOException;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -37,6 +39,30 @@ import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 public class ClassTest {
+    @Test
+    public void getResourceFindsRelativeAndAbsoluteNames() {
+        // A relative name is in the class's package, and a leading "/" makes the name absolute.
+        assertNotNull(ClassTest.class.getResource("class-relative-resource"));
+        assertNotNull(ClassTest[].class.getResource("/resources-for-test/1"));
+        assertNull(ClassTest.class.getResource("resources-for-test/1"));
+        assertNull(ClassTest.class.getResource("/class-relative-resource"));
+    }
+
+    // On C, URL.openStream does not compile: TURL maps http and https to the JS-only TXHRStreamHandler, so every
+    // openStream call links the XHR connection. This gap is older than getResource.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void getResourceResolvesNamesAsGetResourceAsStream() throws IOException {
+        // A relative name is in the class's package, and a leading "/" makes the name absolute.
+        try (var input = ClassTest.class.getResource("class-relative-resource").openStream()) {
+            assertArrayEquals(new byte[] { 'r', 'e', 'l' }, input.readAllBytes());
+        }
+        try (var input = ClassTest[].class.getResource("/resources-for-test/1").openStream()) {
+            assertArrayEquals(new byte[] { 'q' }, input.readAllBytes());
+        }
+        assertNull(ClassTest.class.getResource("resources-for-test/1"));
+    }
+
     @Test
     public void classNameEvaluated() {
         assertEquals("java.lang.Object", Object.class.getName());

@@ -17,19 +17,25 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
+import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
+import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 @EachTestCompiledSeparately
@@ -68,6 +74,33 @@ public class ClassLoaderTest {
     public void returnsNullForNonExistentResource() {
         var input = ClassLoader.getSystemClassLoader().getResourceAsStream("non-existent-resource.txt");
         assertNull(input);
+    }
+
+    @Test
+    public void getResourceFindsOnlyExistingResources() throws IOException {
+        URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
+        assertNotNull(url);
+        assertEquals(url.toString(), ClassLoader.getSystemResource("resources-for-test/2").toString());
+        assertNull(ClassLoader.getSystemClassLoader().getResource("non-existent-resource.txt"));
+        assertNull(ClassLoader.getSystemResource("non-existent-resource.txt"));
+        assertEquals(1, Collections.list(ClassLoader.getSystemResources("resources-for-test/3")).size());
+        assertFalse(ClassLoader.getSystemResources("non-existent-resource.txt").hasMoreElements());
+    }
+
+    // On C, URL.openStream does not compile: TURL maps http and https to the JS-only TXHRStreamHandler, so every
+    // openStream call links the XHR connection. This gap is older than getResource.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void getResourceGivesUrlThatReadsTheResource() throws IOException {
+        URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
+        try (var input = url.openStream()) {
+            assertArrayEquals(new byte[] { 'q', 'w' }, input.readAllBytes());
+        }
+        List<URL> urls = Collections.list(ClassLoader.getSystemClassLoader().getResources("resources-for-test/3"));
+        assertEquals(1, urls.size());
+        try (var input = urls.get(0).openStream()) {
+            assertArrayEquals(new byte[] { 'q', 'w', 'e' }, input.readAllBytes());
+        }
     }
 
     private static String loadResource(String name) {
