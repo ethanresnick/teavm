@@ -22,9 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.zip.Adler32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -115,5 +117,50 @@ public class DeflaterTest {
         }
         assertTrue(deflater.needsInput());
         assertEquals(0, deflater.deflate(out));
+    }
+
+    @Test
+    public void dictionarySetBeforeInputIsUsed() throws DataFormatException {
+        var dictionary = "hello world".getBytes(StandardCharsets.UTF_8);
+        var deflater = new Deflater();
+        deflater.setDictionary(dictionary);
+        deflater.setInput("hello world hello".getBytes(StandardCharsets.UTF_8));
+        deflater.finish();
+        var compressed = new byte[100];
+        var length = deflater.deflate(compressed);
+
+        var inflater = new Inflater();
+        inflater.setInput(compressed, 0, length);
+        var result = new byte[100];
+        assertEquals(0, inflater.inflate(result));
+        assertTrue(inflater.needsDictionary());
+        var adler = new Adler32();
+        adler.update(dictionary);
+        assertEquals(adler.getValue(), inflater.getAdler());
+        inflater.setDictionary(dictionary);
+        var n = inflater.inflate(result);
+        assertEquals("hello world hello", new String(result, 0, n, StandardCharsets.UTF_8));
+    }
+
+    // Accepted gap: jzlib (zlib 1.1) drops a dictionary shorter than 3 bytes (MIN_MATCH) without setting the
+    // header's FDICT flag, so the inflater never asks for it. The JDK's zlib uses any dictionary. The output still
+    // decodes to the input.
+    @Test
+    @Disabled("jzlib ignores a dictionary shorter than 3 bytes")
+    public void shortDictionaryIsUsed() throws DataFormatException {
+        for (var dictionaryLength = 1; dictionaryLength <= 2; ++dictionaryLength) {
+            var dictionary = Arrays.copyOf("ab".getBytes(StandardCharsets.UTF_8), dictionaryLength);
+            var deflater = new Deflater();
+            deflater.setDictionary(dictionary);
+            deflater.setInput("abab".getBytes(StandardCharsets.UTF_8));
+            deflater.finish();
+            var compressed = new byte[100];
+            var length = deflater.deflate(compressed);
+
+            var inflater = new Inflater();
+            inflater.setInput(compressed, 0, length);
+            assertEquals(0, inflater.inflate(new byte[100]));
+            assertTrue(inflater.needsDictionary(), "dictionary of " + dictionaryLength + " bytes");
+        }
     }
 }

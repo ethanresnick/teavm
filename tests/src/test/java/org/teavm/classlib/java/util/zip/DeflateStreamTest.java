@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
@@ -39,6 +40,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -117,6 +119,35 @@ public class DeflateStreamTest {
         gzip.close();
         var input = new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray()));
         assertArrayEquals(data, input.readAllBytes());
+    }
+
+    // TeaVM's GZIPOutputStream.flush makes a sync flush (the JDK's does so only with syncFlush = true, which TeaVM
+    // lacks). With more pending output than its 512-byte buffer, one deflate call left the rest of the flush in the
+    // deflater, so the flushed bytes did not decode to all the data written.
+    @Test
+    @SkipJVM
+    public void gzipFlushWritesAllPendingOutput() throws IOException, DataFormatException {
+        var data = new byte[20000];
+        var random = new Random(1);
+        random.nextBytes(data);
+        var bytes = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(bytes);
+        gzip.write(data);
+        gzip.flush();
+        var flushed = bytes.toByteArray();
+        // Skip the 10-byte header and inflate the raw deflate data written so far.
+        var inflater = new Inflater(true);
+        inflater.setInput(flushed, 10, flushed.length - 10);
+        var result = new byte[data.length];
+        var length = 0;
+        int n;
+        while (length < result.length && (n = inflater.inflate(result, length, result.length - length)) > 0) {
+            length += n;
+        }
+        assertEquals(data.length, length);
+        assertArrayEquals(data, result);
+        gzip.close();
+        assertArrayEquals(data, new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray())).readAllBytes());
     }
 
     @Test
