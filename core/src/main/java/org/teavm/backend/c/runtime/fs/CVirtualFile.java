@@ -59,6 +59,12 @@ public class CVirtualFile implements VirtualFile {
     }
 
     @Override
+    public boolean isSymbolicLink() {
+        char[] chars = path.toCharArray();
+        return CFileSystem.isSymbolicLink(chars, chars.length);
+    }
+
+    @Override
     public String[] listFiles() {
         char[] chars = path.toCharArray();
         StringList list = CFileSystem.listFiles(chars, chars.length);

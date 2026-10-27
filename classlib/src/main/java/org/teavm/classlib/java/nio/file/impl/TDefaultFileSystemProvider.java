@@ -23,6 +23,7 @@ import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -302,11 +303,12 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
             throw new NoSuchFileException(parent.pathString);
         }
         var childVfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (childVfile != null && childVfile.exists()) {
+        // A symbolic link is an existing entry, also when its target does not exist.
+        if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
             throw new TFileAlreadyExistsException(defaultPath.pathString);
         }
         if (!vfile.createDirectory(defaultPath.getFileName().pathString, ownerOnly)) {
-            if (childVfile != null && childVfile.exists()) {
+            if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
                 // created since the check above
                 throw new TFileAlreadyExistsException(defaultPath.pathString);
             }
@@ -318,13 +320,26 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
     public void delete(TPath path) throws IOException {
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // As in the JDK, delete removes a symbolic link itself, also one whose target does not exist.
+        if (vfile == null || !vfile.exists() && !vfile.isSymbolicLink()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
         if (!vfile.delete()) {
             if (vfile.isDirectory() && vfile.listFiles().length > 0) {
                 throw new DirectoryNotEmptyException(defaultPath.pathString);
             }
+            throw new IOException();
+        }
+    }
+
+    public void setLastModifiedTime(TPath path, TFileTime time) throws IOException {
+        var defaultPath = (TDefaultPath) path;
+        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+        if (vfile == null || !vfile.exists()) {
+            throw new NoSuchFileException(defaultPath.pathString);
+        }
+        // Not File.setLastModified: it rejects times before the epoch, which Files accepts
+        if (!vfile.setLastModified(time.toMillis())) {
             throw new IOException();
         }
     }
@@ -485,14 +500,19 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // With NOFOLLOW_LINKS, a symbolic link describes itself (lstat): it exists even when its target does not,
+        // and it is neither a directory nor a regular file. Its size is 0. Its times are its target's, because
+        // VirtualFile has no lstat times.
+        var isLink = vfile != null && Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)
+                && vfile.isSymbolicLink();
+        if (vfile == null || !isLink && !vfile.exists()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
         //noinspection unchecked
         return (A) new TBasicFileAttributes() {
             @Override
             public long size() {
-                return vfile.length();
+                return isLink ? 0 : vfile.length();
             }
 
             @Override
@@ -507,12 +527,12 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isSymbolicLink() {
-                return false;
+                return isLink;
             }
 
             @Override
             public boolean isRegularFile() {
-                return vfile.isFile();
+                return !isLink && vfile.isFile();
             }
 
             @Override
@@ -522,7 +542,7 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isDirectory() {
-                return vfile.isDirectory();
+                return !isLink && vfile.isDirectory();
             }
 
             @Override
