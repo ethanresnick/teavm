@@ -272,6 +272,17 @@ public class CollectionsTest {
     }
 
     @Test
+    public void reverseOrderReversesComparatorReturningMinValue() {
+        // Collections.reverseOrder(cmp): "Returns a comparator that imposes the reverse ordering of the specified
+        // comparator." Negating Integer.MIN_VALUE gives Integer.MIN_VALUE, so negation would not reverse this one.
+        Comparator<Integer> extreme = (a, b) -> a < b ? Integer.MIN_VALUE : a > b ? 1 : 0;
+        Comparator<Integer> reversed = Collections.reverseOrder(extreme);
+        assertTrue(reversed.compare(1, 2) > 0);
+        assertTrue(reversed.compare(2, 1) < 0);
+        assertEquals(0, reversed.compare(1, 1));
+    }
+
+    @Test
     public void synchronizedSortedCollectionsAreBackedByTheArgument() {
         // Collections.synchronizedSortedSet: "Returns a synchronized (thread-safe) sorted set backed by the
         // specified sorted set."; likewise the navigable and map forms.

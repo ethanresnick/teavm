@@ -639,7 +639,8 @@ public final class TCollections extends TObject {
         return m;
     }
 
-    static class UnmodifiableSortedSet<E> extends TAbstractSet<E> implements TSortedSet<E> {
+    static class UnmodifiableSortedSet<E> extends TTemplateCollections.AbstractImmutableSet<E>
+            implements TSortedSet<E> {
         private final TSortedSet<E> s;
 
         UnmodifiableSortedSet(TSortedSet<E> s) {
@@ -664,19 +665,7 @@ public final class TCollections extends TObject {
         @Override public boolean add(E e) {
             throw new TUnsupportedOperationException();
         }
-        @Override public boolean remove(Object o) {
-            throw new TUnsupportedOperationException();
-        }
         @Override public boolean addAll(TCollection<? extends E> c) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public boolean removeAll(TCollection<?> c) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public boolean retainAll(TCollection<?> c) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public void clear() {
             throw new TUnsupportedOperationException();
         }
         @Override public boolean equals(Object o) {
@@ -756,12 +745,6 @@ public final class TCollections extends TObject {
         @Override public TNavigableSet<E> tailSet(E fromElement, boolean inclusive) {
             return new UnmodifiableNavigableSet<>(ns.tailSet(fromElement, inclusive));
         }
-        @Override public E removeFirst() {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public E removeLast() {
-            throw new TUnsupportedOperationException();
-        }
         @Override public TNavigableSet<E> reversed() {
             return descendingSet();
         }
@@ -840,7 +823,8 @@ public final class TCollections extends TObject {
         }
     }
 
-    static class UnmodifiableSortedMap<K, V> extends TAbstractMap<K, V> implements TSortedMap<K, V> {
+    static class UnmodifiableSortedMap<K, V> extends TTemplateCollections.AbstractImmutableMap<K, V>
+            implements TSortedMap<K, V> {
         private final TSortedMap<K, ? extends V> m;
         private TSet<Entry<K, V>> entrySetCache;
 
@@ -868,18 +852,6 @@ public final class TCollections extends TObject {
         }
         @Override public V get(Object key) {
             return m.get(key);
-        }
-        @Override public V put(K key, V value) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public V remove(Object key) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public void putAll(TMap<? extends K, ? extends V> map) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public void clear() {
-            throw new TUnsupportedOperationException();
         }
         @Override public boolean equals(Object o) {
             return o == this || m.equals(o);
@@ -911,12 +883,6 @@ public final class TCollections extends TObject {
         @Override public Entry<K, V> pollLastEntry() {
             throw new TUnsupportedOperationException();
         }
-        @Override public V putFirst(K k, V v) {
-            throw new TUnsupportedOperationException();
-        }
-        @Override public V putLast(K k, V v) {
-            throw new TUnsupportedOperationException();
-        }
         @Override public TSequencedSet<K> sequencedKeySet() {
             return new UnmodifiableSequencedSet<>(m.sequencedKeySet());
         }
@@ -939,6 +905,8 @@ public final class TCollections extends TObject {
             if (r instanceof TSortedMap) {
                 return new UnmodifiableSortedMap<>((TSortedMap<K, ? extends V>) r);
             }
+            // TSortedMap has no default reversed() view yet (the JDK's returns a SortedMap), so a backing map
+            // whose reversed() is not sorted cannot be viewed here.
             throw new TUnsupportedOperationException();
         }
     }
@@ -1036,7 +1004,9 @@ public final class TCollections extends TObject {
         if (cmp == null) {
             return reverseOrder();
         }
-        return (o1, o2) -> -cmp.compare(o1, o2);
+        // Swapping the arguments, rather than negating the result, also reverses a comparator that returns
+        // Integer.MIN_VALUE.
+        return (o1, o2) -> cmp.compare(o2, o1);
     }
 
     public static <T> TEnumeration<T> enumeration(TCollection<T> c) {
