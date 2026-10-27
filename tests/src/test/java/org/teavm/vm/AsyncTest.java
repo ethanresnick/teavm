@@ -226,6 +226,34 @@ public class AsyncTest {
         }
     }
 
+    // The inner loop starts at k - 1, and its body uses k - 1 again after a suspension point. On C, the resume
+    // entry gives the loops a second entry point, so the loop body is copied and the copy must read the current k.
+    @Test
+    public void outerLoopExpressionAfterSuspensionInInnerLoop() throws InterruptedException {
+        var sb = new StringBuilder();
+        for (var k = 1; k < 4; k++) {
+            for (var i = k - 1; i >= 0; i--) {
+                Thread.sleep(1);
+                sb.append(k - 1).append(' ');
+            }
+        }
+        assertEquals("0 1 1 2 2 2 ", sb.toString());
+    }
+
+    // The same, but the inner loop body uses both i and k - 1.
+    @Test
+    public void outerLoopExpressionAndIndexAfterSuspensionInInnerLoop() throws InterruptedException {
+        var sb = new StringBuilder();
+        for (var k = 1; k < 4; k++) {
+            for (var i = k - 1; i >= 0; i--) {
+                sb.append(i).append(':');
+                Thread.sleep(1);
+                sb.append(k - 1).append(' ');
+            }
+        }
+        assertEquals("0:0 1:1 0:1 2:2 1:2 0:2 ", sb.toString());
+    }
+
     @Test
     public void monitorTest() {
         dummySyncStaticMethod();
