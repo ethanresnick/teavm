@@ -605,4 +605,89 @@ public class FilesTest {
             new File("test-file-3").delete();
         }
     }
+
+    // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike
+    // the createDirectory method, an exception is not thrown if the directory could not be created because it
+    // already exists." It returns "the directory".
+    // Every depth of an existing prefix (none, some, all), for a relative and an absolute path.
+    @Test
+    public void createDirectoriesWithEveryExistingPrefix() throws IOException {
+        var relative = Path.of("test-dirs-prefix", "a", "b");
+        for (var leaf : new Path[] { relative, relative.toAbsolutePath() }) {
+            var levels = new Path[] { leaf.getParent().getParent(), leaf.getParent(), leaf };
+            for (var existing = 0; existing <= levels.length; ++existing) {
+                try {
+                    for (var i = 0; i < existing; ++i) {
+                        Files.createDirectory(levels[i]);
+                    }
+                    assertEquals(leaf, Files.createDirectories(leaf));
+                    for (var level : levels) {
+                        assertTrue(Files.isDirectory(level), level + ", " + existing + " existing");
+                    }
+                } finally {
+                    for (var i = levels.length - 1; i >= 0; --i) {
+                        Files.deleteIfExists(levels[i]);
+                    }
+                }
+            }
+        }
+    }
+
+    // The same, for a path with a single name, relative and absolute.
+    @Test
+    public void createDirectoriesAcceptsExistingDirectory() throws IOException {
+        var dir = Path.of("test-existing-dir");
+        try {
+            Files.createDirectory(dir);
+            assertEquals(dir, Files.createDirectories(dir));
+            assertEquals(dir.toAbsolutePath(), Files.createDirectories(dir.toAbsolutePath()));
+            assertTrue(Files.isDirectory(dir));
+        } finally {
+            Files.deleteIfExists(dir);
+        }
+        var root = Path.of("/");
+        assertEquals(root, Files.createDirectories(root));
+        // On macOS, /tmp is a symbolic link to a directory. The in-memory file system of JS and Wasm GC has no /tmp.
+        var tmp = Path.of("/tmp");
+        if (Files.isDirectory(tmp)) {
+            assertEquals(tmp, Files.createDirectories(tmp));
+        }
+    }
+
+    // "FileAlreadyExistsException - if dir exists but is not a directory (optional specific exception)".
+    @Test
+    public void createDirectoriesRejectsExistingFile() throws IOException {
+        var file = Path.of("test-dirs-file");
+        var nested = Path.of("test-dirs-parent", "file");
+        try {
+            Files.createFile(file);
+            Files.createDirectory(nested.getParent());
+            Files.createFile(nested);
+            for (var path : new Path[] { file, file.toAbsolutePath(), nested, nested.toAbsolutePath() }) {
+                assertThrows(FileAlreadyExistsException.class, () -> Files.createDirectories(path), path.toString());
+                assertTrue(Files.isRegularFile(path));
+            }
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(nested);
+            Files.deleteIfExists(nested.getParent());
+        }
+    }
+
+    // createDirectory and createFile with an absolute path create the entry at that path.
+    @Test
+    public void createDirectoryAndFileWithAbsolutePath() throws IOException {
+        var dir = Path.of("test-abs-dir").toAbsolutePath();
+        var file = dir.resolve("file");
+        try {
+            assertEquals(dir, Files.createDirectory(dir));
+            assertTrue(Files.isDirectory(dir));
+            assertTrue(Files.isDirectory(Path.of("test-abs-dir")));
+            assertEquals(file, Files.createFile(file));
+            assertTrue(Files.isRegularFile(Path.of("test-abs-dir", "file")));
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir);
+        }
+    }
 }
