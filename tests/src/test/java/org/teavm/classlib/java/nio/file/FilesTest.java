@@ -44,11 +44,13 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -1050,6 +1052,76 @@ public class FilesTest {
                 output.write(1);
             }
             assertFalse(Files.exists(path));
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    // Files.setLastModifiedTime: "Updates a file's last modified time attribute." It throws IOException
+    // "if an I/O error occurs", which for a missing file is NoSuchFileException.
+    // BasicFileAttributeView.setTimes: "The values are converted to the epoch and precision supported by the
+    // file system. Converting from finer to coarser granularities results in precision loss."
+    // So a file system may keep whole seconds (the C backend's does), but must not keep any other value.
+    @Test
+    public void setLastModifiedTime() throws IOException {
+        var path = Path.of("test-file-mtime");
+        var dir = Path.of("test-dir-mtime");
+        try {
+            Files.write(path, new byte[] { 1 });
+            Files.createDirectory(dir);
+            long[] times = {
+                    1_600_000_000_000L,
+                    1_600_000_000_123L,
+                    1_600_000_000_999L,
+                    0L,
+                    1L,
+                    999L,
+                    // Before the epoch, only whole seconds: the JDK on Linux stores -1500 ms as 0
+                    -1_000L,
+                    -86_400_000L * 365 * 30,
+                    315_550_800_000L,
+                    4_102_444_800_456L
+            };
+            for (var target : new Path[] { path, dir }) {
+                for (var millis : times) {
+                    var time = FileTime.fromMillis(millis);
+                    assertEquals(target, Files.setLastModifiedTime(target, time));
+                    assertStoredTime(millis, Files.getLastModifiedTime(target).toMillis());
+                    assertStoredTime(millis, Files.readAttributes(target, BasicFileAttributes.class)
+                            .lastModifiedTime().toMillis());
+                }
+            }
+            Files.setLastModifiedTime(path, FileTime.from(1_600_000_123L, TimeUnit.SECONDS));
+            assertStoredTime(1_600_000_123_000L, Files.getLastModifiedTime(path).toMillis());
+        } finally {
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    private static void assertStoredTime(long expected, long actual) {
+        if (actual != expected) {
+            assertEquals(expected / 1000 * 1000, actual, "time set: " + expected);
+        }
+    }
+
+    @Test
+    public void setLastModifiedTimeOfMissingFile() throws IOException {
+        var time = FileTime.fromMillis(1_600_000_000_000L);
+        assertThrows(NoSuchFileException.class, () -> Files.setLastModifiedTime(Path.of("no-such-file"), time));
+        assertThrows(NoSuchFileException.class, () -> Files.setLastModifiedTime(
+                Path.of("no-such-dir", "no-such-file"), time));
+        assertFalse(Files.exists(Path.of("no-such-file")));
+    }
+
+    // java.nio.file package docs: "Unless otherwise noted, passing a null argument to a constructor or method of
+    // any class or interface in this package will cause a NullPointerException to be thrown."
+    @Test
+    public void setLastModifiedTimeRejectsNull() throws IOException {
+        var path = Path.of("test-file-mtime-null");
+        try {
+            Files.write(path, new byte[] { 1 });
+            assertThrows(NullPointerException.class, () -> Files.setLastModifiedTime(path, null));
         } finally {
             Files.deleteIfExists(path);
         }

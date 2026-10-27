@@ -329,6 +329,18 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
     }
 
+    public void setLastModifiedTime(TPath path, TFileTime time) throws IOException {
+        var defaultPath = (TDefaultPath) path;
+        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+        if (vfile == null || !vfile.exists()) {
+            throw new NoSuchFileException(defaultPath.pathString);
+        }
+        // Not File.setLastModified: it rejects times before the epoch, which Files accepts
+        if (!vfile.setLastModified(time.toMillis())) {
+            throw new IOException();
+        }
+    }
+
     @Override
     public void copy(TPath source, TPath target, TCopyOption... options) throws IOException {
         var replace = false;
