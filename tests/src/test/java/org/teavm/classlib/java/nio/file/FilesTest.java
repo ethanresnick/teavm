@@ -44,6 +44,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -612,6 +613,108 @@ public class FilesTest {
             new File("test-file-2").delete();
             new File("test-file-3").delete();
         }
+    }
+
+    // Files.createTempFile(dir, prefix, suffix, attrs): "prefix - the prefix string to be used in generating the
+    // file's name; may be null"; "suffix - the suffix string to be used in generating the file's name; may be null,
+    // in which case ".tmp" is used". Unlike File.createTempFile, no minimum prefix length is specified. It "Creates
+    // a new empty file in the specified directory".
+    @Test
+    public void createTempFileTakesAnyPrefix() throws IOException {
+        var dir = Files.createDirectories(Path.of("test-temp-file-dir"));
+        var created = new ArrayList<Path>();
+        try {
+            String[] prefixes = { null, "", "a", "ab", "abc", "prefix-" };
+            String[] suffixes = { null, "", ".x", ".suffix" };
+            var names = new HashSet<String>();
+            for (var prefix : prefixes) {
+                for (var suffix : suffixes) {
+                    var file = Files.createTempFile(dir, prefix, suffix);
+                    created.add(file);
+                    var name = file.getFileName().toString();
+                    var expectedPrefix = prefix != null ? prefix : "";
+                    var expectedSuffix = suffix != null ? suffix : ".tmp";
+                    var message = "prefix " + prefix + ", suffix " + suffix + ": " + name;
+                    assertTrue(name.startsWith(expectedPrefix), message);
+                    assertTrue(name.endsWith(expectedSuffix), message);
+                    assertTrue(name.length() > expectedPrefix.length() + expectedSuffix.length(), message);
+                    assertEquals(dir, file.getParent(), message);
+                    assertTrue(Files.isRegularFile(file), message);
+                    assertEquals(0, Files.size(file), message);
+                    assertTrue(names.add(name), "Name repeated: " + message);
+                }
+            }
+        } finally {
+            for (var file : created) {
+                Files.deleteIfExists(file);
+            }
+            Files.delete(dir);
+        }
+    }
+
+    // Files.createTempFile(prefix, suffix, attrs) "Creates an empty file in the default temporary-file directory";
+    // its prefix "may be null" too.
+    @Test
+    public void createTempFileInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
+        var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        var shortPrefix = Files.createTempFile("a", null);
+        var noPrefix = Files.createTempFile(null, ".x");
+        try {
+            assertTrue(shortPrefix.getFileName().toString().startsWith("a"));
+            assertTrue(shortPrefix.getFileName().toString().endsWith(".tmp"));
+            assertTrue(noPrefix.getFileName().toString().endsWith(".x"));
+            assertTrue(Files.isRegularFile(shortPrefix));
+            assertTrue(Files.isRegularFile(noPrefix));
+            assertTrue(Files.isSameFile(tmpDir, shortPrefix.getParent()));
+            assertTrue(Files.isSameFile(tmpDir, noPrefix.getParent()));
+        } finally {
+            Files.deleteIfExists(shortPrefix);
+            Files.deleteIfExists(noPrefix);
+        }
+    }
+
+    // Files.createTempDirectory(prefix, attrs) "Creates a new directory in the default temporary-file directory";
+    // "prefix - the prefix string to be used in generating the directory's name; may be null".
+    @Test
+    public void createTempDirectoryInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
+        var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        var shortPrefix = Files.createTempDirectory("a");
+        var noPrefix = Files.createTempDirectory((String) null);
+        try {
+            assertTrue(shortPrefix.getFileName().toString().startsWith("a"));
+            assertTrue(Files.isDirectory(shortPrefix));
+            assertTrue(Files.isDirectory(noPrefix));
+            assertTrue(Files.isSameFile(tmpDir, shortPrefix.getParent()));
+            assertTrue(Files.isSameFile(tmpDir, noPrefix.getParent()));
+        } finally {
+            Files.deleteIfExists(shortPrefix);
+            Files.deleteIfExists(noPrefix);
+        }
+    }
+
+    // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
+    @Test
+    public void accessChecksFollowFilePermissions() throws IOException {
+        var file = new File("test-file-permissions");
+        var path = Path.of("test-file-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(Files.isReadable(path));
+            assertTrue(Files.isWritable(path));
+            assertFalse(Files.isExecutable(path));
+
+            assertTrue(file.setExecutable(true));
+            assertTrue(Files.isExecutable(path));
+            assertTrue(file.setReadable(false));
+            assertFalse(Files.isReadable(path));
+            assertTrue(file.setWritable(false));
+            assertFalse(Files.isWritable(path));
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+        assertFalse(Files.isExecutable(path));
     }
 
     // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike

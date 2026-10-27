@@ -30,7 +30,6 @@ import org.teavm.jso.browser.Window;
 import org.teavm.jso.core.JSPromise;
 import org.teavm.jso.core.JSString;
 import org.teavm.junit.EachTestCompiledSeparately;
-import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -177,10 +176,13 @@ public class AsyncTest {
     }
 
     @Test
-    @OnlyPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC })
     public void suspendFunctionFromJs() {
+        // On C, wrapWithJsCall runs the function from the event queue, outside any fiber
         assertEquals(23, wrapWithJsCall(() -> perhapsSuspend(false, 23)));
-        assertThrows(RuntimeException.class, () -> wrapWithJsCall(() -> perhapsSuspend(true, 42)));
+        var e = assertThrows(RuntimeException.class, () -> wrapWithJsCall(() -> perhapsSuspend(true, 42)));
+        if (!PlatformDetector.isJavaScript()) {
+            assertEquals(IllegalStateException.class, e.getClass());
+        }
     }
 
     @Test
@@ -247,13 +249,44 @@ public class AsyncTest {
     private void sumInAsyncBody(AsyncCallback<Integer> callback) {
         // perhapsSuspend can suspend, so this method is compiled as suspendable too. Here it does not suspend.
         var result = perhapsSuspend(false, 1) + perhapsSuspend(false, 2);
-        // Not setTimeout(Runnable): the thread above makes Runnable.run suspendable, and on C a suspendable
-        // Runnable can not run from the event queue.
-        if (PlatformDetector.isC()) {
-            EventQueue.offer(() -> callback.complete(result));
-        } else {
-            Window.setTimeout(() -> callback.complete(result), 0);
+        setTimeout(() -> callback.complete(result));
+    }
+
+    @Test
+    public void timedWaitAfterSuspendingInterfaceIterator() throws InterruptedException {
+        // This Iterator.next() can suspend, so every Iterator.next() call is a suspension point, including the one
+        // in Object's notify-listener bookkeeping. The timeout of the wait below fires from the event queue,
+        // outside any fiber, and runs that bookkeeping.
+        Iterable<Integer> source = () -> new Iterator<>() {
+            private int next;
+
+            @Override
+            public boolean hasNext() {
+                return next < 2;
+            }
+
+            @Override
+            public Integer next() {
+                return perhapsSuspend(true, next++);
+            }
+        };
+        var sum = 0;
+        for (int value : source) {
+            sum += value;
         }
+        assertEquals(1, sum);
+        var lock = new Object();
+        var thread = new Thread(() -> {
+            synchronized (lock) {
+                try {
+                    lock.wait(20);
+                } catch (InterruptedException e) {
+                    // not expected
+                }
+            }
+        });
+        thread.start();
+        thread.join();
     }
 
     @Test
@@ -296,8 +329,9 @@ public class AsyncTest {
     }
 
     @Test
-    // On C, the suspendable Throwable constructor makes Allocator.allocateArray suspendable. EventQueue's
-    // static initializer calls it before any fiber exists, and the program crashes reading the null fiber.
+    // On C, the suspendable Throwable constructor makes Allocator.allocateArray suspendable. When the fiber
+    // suspends, Fiber.push allocates, allocateArray sees the suspending fiber and calls Fiber.push to save its
+    // own state, and the program overflows the stack.
     @SkipPlatform(TestPlatform.C)
     public void suspendWithSuspendableArrayCopy() throws InterruptedException {
         // This override makes every Throwable constructor suspendable. Arrays.copyOf can throw,
@@ -380,7 +414,7 @@ public class AsyncTest {
         setTimeout(() -> callback.complete(value));
     }
 
-    private void setTimeout(Runnable callback) {
+    private static void setTimeout(Runnable callback) {
         if (PlatformDetector.isC()) {
             EventQueue.offer(callback::run);
         } else {
@@ -403,12 +437,12 @@ public class AsyncTest {
     private static native int wrapWithJsCall(IntSupplier fn);
     
     private static void wrapWithJsCall(IntSupplier fn, AsyncCallback<Integer> callback) {
-        Window.setTimeout(() -> {
+        setTimeout(() -> {
             try {
                 callback.complete(fn.getAsInt());
             } catch (Throwable e) {
                 callback.error(e);
             }
-        }, 0);
+        });
     }
 }

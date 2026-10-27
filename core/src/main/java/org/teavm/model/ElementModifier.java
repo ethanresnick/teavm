@@ -75,6 +75,18 @@ public enum ElementModifier {
         return modifiers;
     }
 
+    /**
+     * The reflection modifiers of a method as declared, read from the class source before linking. The linker
+     * marks a method that the program never calls abstract when it drops its body (and drops NATIVE), so the
+     * linked method's own modifiers can report ABSTRACT for a method with a body.
+     */
+    public static int declaredModifiersInfo(ClassReaderSource classSource, MethodReader method) {
+        var cls = classSource.get(method.getOwnerName());
+        var declared = cls != null ? cls.getMethod(method.getDescriptor()) : null;
+        var source = declared != null ? declared : method;
+        return asModifiersInfo(source.readModifiers(), source.getLevel());
+    }
+
     public static int asModifiersInfo(Set<ElementModifier> elementModifiers, AccessLevel level) {
         var modifiers = 0;
         switch (level) {

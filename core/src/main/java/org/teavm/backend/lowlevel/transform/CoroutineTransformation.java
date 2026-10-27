@@ -147,10 +147,12 @@ public class CoroutineTransformation {
         getFiber.setLocation(location);
         firstBlock.add(getFiber);
 
+        // Fiber.current() is null when code runs outside a fiber, for example from the event queue. A method that
+        // can suspend may still run there, as long as it does not actually suspend.
         InvokeInstruction isResuming = new InvokeInstruction();
         isResuming.setType(InvocationType.SPECIAL);
-        isResuming.setMethod(new MethodReference(Fiber.class, "isResuming", boolean.class));
-        isResuming.setInstance(fiberVar);
+        isResuming.setMethod(new MethodReference(Fiber.class, "isPresentAndResuming", Fiber.class, boolean.class));
+        isResuming.setArguments(fiberVar);
         isResuming.setReceiver(program.createVariable());
         isResuming.setLocation(location);
         firstBlock.add(isResuming);
@@ -261,8 +263,9 @@ public class CoroutineTransformation {
 
         InvokeInstruction isSuspending = new InvokeInstruction();
         isSuspending.setType(InvocationType.SPECIAL);
-        isSuspending.setMethod(new MethodReference(Fiber.class, "isSuspending", boolean.class));
-        isSuspending.setInstance(fiberVar);
+        isSuspending.setMethod(new MethodReference(Fiber.class, "isPresentAndSuspending", Fiber.class,
+                boolean.class));
+        isSuspending.setArguments(fiberVar);
         isSuspending.setReceiver(program.createVariable());
         isSuspending.setLocation(splitInstruction.getLocation());
         intermediate.add(isSuspending);

@@ -1905,6 +1905,160 @@ public class FileTest {
         return false;
     }
 
+    // File.setReadable/setWritable/setExecutable Javadoc: "Returns: true if and only if the operation succeeded."
+    // canRead/canWrite/canExecute: "true if and only if the file specified by this abstract pathname exists and
+    // ..." -- a missing file has no permissions to change or test.
+    @Test
+    public void permissionSettersOnMissingFileReturnFalse() {
+        var file = new File("no-such-file-for-permissions");
+        assertFalse(file.setWritable(false));
+        assertFalse(file.setWritable(true, false));
+        assertFalse(file.setReadable(false));
+        assertFalse(file.setReadable(true, false));
+        assertFalse(file.setExecutable(true));
+        assertFalse(file.setExecutable(true, false));
+        assertFalse(file.canRead());
+        assertFalse(file.canWrite());
+        assertFalse(file.canExecute());
+    }
+
+    @Test
+    public void setWritableChangesAnExistingFile() throws IOException {
+        var file = new File("file-for-set-writable");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setWritable(false));
+            assertFalse(file.canWrite());
+            assertTrue(file.setWritable(true));
+            assertTrue(file.canWrite());
+        } finally {
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    // setReadable(readable, ownerOnly) Javadoc: "Sets the owner's or everybody's read permission"; ownerOnly: "If
+    // true, the read permission applies only to the owner's read permission; otherwise, it applies to everybody."
+    // The same wording holds for setWritable and setExecutable. The owner's bit is the one this process sees, so
+    // both forms must change canRead/canWrite/canExecute, and each setter must leave the other two permissions
+    // alone. Runs every setter, with both values and both ownerOnly forms, from each of the eight states.
+    @Test
+    public void permissionSettersChangeOnlyTheirOwnPermission() throws IOException {
+        var file = new File("file-for-permission-setters");
+        assertTrue(file.createNewFile());
+        try {
+            for (int start = 0; start < 8; ++start) {
+                for (int permission = 0; permission < 3; ++permission) {
+                    for (int op = 0; op < 4; ++op) {
+                        boolean[] expected = { (start & 1) != 0, (start & 2) != 0, (start & 4) != 0 };
+                        for (int i = 0; i < 3; ++i) {
+                            assertTrue(setPermission(file, i, expected[i], true));
+                        }
+                        assertPermissions(file, expected, "start " + start);
+                        boolean value = (op & 1) != 0;
+                        boolean ownerOnly = (op & 2) != 0;
+                        assertTrue(setPermission(file, permission, value, ownerOnly));
+                        expected[permission] = value;
+                        assertPermissions(file, expected, "start " + start + ", permission " + permission
+                                + ", value " + value + ", ownerOnly " + ownerOnly);
+                    }
+                }
+            }
+        } finally {
+            file.setReadable(true, false);
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    private static boolean setPermission(File file, int permission, boolean value, boolean ownerOnly) {
+        switch (permission) {
+            case 0:
+                return file.setReadable(value, ownerOnly);
+            case 1:
+                return file.setWritable(value, ownerOnly);
+            default:
+                return file.setExecutable(value, ownerOnly);
+        }
+    }
+
+    private static void assertPermissions(File file, boolean[] expected, String message) {
+        assertEquals(expected[0], file.canRead(), "canRead, " + message);
+        assertEquals(expected[1], file.canWrite(), "canWrite, " + message);
+        assertEquals(expected[2], file.canExecute(), "canExecute, " + message);
+    }
+
+    // The one-argument forms are "A convenience method to set the owner's ... permission", i.e. the two-argument
+    // form with ownerOnly = true.
+    @Test
+    public void oneArgumentPermissionSettersChangeTheOwnersPermission() throws IOException {
+        var file = new File("file-for-one-argument-permission-setters");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setExecutable(true));
+            assertTrue(file.canExecute());
+            assertTrue(file.setExecutable(false));
+            assertFalse(file.canExecute());
+            assertTrue(file.setReadable(false));
+            assertFalse(file.canRead());
+            assertTrue(file.setReadable(true));
+            assertTrue(file.canRead());
+        } finally {
+            file.setReadable(true);
+            file.delete();
+        }
+    }
+
+    // canRead: "true if and only if the file ... exists and can be read by the application"; the stream
+    // constructors throw FileNotFoundException "if the file ... for some other reason cannot be opened".
+    @Test
+    public void clearedPermissionsBlockStreams() throws IOException {
+        var file = new File("file-for-cleared-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setReadable(false));
+            try {
+                new FileInputStream(file).close();
+                fail("Unreadable file opened for reading");
+            } catch (IOException e) {
+                // Expected
+            }
+            assertTrue(file.setReadable(true));
+            new FileInputStream(file).close();
+
+            assertTrue(file.setWritable(false, false));
+            try {
+                new FileOutputStream(file).close();
+                fail("Unwritable file opened for writing");
+            } catch (IOException e) {
+                // Expected
+            }
+            assertTrue(file.setWritable(true, false));
+            new FileOutputStream(file).close();
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    // A new regular file is not executable, and a new directory can be searched, which canExecute reports for a
+    // directory on POSIX file systems.
+    @Test
+    public void canExecuteOfNewFileAndDirectory() throws IOException {
+        var file = new File("file-for-can-execute");
+        var dir = new File("dir-for-can-execute");
+        assertTrue(file.createNewFile());
+        assertTrue(dir.mkdir());
+        try {
+            assertFalse(file.canExecute());
+            assertTrue(dir.canExecute());
+        } finally {
+            file.delete();
+            dir.delete();
+        }
+    }
+
     // File.toPath: "Returns a java.nio.file.Path object constructed from this abstract path. The resulting Path is
     // associated with the default-filesystem. The first invocation of this method works as if invoking it were
     // equivalent to evaluating the expression: FileSystems.getDefault().getPath(this.getPath()); Subsequent

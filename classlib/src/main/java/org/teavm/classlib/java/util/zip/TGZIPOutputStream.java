@@ -27,25 +27,23 @@ public class TGZIPOutputStream extends TDeflaterOutputStream {
     }
 
     public TGZIPOutputStream(OutputStream os, int size) throws IOException {
-        super(os, new TDeflater(java.util.zip.Deflater.DEFAULT_COMPRESSION, true), size);
+        this(os, size, false);
+    }
+
+    // The JDK constructors with syncFlush. TDeflaterOutputStream.flush() now implements it.
+    public TGZIPOutputStream(OutputStream os, boolean syncFlush) throws IOException {
+        this(os, BUF_SIZE, syncFlush);
+    }
+
+    public TGZIPOutputStream(OutputStream os, int size, boolean syncFlush) throws IOException {
+        super(os, new TDeflater(java.util.zip.Deflater.DEFAULT_COMPRESSION, true), size, syncFlush);
         writeShort(TGZIPInputStream.GZIP_MAGIC);
         out.write(java.util.zip.Deflater.DEFLATED);
         out.write(0); // flags
         writeLong(0); // mod time
         out.write(0); // extra flags
-        out.write(0); // operating system
-    }
-
-    @Override
-    public void flush() throws IOException {
-        // A sync flush is complete only once deflate leaves room in the buffer. One call wrote at most buf.length
-        // bytes and left the rest of the flush in the deflater.
-        int count;
-        do {
-            count = def.deflate(buf, 0, buf.length, TDeflater.Z_SYNC_FLUSH);
-            out.write(buf, 0, count);
-        } while (count == buf.length);
-        out.flush();
+        // 255 ("unknown"), as the JDK writes since JDK 16 (JDK-8244706).
+        out.write(255); // operating system
     }
 
     @Override

@@ -38,6 +38,9 @@ public class TDeflater implements TAutoCloseable {
     static final int Z_NO_FLUSH = 0;
     static final int Z_SYNC_FLUSH = 2;
     static final int Z_FINISH = 4;
+    // Output space below which a sync or full flush goes to the internal buffer. Each resumed flush writes an empty
+    // static block and an empty stored block, at most 7 bytes, so a larger buffer always makes progress.
+    private static final int MIN_FLUSH_OUTPUT = 64;
     private int flushParm = Z_NO_FLUSH;
     private boolean finished;
     private int compressLevel = DEFAULT_COMPRESSION;
@@ -52,8 +55,9 @@ public class TDeflater implements TAutoCloseable {
     private boolean paramsChanged;
     // The level that the stream compresses with now (compressLevel may be a change not applied yet).
     private int appliedLevel;
-    // Output of a parameter-change flush that the caller's buffers have not taken yet (see
-    // flushAndSetParams). getTotalOut and getBytesWritten do not count it, as the JDK counts only delivered bytes.
+    // Output of a parameter-change flush, or of a flush into a small buffer, that the caller's buffers have not
+    // taken yet (see flushFully). getTotalOut and getBytesWritten do not count it, as the JDK counts only delivered
+    // bytes.
     private byte[] held;
     private int heldPos;
     private int heldEnd;
@@ -115,6 +119,16 @@ public class TDeflater implements TAutoCloseable {
         nbytes -= count;
         long sin = impl.total_in;
         long sout = impl.total_out;
+        // Zlib resumes a SYNC_FLUSH or FULL_FLUSH that filled the output with a new flush, which writes another
+        // empty block (zlib.h: "make sure that avail_out is greater than six to avoid repeated flush markers").
+        // In a buffer smaller than that block, the flush never completed. So such a flush goes to the internal
+        // buffer, and the caller's buffers take its output on the next calls. A pending parameter change takes the
+        // usual path, which applies it.
+        if ((flushParam == SYNC_FLUSH || flushParam == FULL_FLUSH) && nbytes < MIN_FLUSH_OUTPUT && !paramsChanged) {
+            hold(flushFully(flushParam));
+            inRead += impl.total_in - sin;
+            return count + takeHeld(buf, off, nbytes);
+        }
         impl.setOutput(buf, off, nbytes);
         int err = impl.deflate(flushParam);
         switch (err) {
@@ -143,7 +157,7 @@ public class TDeflater implements TAutoCloseable {
         return count;
     }
 
-    // Copies buffered output of a parameter-change flush to the caller's buffer.
+    // Copies held output to the caller's buffer.
     private int takeHeld(byte[] buf, int off, int nbytes) {
         if (held == null) {
             return 0;
@@ -175,19 +189,30 @@ public class TDeflater implements TAutoCloseable {
     // This runs only when no input is available (avail_in == 0), so the buffer holds only data that the stream has
     // already read (at most one block), and params() cannot compress new input with the old function.
     private void flushAndSetParams() {
+        byte[] out = flushFully(JZlib.Z_PARTIAL_FLUSH);
+        // params() repeats the flush, which now finds nothing to do; any output still goes to out.
+        setParams();
+        hold(out);
+    }
+
+    // Runs a flush in an internal buffer that grows until the flush fits. The output is the start of the returned
+    // buffer, up to impl.avail_out bytes before its end.
+    private byte[] flushFully(int flushParam) {
         int length = 0;
         byte[] out = new byte[4096];
         while (true) {
             impl.setOutput(out, length, out.length - length);
-            check(impl.deflate(JZlib.Z_PARTIAL_FLUSH));
+            check(impl.deflate(flushParam));
             length = out.length - impl.avail_out;
             if (impl.avail_out > 0) {
-                break;
+                return out;
             }
             out = Arrays.copyOf(out, out.length * 2);
         }
-        // params() repeats the flush, which now finds nothing to do; any output still goes to out.
-        setParams();
+    }
+
+    // Keeps the output that flushFully wrote to out for the caller's buffers.
+    private void hold(byte[] out) {
         heldEnd = out.length - impl.avail_out;
         if (heldEnd > 0) {
             held = out;
