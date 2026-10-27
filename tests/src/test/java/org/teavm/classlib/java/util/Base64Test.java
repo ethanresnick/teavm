@@ -155,6 +155,96 @@ public class Base64Test {
         assertArrayEquals(data, decoder.decode(padded), message);
         assertArrayEquals(data, decoder.decode(unpadded), message);
         assertArrayEquals(data, decoder.decode(padded.getBytes(StandardCharsets.ISO_8859_1)), message);
+        checkOverloads(data, padded.getBytes(StandardCharsets.ISO_8859_1), encoder, decoder, message);
+        checkOverloads(data, unpadded.getBytes(StandardCharsets.ISO_8859_1), encoder.withoutPadding(), decoder,
+                message);
+    }
+
+    // Javadoc of Encoder.encode(byte[], byte[]) and Decoder.decode(byte[], byte[]): "No bytes will be written to
+    // the output byte array if the output byte array is not big enough", and they throw IllegalArgumentException
+    // "if dst does not have enough space". Javadoc of encode(ByteBuffer) and decode(ByteBuffer): "Upon return,
+    // the source buffer's position will be updated to its limit; its limit will not have been changed. The
+    // returned output buffer's position will be zero and its limit will be the number of resulting encoded bytes."
+    private static void checkOverloads(byte[] data, byte[] encoded, Base64.Encoder encoder, Base64.Decoder decoder,
+            String message) {
+        // Array overloads: exact size, larger destination (the tail stays as it was), one byte too small.
+        var dst = new byte[encoded.length + 2];
+        Arrays.fill(dst, (byte) 7);
+        assertEquals(encoded.length, encoder.encode(data, dst), message);
+        assertArrayEquals(encoded, Arrays.copyOf(dst, encoded.length), message);
+        assertEquals(7, dst[encoded.length], message);
+        assertEquals(encoded.length, encoder.encode(data, new byte[encoded.length]), message);
+        var decoded = new byte[data.length + 2];
+        Arrays.fill(decoded, (byte) 7);
+        assertEquals(data.length, decoder.decode(encoded, decoded), message);
+        assertArrayEquals(data, Arrays.copyOf(decoded, data.length), message);
+        assertEquals(7, decoded[data.length], message);
+        if (encoded.length > 0) {
+            var small = new byte[encoded.length - 1];
+            assertThrows(IllegalArgumentException.class, () -> encoder.encode(data, small), message);
+            assertArrayEquals(new byte[small.length], small, message);
+        }
+        if (data.length > 0) {
+            var small = new byte[data.length - 1];
+            assertThrows(IllegalArgumentException.class, () -> decoder.decode(encoded, small), message);
+        }
+
+        // Buffer overloads, on a source with a non-zero position and a limit before its capacity.
+        var source = ByteBuffer.allocate(data.length + 5);
+        source.position(3);
+        source.put(data);
+        source.limit(3 + data.length);
+        source.position(3);
+        var result = encoder.encode(source);
+        assertEquals(3 + data.length, source.position(), message);
+        assertEquals(3 + data.length, source.limit(), message);
+        assertEquals(0, result.position(), message);
+        assertEquals(encoded.length, result.limit(), message);
+        assertArrayEquals(encoded, remaining(result), message);
+        // A read-only source works too.
+        assertArrayEquals(encoded, remaining(encoder.encode(ByteBuffer.wrap(data).asReadOnlyBuffer())), message);
+
+        var encodedSource = ByteBuffer.allocate(encoded.length + 4);
+        encodedSource.position(2);
+        encodedSource.put(encoded);
+        encodedSource.limit(2 + encoded.length);
+        encodedSource.position(2);
+        result = decoder.decode(encodedSource);
+        assertEquals(2 + encoded.length, encodedSource.position(), message);
+        assertEquals(2 + encoded.length, encodedSource.limit(), message);
+        assertEquals(0, result.position(), message);
+        assertEquals(data.length, result.limit(), message);
+        assertArrayEquals(data, remaining(result), message);
+    }
+
+    // Javadoc of Decoder.decode(ByteBuffer): "IllegalArgumentException is thrown if the input buffer is not in
+    // valid Base64 encoding scheme. The position of the input buffer will not be advanced in this case."
+    @Test
+    public void decodeBufferKeepsPositionOnInvalidInput() {
+        var random = new Random(67);
+        for (var length = 1; length <= 100; ++length) {
+            var data = new byte[length];
+            random.nextBytes(data);
+            var encoded = Base64.getEncoder().encode(data);
+            var index = random.nextInt(encoded.length);
+            encoded[index] = '*';
+            var buffer = ByteBuffer.allocate(encoded.length + 2);
+            buffer.position(1);
+            buffer.put(encoded);
+            buffer.limit(1 + encoded.length);
+            buffer.position(1);
+            assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(buffer), "at " + index);
+            assertEquals(1, buffer.position());
+            assertEquals(1 + encoded.length, buffer.limit());
+            var dst = new byte[length];
+            assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(encoded, dst));
+        }
+    }
+
+    private static byte[] remaining(ByteBuffer buffer) {
+        var bytes = new byte[buffer.remaining()];
+        buffer.duplicate().get(bytes);
+        return bytes;
     }
 
     private static String referenceEncode(byte[] data, boolean url, boolean pad) {
