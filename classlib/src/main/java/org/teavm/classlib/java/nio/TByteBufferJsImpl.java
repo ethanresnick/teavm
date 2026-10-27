@@ -79,9 +79,9 @@ class TByteBufferJsImpl extends TByteBuffer implements TArrayBufferViewProvider 
             var srcImpl = (TByteBufferJsImpl) src;
             var slice = new Int8Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset, length);
             data.set(slice, index);
-        } else if (src.hasArray()) {
-            var slice = new Int8Array(Int8Array.fromJavaArray(src.array()).getBuffer(), src.arrayOffset() + offset,
-                    length);
+        } else if (src.hasArrayImpl()) {
+            var slice = new Int8Array(Int8Array.fromJavaArray(src.arrayImpl()).getBuffer(),
+                    src.arrayOffsetImpl() + offset, length);
             data.set(slice, index);
         } else {
             for (var i = 0; i < length; i++) {
@@ -108,7 +108,7 @@ class TByteBufferJsImpl extends TByteBuffer implements TArrayBufferViewProvider 
 
     @Override
     public TByteBuffer duplicate() {
-        var result = new TByteBufferJsImpl(array, arrayOffset + position, data, direct, readOnly);
+        var result = new TByteBufferJsImpl(array, arrayOffset, data, direct, readOnly);
         result.position = position;
         result.limit = limit;
         result.mark = mark;
@@ -118,7 +118,7 @@ class TByteBufferJsImpl extends TByteBuffer implements TArrayBufferViewProvider 
 
     @Override
     public TByteBuffer asReadOnlyBuffer() {
-        var result = new TByteBufferJsImpl(array, arrayOffset + position, data, direct, true);
+        var result = new TByteBufferJsImpl(array, arrayOffset, data, direct, true);
         result.position = position;
         result.limit = limit;
         result.mark = mark;

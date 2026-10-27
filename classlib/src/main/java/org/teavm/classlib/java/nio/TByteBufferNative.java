@@ -108,8 +108,8 @@ class TByteBufferNative extends TByteBuffer implements TArrayBufferViewProvider,
         if (src instanceof TByteBufferNative) {
             var srcImpl = (TByteBufferNative) src;
             copy(srcImpl.address.add(offset), address.add(index), length);
-        } else if (src.hasArray()) {
-            copy(src.array(), offset + src.arrayOffset(), address.add(index), length);
+        } else if (src.hasArrayImpl()) {
+            copy(src.arrayImpl(), offset + src.arrayOffsetImpl(), address.add(index), length);
         } else {
             var addr = address.add(index);
             while (length-- > 0) {
@@ -136,7 +136,7 @@ class TByteBufferNative extends TByteBuffer implements TArrayBufferViewProvider,
 
     @Override
     public TByteBuffer duplicate() {
-        var result = new TByteBufferNative(gcRef, array, arrayOffset + position, base, address, capacity, readOnly);
+        var result = new TByteBufferNative(gcRef, array, arrayOffset, base, address, capacity, readOnly);
         result.position = position;
         result.limit = limit;
         result.mark = mark;
@@ -146,7 +146,7 @@ class TByteBufferNative extends TByteBuffer implements TArrayBufferViewProvider,
 
     @Override
     public TByteBuffer asReadOnlyBuffer() {
-        var result = new TByteBufferNative(gcRef, array, arrayOffset + position, base, address, capacity, true);
+        var result = new TByteBufferNative(gcRef, array, arrayOffset, base, address, capacity, true);
         result.position = position;
         result.limit = limit;
         result.mark = mark;

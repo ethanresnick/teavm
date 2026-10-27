@@ -45,6 +45,62 @@ public class ChecksumTest {
         }
     }
 
+    // Checksum.update(ByteBuffer): "Updates the current checksum with the bytes from the specified buffer. The
+    // checksum is updated with the remaining bytes in the buffer, starting at the buffer's position." The
+    // buffers below come from duplicate(), slice() and asReadOnlyBuffer() at non-zero positions, so their
+    // arrayOffset() is non-zero or they have no accessible array.
+    @Test
+    public void updateDerivedByteBuffer() {
+        byte[] backing = new byte[DATA.length + 7];
+        System.arraycopy(DATA, 0, backing, 3, DATA.length);
+        long expectedCrc = crcOf(DATA);
+        long expectedAdler = adlerOf(DATA);
+        for (int i = 0; i < 6; ++i) {
+            ByteBuffer base = ByteBuffer.wrap(backing);
+            base.position(1);
+            ByteBuffer buffer;
+            switch (i) {
+                case 0:
+                    buffer = base.duplicate();
+                    buffer.position(3);
+                    break;
+                case 1:
+                    buffer = base.slice();
+                    buffer.position(2);
+                    break;
+                case 2:
+                    buffer = base.duplicate().slice();
+                    buffer.position(2);
+                    break;
+                case 3:
+                    buffer = base.slice().duplicate();
+                    buffer.position(2);
+                    break;
+                case 4:
+                    buffer = base.asReadOnlyBuffer();
+                    buffer.position(3);
+                    break;
+                default:
+                    base.position(2);
+                    buffer = base.slice();
+                    buffer.position(1);
+                    buffer = buffer.slice();
+                    break;
+            }
+            buffer.limit(buffer.position() + DATA.length);
+
+            CRC32 crc = new CRC32();
+            crc.update(buffer);
+            assertEquals(expectedCrc, crc.getValue(), "CRC32, case " + i);
+            assertEquals(buffer.limit(), buffer.position(), "case " + i);
+
+            buffer.position(buffer.limit() - DATA.length);
+            Adler32 adler = new Adler32();
+            adler.update(buffer);
+            assertEquals(expectedAdler, adler.getValue(), "Adler32, case " + i);
+        }
+    }
+
     @Test
     public void defaultUpdateByteArray() {
         CountingChecksum checksum = new CountingChecksum();

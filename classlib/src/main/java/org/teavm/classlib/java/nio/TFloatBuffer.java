@@ -176,17 +176,25 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
 
     @Override
     public final boolean hasArray() {
-        return isArrayPresent();
+        return isArrayPresent() && !isReadOnly();
     }
 
     @Override
     public final float[] array() {
+        checkArrayWritable();
         return getArray();
     }
 
     @Override
     public final int arrayOffset() {
+        checkArrayWritable();
         return getArrayOffset();
+    }
+
+    private void checkArrayWritable() {
+        if (isReadOnly() && isArrayPresent()) {
+            throw new TReadOnlyBufferException();
+        }
     }
 
     abstract boolean isArrayPresent();
