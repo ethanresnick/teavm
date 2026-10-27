@@ -340,6 +340,7 @@ class DependencyGraphBuilder {
         @Override
         public void getElement(VariableReader receiver, VariableReader array, VariableReader index,
                 ArrayElementType type) {
+            arrayIndexMayBeOutOfBounds();
             if (isPrimitive(type)) {
                 return;
             }
@@ -353,6 +354,7 @@ class DependencyGraphBuilder {
         @Override
         public void putElement(VariableReader array, VariableReader index, VariableReader value,
                 ArrayElementType type) {
+            arrayIndexMayBeOutOfBounds();
             if (isPrimitive(type)) {
                 return;
             }
@@ -361,6 +363,14 @@ class DependencyGraphBuilder {
             if (valueNode != null && arrayNode != null && valueNode != arrayNode.getArrayItem()) {
                 valueNode.connect(arrayNode.getArrayItem());
             }
+        }
+
+        // The backends check array indexes and throw ArrayIndexOutOfBoundsException themselves, after this analysis,
+        // so no instruction here creates the exception. Its type must still reach the handlers, as the types of a
+        // failed cast or null check do.
+        private void arrayIndexMayBeOutOfBounds() {
+            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                    "java.lang.ArrayIndexOutOfBoundsException"));
         }
 
         private boolean isPrimitive(ArrayElementType type) {
