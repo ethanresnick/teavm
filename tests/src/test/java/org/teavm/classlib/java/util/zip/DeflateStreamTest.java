@@ -229,4 +229,30 @@ public class DeflateStreamTest {
             return super.read(b, off, Math.min(len, 1));
         }
     }
+
+    @Test
+    public void gzipOutputIsTheJdkOne() throws IOException {
+        var output = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(output);
+        gzip.write("hello".getBytes(StandardCharsets.UTF_8));
+        gzip.flush();
+        assertEquals(10, output.size());
+        gzip.close();
+        assertArrayEquals(new byte[] { 31, -117, 8, 0, 0, 0, 0, 0, 0, -1, -53, 72, -51, -55, -55, 7, 0, -122, -90, 16,
+                54, 5, 0, 0, 0 }, output.toByteArray());
+    }
+
+    @Test
+    public void gzipSyncFlush() throws IOException {
+        var output = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(output, true);
+        gzip.write("hello".getBytes(StandardCharsets.UTF_8));
+        gzip.flush();
+        var bytes = output.toByteArray();
+        assertArrayEquals(new byte[] { 0, 0, -1, -1 }, Arrays.copyOfRange(bytes, bytes.length - 4, bytes.length));
+        gzip.close();
+        try (var input = new GZIPInputStream(new ByteArrayInputStream(output.toByteArray()))) {
+            assertEquals("hello", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+        }
+    }
 }
