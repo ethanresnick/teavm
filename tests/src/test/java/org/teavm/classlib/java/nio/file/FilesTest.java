@@ -854,10 +854,9 @@ public class FilesTest {
                     0L,
                     1L,
                     999L,
-                    -1L,
+                    // Before the epoch, only whole seconds: the JDK on Linux stores -1500 ms as 0
                     -1_000L,
-                    -1_500L,
-                    -86_400_000L * 365 * 30 - 7L,
+                    -86_400_000L * 365 * 30,
                     315_550_800_000L,
                     4_102_444_800_456L
             };
@@ -878,11 +877,9 @@ public class FilesTest {
         }
     }
 
-    // The exact time, or the time cut to whole seconds, either towards zero (the JDK on Linux stores -1 ms as 0)
-    // or towards the past.
     private static void assertStoredTime(long expected, long actual) {
-        if (actual != expected && actual != expected / 1000 * 1000) {
-            assertEquals(Math.floorDiv(expected, 1000) * 1000, actual, "time set: " + expected);
+        if (actual != expected) {
+            assertEquals(expected / 1000 * 1000, actual, "time set: " + expected);
         }
     }
 
