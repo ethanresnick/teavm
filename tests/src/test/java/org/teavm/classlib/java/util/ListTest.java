@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
@@ -174,5 +175,17 @@ public class ListTest {
         } catch (UnsupportedOperationException e) {
             // ok
         }
+    }
+
+    @Test
+    public void ofRejectsNull() {
+        try {
+            List.of((Object) null);
+            fail();
+        } catch (NullPointerException e) {
+            // ok
+        }
+        // Collections.singletonList shares the list class with List.of(e) and still accepts null.
+        assertEquals(null, Collections.singletonList(null).get(0));
     }
 }

@@ -102,8 +102,10 @@ public interface TList<E> extends TSequencedCollection<E> {
         return TCollections.emptyList();
     }
 
+    // As in the JDK, List.of(null) throws NullPointerException. The check is here, not in the list class, because
+    // Collections.singletonList shares that class and accepts null.
     static <E> TList<E> of(E e) {
-        return TCollections.singletonList(e);
+        return TCollections.singletonList(Objects.requireNonNull(e));
     }
 
     static <E> TList<E> of(E e1, E e2) {
