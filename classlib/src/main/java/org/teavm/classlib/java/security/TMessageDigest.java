@@ -79,8 +79,8 @@ public abstract class TMessageDigest implements Cloneable {
         if (len == 0) {
             return;
         }
-        // Bulk get rather than array() and arrayOffset(): reading the backing array directly was only 1-6% faster
-        // in MessageDigestBenchmark.heapByteBuffer (V8, JS and Wasm GC), since hashing costs far more than the copy.
+        // Bulk get rather than array() and arrayOffset(): hashing costs far more than the copy, and reading the
+        // backing array directly showed no clear gain in MessageDigestBenchmark.heapByteBuffer.
         byte[] chunk = new byte[Math.min(len, 4096)];
         while (input.hasRemaining()) {
             int n = Math.min(chunk.length, input.remaining());

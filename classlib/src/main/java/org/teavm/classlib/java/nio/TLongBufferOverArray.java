@@ -94,7 +94,7 @@ class TLongBufferOverArray extends TLongBufferImpl {
             System.arraycopy(src.getArray(), src.getArrayOffset() + offset, array, start + index, length);
         } else {
             while (length-- > 0) {
-                array[start + index++] = src.getElement(offset++);
+                putElement(index++, src.getElement(offset++));
             }
         }
     }

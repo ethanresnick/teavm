@@ -98,10 +98,6 @@ public class BufferArrayTest {
             assertEquals(kind.get(buffer, i), kind.arrayElement(buffer, buffer.arrayOffset() + i),
                     path + " at " + i);
         }
-        if (buffer.hasRemaining()) {
-            assertEquals(kind.get(buffer, buffer.position()),
-                    kind.arrayElement(buffer, buffer.arrayOffset() + buffer.position()), path);
-        }
     }
 
     // Buffer.hasArray(): "If this method returns true then the array and arrayOffset methods may safely be
@@ -112,6 +108,7 @@ public class BufferArrayTest {
     @Test
     public void readOnlyBufferHasNoAccessibleArray() {
         for (Kind kind : kinds()) {
+            checkNoAccessibleArray(kind.asReadOnly(kind.allocateFilled(SIZE)), kind.name + " allocate");
             for (int p : POSITIONS) {
                 Buffer base = kind.wrap(SIZE, 0, SIZE);
                 base.position(p);
@@ -121,19 +118,21 @@ public class BufferArrayTest {
                 readOnly.add(kind.asReadOnly(kind.slice(base)));
                 readOnly.add(kind.duplicate(kind.asReadOnly(base)));
                 readOnly.add(kind.slice(kind.asReadOnly(base)));
-                readOnly.add(kind.asReadOnly(kind.allocateFilled(SIZE)));
                 for (Buffer buffer : readOnly) {
-                    String name = kind.name + " at " + p;
-                    assertTrue(buffer.isReadOnly(), name);
-                    assertFalse(buffer.hasArray(), name);
-                    assertThrows(ReadOnlyBufferException.class, buffer::array, name);
-                    assertThrows(ReadOnlyBufferException.class, buffer::arrayOffset, name);
+                    checkNoAccessibleArray(buffer, kind.name + " at " + p);
                 }
                 // The writable buffer the views came from still exposes its array.
                 assertTrue(base.hasArray(), kind.name);
                 assertEquals(0, base.arrayOffset(), kind.name);
             }
         }
+    }
+
+    private static void checkNoAccessibleArray(Buffer buffer, String name) {
+        assertTrue(buffer.isReadOnly(), name);
+        assertFalse(buffer.hasArray(), name);
+        assertThrows(ReadOnlyBufferException.class, buffer::array, name);
+        assertThrows(ReadOnlyBufferException.class, buffer::arrayOffset, name);
     }
 
     // XBuffer.put(XBuffer src): "This method transfers the elements remaining in the given source buffer into

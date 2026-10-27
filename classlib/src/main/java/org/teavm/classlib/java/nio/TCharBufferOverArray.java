@@ -94,7 +94,7 @@ class TCharBufferOverArray extends TCharBufferImpl {
             System.arraycopy(src.getArray(), src.getArrayOffset() + offset, array, start + index, length);
         } else {
             while (length-- > 0) {
-                array[start + index++] = src.get(offset++);
+                putChar(index++, src.get(offset++));
             }
         }
     }

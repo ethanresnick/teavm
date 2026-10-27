@@ -87,14 +87,15 @@ public class ChecksumTest {
                     buffer = buffer.slice();
                     break;
             }
-            buffer.limit(buffer.position() + DATA.length);
+            int start = buffer.position();
+            buffer.limit(start + DATA.length);
 
             CRC32 crc = new CRC32();
             crc.update(buffer);
             assertEquals(expectedCrc, crc.getValue(), "CRC32, case " + i);
             assertEquals(buffer.limit(), buffer.position(), "case " + i);
 
-            buffer.position(buffer.limit() - DATA.length);
+            buffer.position(start);
             Adler32 adler = new Adler32();
             adler.update(buffer);
             assertEquals(expectedAdler, adler.getValue(), "Adler32, case " + i);
