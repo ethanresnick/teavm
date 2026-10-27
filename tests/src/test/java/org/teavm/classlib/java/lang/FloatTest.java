@@ -234,6 +234,9 @@ public class FloatTest {
         assertEquals("1.0940399E9", Float.toString(1.0940399E9f));
         assertEquals("1.1611759E9", Float.toString(1.1611759E9f));
         assertEquals("1.0000008E9", Float.toString(1.0000008E9f));
+        // Above 10^10 the units are tens, and only a bound mantissa divisible by 5 can give an exact bound
+        assertEquals("1.000096E10", Float.toString(1.000096E10f));
+        assertEquals("1.080736E10", Float.toString(1.080736E10f));
         assertEquals("1.00000083E9", Float.toString(Math.nextUp(1.0000008E9f)));
         assertEquals("1.0000007E9", Float.toString(Math.nextDown(1.0000008E9f)));
         assertEquals("1.0083912E9", Float.toString(1.0083912E9f));

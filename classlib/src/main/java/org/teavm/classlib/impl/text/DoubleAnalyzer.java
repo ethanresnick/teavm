@@ -106,10 +106,16 @@ public final class DoubleAnalyzer {
         var binExp = exponent - 1076;
         if (binExp >= decExp && decExp < 24) {
             var even = ((mantissa >>> shift) & 1) == 0;
-            decMantissaHi = exactBound(decMantissaHi, decExp, (mantissa << 1) + (1L << shift), binExp, even, true);
-            decMantissaLow = powerOfTwo
-                    ? exactBound(decMantissaLow, decExp, (mantissa << 2) - 1, binExp - 1, even, false)
-                    : exactBound(decMantissaLow, decExp, (mantissa << 1) - (1L << shift), binExp, even, false);
+            // For decExp > 0 a bound mantissa that is not divisible by 5 cannot give a whole number of units
+            var hiMantissa = (mantissa << 1) + (1L << shift);
+            if (decExp <= 0 || isDivisibleBy5(hiMantissa)) {
+                decMantissaHi = exactBound(decMantissaHi, decExp, hiMantissa, binExp, even, true);
+            }
+            var lowMantissa = powerOfTwo ? (mantissa << 2) - 1 : (mantissa << 1) - (1L << shift);
+            if (decExp <= 0 || isDivisibleBy5(lowMantissa)) {
+                decMantissaLow = exactBound(decMantissaLow, decExp, lowMantissa, powerOfTwo ? binExp - 1 : binExp,
+                        even, false);
+            }
         }
 
         var exactMantissa = decMantissa;
@@ -122,13 +128,15 @@ public final class DoubleAnalyzer {
             decMantissa = Long.divideUnsigned(decMantissa, upperPos) * upperPos + upperPos;
         } else {
             var half = upperPos >>> 1;
-            // The value is mantissa * 2^(binExp + 1) and a halfway decimal is a multiple of 10^decExp, so the value
-            // can be exactly halfway only if it is a multiple of 2^decExp
+            // The value is mantissa * 2^(binExp + 1). A halfway decimal is 10^(k-1) * (10 * lower + 5) * 10^decExp
+            // with upperPos = 10^k, so its power of two is 2^(k - 1 + decExp), and k - 1 < 19 is the number of
+            // trailing zeros of half. The value can be exactly halfway only if the powers of two match. Both are
+            // counted with int operations, which are faster than long ones on JS.
             var lowBits = (int) mantissa;
             var mantissaZeros = lowBits != 0
                     ? Integer.numberOfTrailingZeros(lowBits)
                     : 32 + Integer.numberOfTrailingZeros((int) (mantissa >>> 32));
-            if (half > 0 && binExp + 1 + mantissaZeros >= decExp) {
+            if (half > 0 && binExp + 1 + mantissaZeros - decExp == Integer.numberOfTrailingZeros((int) half)) {
                 var lower = Long.divideUnsigned(decMantissa, upperPos);
                 var lowerMantissa = lower * upperPos;
                 var remainder = decMantissa - lowerMantissa;
@@ -199,6 +207,11 @@ public final class DoubleAnalyzer {
             return bound;
         }
         return upper == inclusive ? exact : exact - 1;
+    }
+
+    // Multiplication by the inverse of 5 modulo 2^64, see INV_POW5
+    private static boolean isDivisibleBy5(long value) {
+        return Long.compareUnsigned(value * -3689348814741910323L, 3689348814741910323L) <= 0;
     }
 
     // Checks that decMantissa * 10^decExp == binMantissa * 2^binExp exactly. decMantissa is unsigned.

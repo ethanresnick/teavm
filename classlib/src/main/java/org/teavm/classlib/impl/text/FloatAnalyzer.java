@@ -95,10 +95,16 @@ public final class FloatAnalyzer {
         var binExp = exponent - 151;
         if (binExp >= decExp && decExp < 12) {
             var even = ((mantissa >>> shift) & 1) == 0;
-            decMantissaHi = exactBound(decMantissaHi, decExp, (mantissa << 1) + (1 << shift), binExp, even, true);
-            decMantissaLow = powerOfTwo
-                    ? exactBound(decMantissaLow, decExp, (mantissa << 2) - 1, binExp - 1, even, false)
-                    : exactBound(decMantissaLow, decExp, (mantissa << 1) - (1 << shift), binExp, even, false);
+            // For decExp > 0 a bound mantissa that is not divisible by 5 cannot give a whole number of units
+            var hiMantissa = (mantissa << 1) + (1 << shift);
+            if (decExp <= 0 || isDivisibleBy5(hiMantissa)) {
+                decMantissaHi = exactBound(decMantissaHi, decExp, hiMantissa, binExp, even, true);
+            }
+            var lowMantissa = powerOfTwo ? (mantissa << 2) - 1 : (mantissa << 1) - (1 << shift);
+            if (decExp <= 0 || isDivisibleBy5(lowMantissa)) {
+                decMantissaLow = exactBound(decMantissaLow, decExp, lowMantissa, powerOfTwo ? binExp - 1 : binExp,
+                        even, false);
+            }
         }
 
         var exactMantissa = decMantissa;
@@ -111,9 +117,11 @@ public final class FloatAnalyzer {
             decMantissa = Integer.divideUnsigned(decMantissa, upperPos) * upperPos + upperPos;
         } else {
             var half = upperPos >>> 1;
-            // The value is mantissa * 2^(binExp + 1) and a halfway decimal is a multiple of 10^decExp, so the value
-            // can be exactly halfway only if it is a multiple of 2^decExp
-            if (half > 0 && binExp + 1 + Integer.numberOfTrailingZeros(mantissa) >= decExp) {
+            // The value is mantissa * 2^(binExp + 1). A halfway decimal is 10^(k-1) * (10 * lower + 5) * 10^decExp
+            // with upperPos = 10^k, so its power of two is 2^(k - 1 + decExp), and k - 1 is the number of trailing
+            // zeros of half. The value can be exactly halfway only if the powers of two match.
+            if (half > 0 && binExp + 1 + Integer.numberOfTrailingZeros(mantissa) - decExp
+                    == Integer.numberOfTrailingZeros(half)) {
                 var lower = Integer.divideUnsigned(decMantissa, upperPos);
                 var lowerMantissa = lower * upperPos;
                 var remainder = decMantissa - lowerMantissa;
@@ -185,6 +193,11 @@ public final class FloatAnalyzer {
             return bound;
         }
         return upper == inclusive ? exact : exact - 1;
+    }
+
+    // Multiplication by the inverse of 5 modulo 2^32, see INV_POW5
+    private static boolean isDivisibleBy5(int value) {
+        return Integer.compareUnsigned(value * -858993459, 858993459) <= 0;
     }
 
     // Checks that decMantissa * 10^decExp == binMantissa * 2^binExp exactly. decMantissa is unsigned.
