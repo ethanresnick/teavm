@@ -674,6 +674,10 @@ abstract class TDateFormatElement {
         @Override
         public void parse(String text, TCalendar date, TParsePosition position) {
             int index = position.getIndex();
+            if (index >= text.length()) {
+                position.setErrorIndex(index);
+                return;
+            }
             char signChar = text.charAt(index++);
             int sign;
             if (signChar == '+') {
