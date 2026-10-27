@@ -349,6 +349,42 @@ public class ThreadTest {
         }
     }
 
+    // join: "InterruptedException - if any thread has interrupted the current thread. The interrupted status of
+    // the current thread is cleared when this exception is thrown."
+    @Test
+    public void joinThrowsForEarlierInterrupt() throws InterruptedException {
+        var current = Thread.currentThread();
+        var other = new Thread(() -> {
+            try {
+                Thread.sleep(10_000);
+            } catch (InterruptedException e) {
+                // ends the thread
+            }
+        });
+        other.start();
+        var names = List.of("join()", "join(5000)", "join(5000, 1)");
+        var joins = List.<Action>of(other::join, () -> other.join(5000), () -> other.join(5000, 1));
+        for (var i = 0; i < joins.size(); ++i) {
+            current.interrupt();
+            long start = System.currentTimeMillis();
+            var watchdog = interruptLater(current);
+            var threw = false;
+            try {
+                joins.get(i).run();
+            } catch (InterruptedException e) {
+                threw = true;
+            } catch (Exception e) {
+                fail(names.get(i) + ": " + e);
+            }
+            watchdog.interrupt();
+            assertTrue(threw, names.get(i) + " did not throw");
+            assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+            assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+        }
+        other.interrupt();
+        other.join();
+    }
+
     private static void sleepUnchecked(long millis) {
         try {
             Thread.sleep(millis);
@@ -475,5 +511,20 @@ public class ThreadTest {
         } finally {
             current.setContextClassLoader(original);
         }
+    }
+
+    // Ends a call that blocks although it should throw at once, so that the test fails on its time check instead
+    // of hanging. Stop the returned thread with interrupt().
+    private static Thread interruptLater(Thread target) {
+        var watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            target.interrupt();
+        });
+        watchdog.start();
+        return watchdog;
     }
 }

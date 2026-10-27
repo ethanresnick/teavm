@@ -184,7 +184,9 @@ public interface TRandomGenerator {
     }
 
     /**
-     * The JDK's RandomSupport.boundedNextInt, which its nextInt(bound) and nextInt(origin, bound) use.
+     * A uniformly distributed int in [origin, bound), drawn from {@code rng.nextInt()} by masking when the range
+     * is a power of two and otherwise by a rejection loop, so that the result is uniform and matches the JDK's
+     * sequence for the same seed. Shared by nextInt(bound) and nextInt(origin, bound).
      * Requires {@code origin < bound}.
      */
     private static int boundedNextInt(TRandomGenerator rng, int origin, int bound) {
@@ -212,7 +214,7 @@ public interface TRandomGenerator {
         return r;
     }
 
-    /** {@link #boundedNextInt} for longs, as the JDK's RandomSupport.boundedNextLong. */
+    /** {@link #boundedNextInt} for longs, drawing from {@code rng.nextLong()}. */
     private static long boundedNextLong(TRandomGenerator rng, long origin, long bound) {
         long r = rng.nextLong();
         long n = bound - origin;
