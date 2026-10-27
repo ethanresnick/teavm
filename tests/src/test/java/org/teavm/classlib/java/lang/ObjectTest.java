@@ -248,10 +248,7 @@ public class ObjectTest {
         refs.add(runWaiter(newLock(locks), lock -> lock.wait(10000), true));
         names.add("wait() notified");
         refs.add(runNotifiedWaiter(newLock(locks)));
-        for (var i = 0; i < refs.size(); ++i) {
-            GCSupport.tryToTriggerGC(refs.get(i));
-            assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
-        }
+        assertAllCollected(refs, names);
         // The locks must stay reachable until here: a dead listener in a lock's queue is what kept a thread alive.
         assertEquals(refs.size(), locks.size());
     }
@@ -260,6 +257,19 @@ public class ObjectTest {
         var lock = new Object();
         locks.add(lock);
         return lock;
+    }
+
+    // A collection that clears one reference usually clears them all, and each tryToTriggerGC call is slow, so
+    // trigger one only for a reference that is still set.
+    private static void assertAllCollected(List<WeakReference<Thread>> refs, List<String> names) {
+        for (var ref : refs) {
+            if (ref.get() != null) {
+                GCSupport.tryToTriggerGC(ref);
+            }
+        }
+        for (var i = 0; i < refs.size(); ++i) {
+            assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
+        }
     }
 
     interface WaitAction {

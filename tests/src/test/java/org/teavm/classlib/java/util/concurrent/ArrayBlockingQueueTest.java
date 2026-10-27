@@ -271,10 +271,7 @@ public class ArrayBlockingQueueTest {
         names.add("take() woken by add()");
         var queue = newQueue(queues, 0);
         refs.add(runWaiter(queue, BlockingQueue::take, () -> queue.add(1)));
-        for (var i = 0; i < refs.size(); ++i) {
-            GCSupport.tryToTriggerGC(refs.get(i));
-            assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
-        }
+        assertAllCollected(refs, names);
         // The queues must stay reachable until here: a dead waiter in a queue is what kept a thread alive.
         assertEquals(refs.size(), queues.size());
     }
@@ -292,10 +289,7 @@ public class ArrayBlockingQueueTest {
         refs.add(runWaiter(newQueue(queues, 1), queue -> queue.put(2), INTERRUPT));
         names.add("poll(10 s) interrupted");
         refs.add(runWaiter(newQueue(queues, 0), queue -> queue.poll(10, TimeUnit.SECONDS), INTERRUPT));
-        for (var i = 0; i < refs.size(); ++i) {
-            GCSupport.tryToTriggerGC(refs.get(i));
-            assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
-        }
+        assertAllCollected(refs, names);
         assertEquals(refs.size(), queues.size());
     }
 
@@ -307,6 +301,19 @@ public class ArrayBlockingQueueTest {
         }
         queues.add(queue);
         return queue;
+    }
+
+    // A collection that clears one reference usually clears them all, and each tryToTriggerGC call is slow, so
+    // trigger one only for a reference that is still set.
+    private static void assertAllCollected(List<WeakReference<Thread>> refs, List<String> names) {
+        for (var ref : refs) {
+            if (ref.get() != null) {
+                GCSupport.tryToTriggerGC(ref);
+            }
+        }
+        for (var i = 0; i < refs.size(); ++i) {
+            assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
+        }
     }
 
     interface WaitAction {
