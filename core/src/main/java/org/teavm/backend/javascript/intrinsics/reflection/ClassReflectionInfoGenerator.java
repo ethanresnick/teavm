@@ -442,7 +442,8 @@ public class ClassReflectionInfoGenerator implements Injector {
             first = false;
             writer.append('[');
             writer.append('"').append(RenderingUtil.escapeString(method.getName())).append("\",").ws();
-            writer.append(ElementModifier.asModifiersInfo(method.readModifiers(), method.getLevel())).append(",").ws();
+            writer.append(ElementModifier.declaredModifiersInfo(dependencyInfo.getClassSource(), method))
+                    .append(",").ws();
             RenderingUtil.typeToClsString(writer, method.getResultType());
             writer.append(',').ws();
             if (method.parameterCount() == 0) {

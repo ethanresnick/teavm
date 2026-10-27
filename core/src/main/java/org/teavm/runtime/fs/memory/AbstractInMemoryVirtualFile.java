@@ -22,10 +22,12 @@ public abstract class AbstractInMemoryVirtualFile {
     String name;
     InMemoryVirtualDirectory parent;
     long lastModified = System.currentTimeMillis();
-    boolean readOnly;
+    // POSIX permission bits. There is a single user, the owner, so only the owner's bits decide access.
+    int mode;
 
-    AbstractInMemoryVirtualFile(String name) {
+    AbstractInMemoryVirtualFile(String name, int mode) {
         this.name = name;
+        this.mode = mode;
     }
 
     public String getName() {
@@ -54,11 +56,15 @@ public abstract class AbstractInMemoryVirtualFile {
     public abstract String[] listFiles();
 
     public boolean canRead() {
-        return true;
+        return (mode & 0400) != 0;
     }
 
     public boolean canWrite() {
-        return !readOnly;
+        return (mode & 0200) != 0;
+    }
+
+    public boolean canExecute() {
+        return (mode & 0100) != 0;
     }
 
     public long lastModified() {
@@ -66,7 +72,7 @@ public abstract class AbstractInMemoryVirtualFile {
     }
 
     public boolean setLastModified(long lastModified) {
-        if (readOnly) {
+        if (!canWrite()) {
             return false;
         }
         this.lastModified = lastModified;
@@ -74,7 +80,11 @@ public abstract class AbstractInMemoryVirtualFile {
     }
 
     public boolean setReadOnly(boolean readOnly) {
-        this.readOnly = readOnly;
+        return setAccess(0222, !readOnly);
+    }
+
+    public boolean setAccess(int modeBits, boolean enable) {
+        mode = enable ? mode | modeBits : mode & ~modeBits;
         return true;
     }
 

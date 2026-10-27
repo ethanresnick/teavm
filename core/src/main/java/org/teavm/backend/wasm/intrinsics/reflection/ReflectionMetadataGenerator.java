@@ -331,8 +331,7 @@ public class ReflectionMetadataGenerator {
             }
 
             if (methodInfoStruct.modifiersIndex() >= 0) {
-                var modifiers = ElementModifier.asModifiersInfo(method.readModifiers(), method.getLevel());
-                builder.i32Const(modifiers);
+                builder.i32Const(ElementModifier.declaredModifiersInfo(dependencies.getClassSource(), method));
             }
 
             if (methodInfoStruct.returnTypeIndex() >= 0) {

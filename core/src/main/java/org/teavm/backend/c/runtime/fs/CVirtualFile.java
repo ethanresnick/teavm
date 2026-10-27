@@ -161,6 +161,12 @@ public class CVirtualFile implements VirtualFile {
     }
 
     @Override
+    public boolean canExecute() {
+        char[] chars = path.toCharArray();
+        return CFileSystem.canExecute(chars, chars.length);
+    }
+
+    @Override
     public long lastModified() {
         char[] chars = path.toCharArray();
         return CFileSystem.lastModified(chars, chars.length);
@@ -176,6 +182,12 @@ public class CVirtualFile implements VirtualFile {
     public boolean setReadOnly(boolean readOnly) {
         char[] chars = path.toCharArray();
         return CFileSystem.setReadonly(chars, chars.length, readOnly);
+    }
+
+    @Override
+    public boolean setAccess(int modeBits, boolean enable) {
+        char[] chars = path.toCharArray();
+        return CFileSystem.setAccess(chars, chars.length, modeBits, enable);
     }
 
     @Override

@@ -141,6 +141,32 @@ int32_t teavm_file_setReadonly(char16_t* name, int32_t nameSize, int32_t readonl
     return result == 0;
 }
 
+int32_t teavm_file_canExecute(char16_t* name, int32_t nameSize) {
+    char* mbName = teavm_char16ToMb(name, nameSize);
+    int result = access(mbName, X_OK);
+    free(mbName);
+    return result == 0;
+}
+
+int32_t teavm_file_setAccess(char16_t* name, int32_t nameSize, int32_t modeBits, int32_t enable) {
+    struct stat s;
+    char* mbName = teavm_char16ToMb(name, nameSize);
+    if (stat(mbName, &s) != 0) {
+        free(mbName);
+        return 0;
+    }
+
+    mode_t mode = s.st_mode & 07777;
+    if (enable) {
+        mode |= (mode_t) modeBits;
+    } else {
+        mode &= ~(mode_t) modeBits;
+    }
+    int result = chmod(mbName, mode);
+    free(mbName);
+    return result == 0;
+}
+
 TeaVM_StringList* teavm_file_listFiles(char16_t* name, int32_t nameSize) {
     char* mbName = teavm_char16ToMb(name, nameSize);
     DIR* dir = opendir(mbName);
@@ -435,6 +461,11 @@ int32_t teavm_file_canWrite(char16_t* name, int32_t nameSize) {
     return teavm_file_checkExistingFileAccess(name, nameSize, GENERIC_WRITE);
 }
 
+// Windows has no execute permission: any existing file can be executed.
+int32_t teavm_file_canExecute(char16_t* name, int32_t nameSize) {
+    return teavm_file_exists(name, nameSize);
+}
+
 int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize) {
     WCHAR* nativeName = teavm_file_convertPath(name, nameSize);
     int32_t result = CreateDirectoryW(nativeName, NULL);
@@ -501,6 +532,15 @@ int32_t teavm_file_setReadonly(char16_t* name, int32_t nameSize, int32_t readonl
     BOOL status = SetFileAttributesW(nativeName, attributes);
     free(nativeName);
     return status;
+}
+
+// Windows has no read or execute permission bits and does not distinguish the owner from others: the write bits
+// map to the read-only attribute, and clearing the read or execute bits fails.
+int32_t teavm_file_setAccess(char16_t* name, int32_t nameSize, int32_t modeBits, int32_t enable) {
+    if (modeBits & 0222) {
+        return teavm_file_setReadonly(name, nameSize, !enable);
+    }
+    return enable && teavm_file_exists(name, nameSize);
 }
 
 int64_t teavm_file_lastModified(char16_t* name, int32_t nameSize) {

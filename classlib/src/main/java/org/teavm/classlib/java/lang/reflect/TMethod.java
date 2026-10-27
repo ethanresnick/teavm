@@ -51,25 +51,106 @@ public class TMethod extends TExecutable implements TMember {
         return genericReturnType;
     }
 
+    public boolean isDefault() {
+        // A public, non-abstract, non-static method of an interface.
+        int flags = getModifiers() & (TModifier.PUBLIC | TModifier.ABSTRACT | TModifier.STATIC);
+        return flags == TModifier.PUBLIC && getDeclaringClass().isInterface();
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(TModifier.toString(getModifiers(), (getDeclaringClass().getModifiers() & TModifier.INTERFACE) != 0));
-        if (sb.length() > 0) {
-            sb.append(' ');
+        appendModifiers(sb);
+        sb.append(getReturnType().getTypeName()).append(' ');
+        appendMemberName(sb);
+        appendParameters(sb, getParameterTypes(), false);
+        appendThrows(sb);
+        return sb.toString();
+    }
+
+    public String toGenericString() {
+        StringBuilder sb = new StringBuilder();
+        appendModifiers(sb);
+        TTypeVariable<?>[] typeParams = getTypeParameters();
+        if (typeParams.length > 0) {
+            sb.append('<');
+            for (int i = 0; i < typeParams.length; i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                appendTypeParameter(sb, typeParams[i]);
+            }
+            sb.append("> ");
         }
-        sb.append(getReturnType().getName()).append(' ').append(getDeclaringClass().getName()).append('.')
-                .append(getName()).append('(');
-        TClass<?>[] parameterTypes = getParameterTypes();
-        if (parameterTypes.length > 0) {
-            sb.append(parameterTypes[0].getName());
-            for (int i = 1; i < parameterTypes.length; ++i) {
-                sb.append(',').append(parameterTypes[i].getName());
+        sb.append(getGenericReturnType().getTypeName()).append(' ');
+        appendMemberName(sb);
+        appendParameters(sb, getGenericParameterTypes(), isVarArgs());
+        appendThrows(sb);
+        return sb.toString();
+    }
+
+    // With varargsSugar, the last parameter prints as "T..." instead of "T[]".
+    private static void appendParameters(StringBuilder sb, TType[] params, boolean varargsSugar) {
+        sb.append('(');
+        for (int i = 0; i < params.length; i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            String name = params[i].getTypeName();
+            if (varargsSugar && i == params.length - 1 && name.endsWith("[]")) {
+                sb.append(name, 0, name.length() - 2).append("...");
+            } else {
+                sb.append(name);
             }
         }
         sb.append(')');
+    }
 
-        return sb.toString();
+    private void appendThrows(StringBuilder sb) {
+        TClass<?>[] exceptions = getExceptionTypes();
+        for (int i = 0; i < exceptions.length; i++) {
+            sb.append(i == 0 ? " throws " : ",").append(exceptions[i].getTypeName());
+        }
+    }
+
+    // Appends the method modifiers (JLS 8.4.3) in JLS order, each followed by a space.
+    // "default" goes after "abstract". Other flag bits, such as bridge and varargs, never print.
+    private void appendModifiers(StringBuilder sb) {
+        int mods = getModifiers();
+        appendIf(sb, mods, TModifier.PUBLIC, "public");
+        appendIf(sb, mods, TModifier.PROTECTED, "protected");
+        appendIf(sb, mods, TModifier.PRIVATE, "private");
+        appendIf(sb, mods, TModifier.ABSTRACT, "abstract");
+        if (isDefault()) {
+            sb.append("default ");
+        }
+        appendIf(sb, mods, TModifier.STATIC, "static");
+        appendIf(sb, mods, TModifier.FINAL, "final");
+        appendIf(sb, mods, TModifier.SYNCHRONIZED, "synchronized");
+        appendIf(sb, mods, TModifier.NATIVE, "native");
+        appendIf(sb, mods, TModifier.STRICT, "strictfp");
+    }
+
+    private static void appendIf(StringBuilder sb, int mods, int flag, String word) {
+        if ((mods & flag) != 0) {
+            sb.append(word).append(' ');
+        }
+    }
+
+    private void appendMemberName(StringBuilder sb) {
+        sb.append(getDeclaringClass().getTypeName()).append('.').append(getName());
+    }
+
+    // Writes "T", or "T extends A & B" when the bounds say more than Object.
+    private static void appendTypeParameter(StringBuilder sb, TTypeVariable<?> variable) {
+        sb.append(variable.getName());
+        TType[] bounds = variable.getBounds();
+        if (bounds.length == 1 && bounds[0] == (Object) Object.class) {
+            return;
+        }
+        for (int i = 0; i < bounds.length; i++) {
+            sb.append(i == 0 ? " extends " : " & ").append(bounds[i].getTypeName());
+        }
     }
 
     public Object invoke(Object obj, Object... args) throws TIllegalAccessException, TIllegalArgumentException,

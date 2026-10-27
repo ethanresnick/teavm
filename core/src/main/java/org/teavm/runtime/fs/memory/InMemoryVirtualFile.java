@@ -24,7 +24,7 @@ public class InMemoryVirtualFile extends AbstractInMemoryVirtualFile {
     int size;
 
     InMemoryVirtualFile(String name) {
-        super(name);
+        super(name, 0666);
     }
 
     @Override
@@ -53,7 +53,7 @@ public class InMemoryVirtualFile extends AbstractInMemoryVirtualFile {
             return null;
         }
 
-        if (writable && readOnly) {
+        if ((readable && !canRead()) || (writable && !canWrite())) {
             return null;
         }
 

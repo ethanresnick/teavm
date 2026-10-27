@@ -17,6 +17,7 @@ package org.teavm.classlib.java.util.logging;
 
 import org.teavm.classlib.java.io.TSerializable;
 import org.teavm.classlib.java.lang.*;
+import org.teavm.classlib.java.util.TResourceBundle;
 
 public class TLogRecord extends TObject implements TSerializable {
     private static long sequenceNumberGenerator;
@@ -30,6 +31,9 @@ public class TLogRecord extends TObject implements TSerializable {
     private String sourceMethodName;
     private long threadID;
     private TThrowable thrown;
+    // TeaVM's Logger does not localize messages, so it ignores these; a custom Formatter can read them.
+    private String resourceBundleName;
+    private TResourceBundle resourceBundle;
 
     public TLogRecord(TLevel level, String msg) {
         this.level = level;
@@ -37,6 +41,22 @@ public class TLogRecord extends TObject implements TSerializable {
         this.millis = TSystem.currentTimeMillis();
         this.sequenceNumber = sequenceNumberGenerator++;
         this.threadID = TThread.currentThread().getId();
+    }
+
+    public String getResourceBundleName() {
+        return resourceBundleName;
+    }
+
+    public void setResourceBundleName(String name) {
+        resourceBundleName = name;
+    }
+
+    public TResourceBundle getResourceBundle() {
+        return resourceBundle;
+    }
+
+    public void setResourceBundle(TResourceBundle bundle) {
+        resourceBundle = bundle;
     }
 
     public TLevel getLevel() {
