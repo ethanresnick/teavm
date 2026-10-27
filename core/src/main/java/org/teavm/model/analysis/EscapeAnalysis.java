@@ -218,7 +218,10 @@ public class EscapeAnalysis {
             }
             for (Phi phi : block.getPhis()) {
                 for (Incoming incoming : phi.getIncomings()) {
+                    // Both ways: ScalarReplacement replaces a phi field by field, so the receiver needs the fields
+                    // of every incoming object, and every incoming object needs the fields of the receiver.
                     graphBuilder.addEdge(phi.getReceiver().getIndex(), incoming.getValue().getIndex());
+                    graphBuilder.addEdge(incoming.getValue().getIndex(), phi.getReceiver().getIndex());
                 }
             }
         }
