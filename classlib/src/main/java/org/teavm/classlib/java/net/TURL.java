@@ -294,12 +294,10 @@ public final class TURL implements Serializable {
 
         switch (protocol) {
             case "http":
+                strmHandler = createHttpHandler(80);
+                break;
             case "https":
-                // The XHR connection exists only on JS and Wasm GC. On C, linking it failed the build of every
-                // program that opens a URL, so http and https have no connection there, like other protocols.
-                strmHandler = PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()
-                        ? new TXHRStreamHandler()
-                        : new TDummyStreamHandler(80);
+                strmHandler = createHttpHandler(443);
                 break;
             case "ftp":
                 strmHandler = new TDummyStreamHandler(21);
@@ -309,6 +307,14 @@ public final class TURL implements Serializable {
                 break;
         }
 
+    }
+
+    private static TURLStreamHandler createHttpHandler(int defaultPort) {
+        // The XHR connection exists only on JS and Wasm GC. On C, linking it failed the build of every
+        // program that opens a URL, so http and https have no connection there, like other protocols.
+        return PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()
+                ? new TXHRStreamHandler(defaultPort)
+                : new TDummyStreamHandler(defaultPort);
     }
 
     public InputStream openStream() throws IOException {
