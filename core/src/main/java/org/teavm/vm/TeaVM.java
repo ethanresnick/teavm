@@ -95,6 +95,7 @@ import org.teavm.model.optimization.ScalarReplacement;
 import org.teavm.model.optimization.SystemArrayCopyOptimization;
 import org.teavm.model.optimization.UnreachableBasicBlockElimination;
 import org.teavm.model.optimization.UnusedVariableElimination;
+import org.teavm.model.optimization.UnusedVariableElimination.ImplicitExceptions;
 import org.teavm.model.text.ListingBuilder;
 import org.teavm.model.transformation.ClassInitializerInsertionTransformer;
 import org.teavm.model.util.ModelUtils;
@@ -158,6 +159,7 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
     private boolean cancelled;
     private ListableClassHolderSource writtenClasses;
     private TeaVMTarget target;
+    private final ImplicitExceptions implicitExceptions;
     private Map<Class<?>, TeaVMHostExtension> extensions = new HashMap<>();
     private Set<? extends MethodReference> virtualMethods;
     private AnnotationAwareCacheStatus cacheStatus;
@@ -182,6 +184,10 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         services.put(ExtensionEnvironment.class, dependencyAnalyzer.extensionEnvironment());
         dependencyAnalyzer.setObfuscated(builder.obfuscated);
         dependencyAnalyzer.setStrict(builder.strict);
+        // Targets insert null checks before inlining, so field reads and array clones need not be kept after that.
+        implicitExceptions = builder.strict
+                ? ImplicitExceptions.KEEP_UNCHECKED
+                : ImplicitExceptions.REMOVE;
         progressListener = new TeaVMProgressListener() {
             @Override public TeaVMProgressFeedback progressReached(int progress) {
                 return TeaVMProgressFeedback.CONTINUE;
@@ -726,7 +732,7 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
                     Program program = method.getProgram();
                     var context = new MethodOptimizationContextImpl(method);
                     inlining.apply(program, method.getReference());
-                    new UnusedVariableElimination().optimize(context, program);
+                    new UnusedVariableElimination(implicitExceptions).optimize(context, program);
                 }
             }
 
@@ -854,11 +860,11 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         if (optimizationLevel.ordinal() >= TeaVMOptimizationLevel.ADVANCED.ordinal()) {
             optimizations.add(new ConstantConditionElimination());
             optimizations.add(new RedundantJumpElimination());
-            optimizations.add(new UnusedVariableElimination());
+            optimizations.add(new UnusedVariableElimination(implicitExceptions));
         }
         optimizations.add(new ClassInitElimination());
         optimizations.add(new UnreachableBasicBlockElimination());
-        optimizations.add(new UnusedVariableElimination());
+        optimizations.add(new UnusedVariableElimination(implicitExceptions));
         if (target.needsSystemArrayCopyOptimization()) {
             optimizations.add(new SystemArrayCopyOptimization());
         }

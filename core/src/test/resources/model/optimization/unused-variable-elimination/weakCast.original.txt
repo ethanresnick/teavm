@@ -1,0 +1,6 @@
+var @this as this
+
+$start
+    @obj := invokeStatic `Foo.obj()Ljava/lang/Object;`
+    @cast := cast @obj to `Ljava/lang/String;`
+    return

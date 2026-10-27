@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.teavm.model.optimization.GlobalValueNumbering;
 import org.teavm.model.optimization.UnusedVariableElimination;
+import org.teavm.model.optimization.UnusedVariableElimination.ImplicitExceptions;
 import org.teavm.model.transformation.NoSuchFieldCatchElimination;
 
 public class PreOptimizingClassHolderSource implements ClassHolderSource {
@@ -53,7 +54,9 @@ public class PreOptimizingClassHolderSource implements ClassHolderSource {
             if (method.getProgram() != null) {
                 noSuchFieldCatchElimination.apply(method.getProgram());
                 new GlobalValueNumbering(true).optimize(method.getProgram());
-                new UnusedVariableElimination().optimize(method, method.getProgram());
+                // The mode is not known here, and null checks are not inserted yet, so keep every instruction that
+                // can throw. TeaVM removes them later when it does not compile in strict mode.
+                new UnusedVariableElimination(ImplicitExceptions.KEEP_ALL).optimize(method, method.getProgram());
             }
         }
         return cls;
