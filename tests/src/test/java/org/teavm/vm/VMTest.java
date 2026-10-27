@@ -1755,6 +1755,70 @@ public class VMTest {
         }
     }
 
+    // JLS 12.4.2 step 3: a recursive use on the thread that runs the initializer returns at once, also after the
+    // initializer has suspended. RecursiveSlowInitializer uses itself through RecursiveSlowInitializerUser.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void recursiveUseOfAsyncClassInitializerReturnsAtOnce() {
+        assertEquals("initialized", RecursiveSlowInitializer.value());
+        assertEquals("seen:null", RecursiveSlowInitializer.SEEN);
+        assertEquals("seen:null", RecursiveSlowInitializerUser.SEEN);
+    }
+
+    static class RecursiveSlowInitializer {
+        static final String VALUE;
+        static final String SEEN;
+
+        static {
+            sleepInInitializer();
+            SEEN = RecursiveSlowInitializerUser.SEEN;
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    static class RecursiveSlowInitializerUser {
+        static final String SEEN = "seen:" + RecursiveSlowInitializer.value();
+    }
+
+    // Several threads wait for the same initializer, and all of them see it ended
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void severalThreadsWaitForAsyncClassInitializer() throws InterruptedException {
+        var results = new String[4];
+        var threads = new Thread[results.length];
+        for (var i = 0; i < threads.length; ++i) {
+            var index = i;
+            threads[i] = new Thread(() -> results[index] = SharedSlowInitializer.value());
+            threads[i].start();
+        }
+        Thread.sleep(10);
+        assertEquals("initialized", SharedSlowInitializer.value());
+        for (var thread : threads) {
+            thread.join();
+        }
+        assertEquals("[initialized, initialized, initialized, initialized]", Arrays.toString(results));
+        assertEquals(1, SharedSlowInitializer.runs);
+    }
+
+    static class SharedSlowInitializer {
+        static final String VALUE;
+        static int runs;
+
+        static {
+            runs++;
+            sleepInInitializer();
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
     private static void sleepInInitializer() {
         try {
             Thread.sleep(100);

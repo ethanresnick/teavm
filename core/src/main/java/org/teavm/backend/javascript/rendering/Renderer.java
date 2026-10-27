@@ -66,15 +66,15 @@ import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 import org.teavm.model.analysis.ClassMetadataRequirements;
 import org.teavm.model.util.AsyncMethodFinder;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.RenderingException;
 import org.teavm.vm.TeaVMProgressFeedback;
 
 public class Renderer implements RenderingManager {
-    public static final MethodReference INITIALIZATION_ENTER = new MethodReference(ClassInitializationLock.class,
-            "enter", String.class, int.class);
-    public static final MethodReference INITIALIZATION_EXIT = new MethodReference(ClassInitializationLock.class,
-            "exit", String.class, void.class);
+    // Linked only when the program has an @Async method, which an async initializer implies
+    private static final MethodReference INITIALIZATION_ENTER = ClassInitializationLockDependencyListener.ENTER;
+    private static final MethodReference INITIALIZATION_EXIT = ClassInitializationLockDependencyListener.EXIT;
     public static final int SECTION_STRING_POOL = 0;
     public static final int SECTION_METADATA = 1;
 

@@ -101,6 +101,7 @@ import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.model.transformation.BoundCheckInsertion;
 import org.teavm.model.transformation.NullCheckFilter;
 import org.teavm.model.transformation.NullCheckInsertion;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
 import org.teavm.model.util.VariableCategoryProvider;
 import org.teavm.reflection.AnnotationGenerationHelper;
@@ -324,8 +325,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         exceptionCons.getVariable(1).propagate(dependencyAnalyzer.getClassType(Throwable.class.getName()));
         exceptionCons.use();
 
-        dependencyAnalyzer.linkMethod(Renderer.INITIALIZATION_ENTER).propagate(1, String.class).use();
-        dependencyAnalyzer.linkMethod(Renderer.INITIALIZATION_EXIT).propagate(1, String.class).use();
+        dependencyAnalyzer.addDependencyListener(new ClassInitializationLockDependencyListener());
 
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getMessage", String.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getCause", Throwable.class)).use();

@@ -78,6 +78,7 @@ import org.teavm.model.ValueType;
 import org.teavm.model.Variable;
 import org.teavm.model.analysis.ClassInitializerInfo;
 import org.teavm.model.instructions.NullConstantInstruction;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.model.util.InstructionVariableMapper;
 import org.teavm.model.util.RegisterAllocator;
 import org.teavm.model.util.UsageExtractor;
@@ -90,10 +91,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             "failedInitializer", void.class);
     public static final MethodReference INITIALIZER_ERROR = new MethodReference(WasmGCSupport.class,
             "initializerError", Throwable.class, Throwable.class);
-    public static final MethodReference INITIALIZATION_ENTER = new MethodReference(ClassInitializationLock.class,
-            "enter", String.class, int.class);
-    public static final MethodReference INITIALIZATION_EXIT = new MethodReference(ClassInitializationLock.class,
-            "exit", String.class, void.class);
+    // Linked only when the program has an @Async method, which an async initializer implies
+    private static final MethodReference INITIALIZATION_ENTER = ClassInitializationLockDependencyListener.ENTER;
+    private static final MethodReference INITIALIZATION_EXIT = ClassInitializationLockDependencyListener.EXIT;
     private WasmModule module;
     private ClassHierarchy hierarchy;
     private ListableClassHolderSource classes;
