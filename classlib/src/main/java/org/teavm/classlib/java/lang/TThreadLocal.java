@@ -23,6 +23,7 @@ public class TThreadLocal<T> extends TObject {
     private Map<Object, Object> map;
     private boolean initialized;
     private T value;
+    static final Object ABSENT = new Object();
 
     public TThreadLocal() {
         super();
@@ -116,8 +117,6 @@ public class TThreadLocal<T> extends TObject {
         Object v = map.get(TThread.currentThread().key);
         return v == null ? ABSENT : v == NULL ? null : v;
     }
-
-    static final Object ABSENT = new Object();
 
     private static boolean isInMainThread() {
         return TThread.currentThread() == TThread.getMainThread();

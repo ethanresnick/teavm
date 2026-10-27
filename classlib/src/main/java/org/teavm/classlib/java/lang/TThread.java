@@ -24,7 +24,7 @@ import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 
 public class TThread extends TObject implements TRunnable {
-    private static TThread mainThread = createMainThread();
+    private static TThread mainThread = new TThread("main", true);
     private static TThread currentThread = mainThread;
     private static int nextId = 1;
     private static int activeCount = 1;
@@ -53,29 +53,25 @@ public class TThread extends TObject implements TRunnable {
     private boolean started;
     // The context class loader once set (null is a valid value); until then, the system loader. A new thread
     // copies both from the thread that creates it, as in the JDK.
-    private Object contextClassLoader;
+    private TClassLoader contextClassLoader;
     private boolean contextClassLoaderSet;
     TRunnable target;
-
-    private static TThread createMainThread() {
-        TThread main = new TThread("main", true);
-        main.alive = true;
-        main.started = true;
-        return main;
-    }
 
     public TThread() {
         this(null, null);
     }
 
     /**
-     * The main thread's constructor. It has no creator, so it copies nothing. It must not reach
+     * The main thread's constructor. The main thread runs from the start, and it has no creator, so it copies
+     * nothing. It must not reach
      * the public constructor's inheritance snapshot: Thread's class initializer creates the main thread, and
      * currentThread() runs that initializer, so code reachable from here would make currentThread() suspendable.
      */
-    private TThread(String name, boolean mainThread) {
+    private TThread(String name, @SuppressWarnings("unused") boolean mainThread) {
         this.name = name;
         id = nextId++;
+        alive = true;
+        started = true;
     }
 
     public TThread(String name) {
@@ -167,7 +163,7 @@ public class TThread extends TObject implements TRunnable {
         Object[] pairs = inherited;
         inherited = null;
         if (pairs != null) {
-            for (int i = 0; i < pairs.length; i += 2) {
+            for (int i = 0; i < pairs.length && pairs[i] != null; i += 2) {
                 ((TThreadLocal<Object>) pairs[i]).set(pairs[i + 1]);
             }
         }
@@ -212,6 +208,9 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void join(long millis, int nanos) throws InterruptedException {
+        if (millis < 0 || nanos < 0 || nanos > 999999) {
+            throw new IllegalArgumentException();
+        }
         // A thread that was never started has nothing to wait for.
         if (currentThread() == this || !started) {
             return;
@@ -316,46 +315,50 @@ public class TThread extends TObject implements TRunnable {
     // The JDK's sleep(millis, nanos) and sleep(Duration). The clock has millisecond resolution, so a part of a
     // millisecond rounds up, as in the JDK before 21.
     public static void sleep(long millis, int nanos) throws TInterruptedException {
-        if (millis < 0) {
-            throw new IllegalArgumentException();
-        }
-        if (nanos < 0 || nanos > 999999) {
+        if (millis < 0 || nanos < 0 || nanos > 999999) {
             throw new IllegalArgumentException();
         }
         sleep(nanos > 0 && millis < Long.MAX_VALUE ? millis + 1 : millis);
     }
 
     public static void sleep(java.time.Duration duration) throws TInterruptedException {
-        long nanos = duration.toNanos();
-        if (nanos < 0) {
+        // As in the JDK, a negative duration returns at once, and one too long for a long of milliseconds
+        // saturates instead of throwing.
+        long seconds = duration.getSeconds();
+        if (seconds < 0) {
             return;
         }
-        long millis = nanos / 1_000_000;
-        sleep(millis, (int) (nanos % 1_000_000));
+        int nanos = duration.getNano();
+        long millis = seconds >= Long.MAX_VALUE / 1000 - 1 ? Long.MAX_VALUE : seconds * 1000 + nanos / 1_000_000;
+        sleep(millis, nanos % 1_000_000);
     }
 
     private static void sleep(long millis, AsyncCallback<Void> callback) {
         TThread current = currentThread();
         SleepHandler handler = new SleepHandler(current, callback);
-        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-            if (current.interruptedFlag) {
-                handler.interrupted();
-            } else {
-                handler.scheduleId = EventQueue.offer(handler, System.currentTimeMillis() + millis);
-                current.interruptHandler = handler;
-            }
-        } else {
-            int intMillis = millis < Integer.MAX_VALUE ? (int) millis : Integer.MAX_VALUE;
-            handler.scheduleId = Platform.schedule(handler, intMillis);
-            current.interruptHandler = handler;
+        // A thread interrupted before it sleeps throws at once, on every backend.
+        if (current.interruptedFlag) {
+            handler.interrupted();
+            return;
         }
+        // Host timers take an int delay (a larger one fires at once), so a longer sleep wakes after
+        // Integer.MAX_VALUE ms, about 24.8 days. This also keeps the deadline below from overflowing.
+        int intMillis = millis < Integer.MAX_VALUE ? (int) millis : Integer.MAX_VALUE;
+        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+            handler.scheduleId = EventQueue.offer(handler, System.currentTimeMillis() + intMillis);
+        } else {
+            handler.scheduleId = Platform.schedule(handler, intMillis);
+        }
+        current.interruptHandler = handler;
     }
 
     static class SleepHandler implements PlatformRunnable, EventQueue.Event, TThreadInterruptHandler {
         private TThread thread;
         private AsyncCallback<Void> callback;
         private boolean isInterrupted;
-        int scheduleId;
+        // -1 until the timer is scheduled. An interrupt before that must not kill another event: on C, event ids
+        // start at 0.
+        int scheduleId = -1;
 
         SleepHandler(TThread thread, AsyncCallback<Void> callback) {
             this.thread = thread;
@@ -367,10 +370,14 @@ public class TThread extends TObject implements TRunnable {
             thread.interruptedFlag = false;
             isInterrupted = true;
             if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                EventQueue.kill(scheduleId);
+                if (scheduleId >= 0) {
+                    EventQueue.kill(scheduleId);
+                }
                 EventQueue.offer(() -> callback.error(new TInterruptedException()));
             } else {
-                Platform.killSchedule(scheduleId);
+                if (scheduleId >= 0) {
+                    Platform.killSchedule(scheduleId);
+                }
                 Platform.postpone(() -> callback.error(new TInterruptedException()));
             }
         }
@@ -398,7 +405,7 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public TClassLoader getContextClassLoader() {
-        return contextClassLoaderSet ? (TClassLoader) contextClassLoader : TClassLoader.getSystemClassLoader();
+        return contextClassLoaderSet ? contextClassLoader : TClassLoader.getSystemClassLoader();
     }
     
     public UncaughtExceptionHandler getUncaughtExceptionHandler() {

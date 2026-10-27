@@ -15,9 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
 
@@ -41,21 +39,31 @@ public class TInheritableThreadLocal<T> extends TThreadLocal<T> {
 
     /**
      * The values a new thread inherits from the current thread, as pairs (instance, child value), or null if
-     * there are none. Only values the current thread has set count, as in the JDK.
+     * there are none. The array may end with null entries. Only values the current thread holds count, as in the
+     * JDK.
      */
     @SuppressWarnings("unchecked")
     static Object[] snapshot() {
         if (all == null || all.isEmpty()) {
             return null;
         }
-        List<Object> pairs = new ArrayList<>();
+        Object[] pairs = new Object[all.size() * 2];
+        int count = 0;
         for (TInheritableThreadLocal<?> local : all) {
             Object v = local.rawValue();
             if (v != ABSENT) {
-                pairs.add(local);
-                pairs.add(((TInheritableThreadLocal<Object>) local).childValue(v));
+                pairs[count++] = local;
+                pairs[count++] = v;
             }
         }
-        return pairs.isEmpty() ? null : pairs.toArray();
+        if (count == 0) {
+            return null;
+        }
+        // childValue is user code, so it runs after the loop: it may create another InheritableThreadLocal,
+        // which changes the set.
+        for (int i = 0; i < count; i += 2) {
+            pairs[i + 1] = ((TInheritableThreadLocal<Object>) pairs[i]).childValue(pairs[i + 1]);
+        }
+        return pairs;
     }
 }
