@@ -17,10 +17,12 @@ package org.teavm.classlib.java.nio.file;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -82,6 +84,10 @@ public class SymbolicLinkCTest {
             assertEquals(Set.of("dir ", "link /dangling", "dir /link-to-dir", "file /link-to-dir/a.txt",
                     "file /link-to-file", "dir /target-dir", "file /target-dir/a.txt"),
                     walk(Set.of(FileVisitOption.FOLLOW_LINKS)));
+
+            // Files.createDirectory throws FileAlreadyExistsException "if dir exists but is not a directory". A
+            // dangling link exists.
+            assertThrows(FileAlreadyExistsException.class, () -> Files.createDirectory(dangling));
 
             // Files.delete: "If the file is a symbolic link then the symbolic link itself, not the final target of
             // the link, is deleted."

@@ -17,8 +17,10 @@ package org.teavm.classlib.java.nio.file;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -115,6 +117,9 @@ public class SymbolicLinkTest {
         assertTrue(Files.exists(dangling, LinkOption.NOFOLLOW_LINKS));
         assertFalse(Files.notExists(dangling, LinkOption.NOFOLLOW_LINKS));
         assertTrue(Files.isSymbolicLink(dangling));
+
+        // Files.createDirectory throws FileAlreadyExistsException "if dir exists but is not a directory".
+        assertThrows(FileAlreadyExistsException.class, () -> Files.createDirectory(dangling));
 
         Files.delete(dangling);
         assertFalse(Files.exists(dangling, LinkOption.NOFOLLOW_LINKS));

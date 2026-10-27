@@ -303,11 +303,12 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
             throw new NoSuchFileException(parent.pathString);
         }
         var childVfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (childVfile != null && childVfile.exists()) {
+        // A symbolic link is an existing entry, also when its target does not exist.
+        if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
             throw new TFileAlreadyExistsException(defaultPath.pathString);
         }
         if (!vfile.createDirectory(defaultPath.getFileName().pathString, ownerOnly)) {
-            if (childVfile != null && childVfile.exists()) {
+            if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
                 // created since the check above
                 throw new TFileAlreadyExistsException(defaultPath.pathString);
             }
