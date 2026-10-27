@@ -23,6 +23,7 @@ import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -153,24 +154,59 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
 
         var defaultPath = (TDefaultPath) path;
-        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
-            if (!create) {
-                throw new NoSuchFileException(defaultPath.pathString);
+        if (checkThatDoesNotExist) {
+            // CREATE_NEW: "The check for the existence of the file and the creation of the file if it does not
+            // exist is atomic". Only the exclusive create decides, never an earlier existence check, and a failed
+            // create never falls through to opening whatever is at the path.
+            createFile(defaultPath, false);
+        } else {
+            var existing = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+            if (existing == null || !existing.exists()) {
+                if (!create) {
+                    throw new NoSuchFileException(defaultPath.pathString);
+                }
+                // CREATE: "Create a new file if it does not exist", else open it, so an entry that appeared since
+                // the check is opened.
+                createEntry(defaultPath, false);
+            } else if (existing.isDirectory()) {
+                throw new FileAlreadyExistsException(defaultPath.pathString);
             }
-            var parentPath = defaultPath.getParent();
-            var parentVfile = defaultPath.getFileSystem().vfs.getFile(
-                    parentPath != null ? parentPath.pathString : ".");
-            parentVfile.createFile(defaultPath.getFileName().toString());
-            vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        } else if (vfile.isDirectory() || checkThatDoesNotExist) {
-            throw new FileAlreadyExistsException(defaultPath.pathString);
         }
+        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
         var accessor = vfile.createAccessor(false, true, append || !truncate);
+        if (accessor == null) {
+            throw new FileSystemException(defaultPath.pathString);
+        }
         if (!append) {
             accessor.seek(0);
         }
         return new TFileOutputStream(accessor);
+    }
+
+    /**
+     * Creates a new, empty file, as {@code Files.createFile} does, and throws {@link FileAlreadyExistsException} if
+     * anything exists at the path. With {@code ownerOnly}, a file system with POSIX permissions gives the file mode
+     * 0600 (Files.createTempFile uses it).
+     */
+    public void createFile(TPath path, boolean ownerOnly) throws IOException {
+        var defaultPath = (TDefaultPath) path;
+        if (!createEntry(defaultPath, ownerOnly)) {
+            throw new FileAlreadyExistsException(defaultPath.pathString);
+        }
+    }
+
+    // Creates the file in one step that fails if the path exists (O_CREAT | O_EXCL on C), so that nothing created
+    // at the path between an earlier check and this call is reused. It also fails for a symbolic link, even one
+    // whose target does not exist, which an existence check that follows links misses.
+    private static boolean createEntry(TDefaultPath path, boolean ownerOnly) throws IOException {
+        var fileName = path.getFileName();
+        if (fileName == null) {
+            // a root, which always exists
+            return false;
+        }
+        var parentPath = path.getParent();
+        var parentVfile = path.getFileSystem().vfs.getFile(parentPath != null ? parentPath.pathString : ".");
+        return parentVfile.createFile(fileName.toString(), ownerOnly);
     }
 
     @Override
@@ -237,6 +273,26 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
     @Override
     public void createDirectory(TPath dir, TFileAttribute<?>... attrs) throws IOException {
+        checkNoAttributes(attrs);
+        createDirectory(dir, false);
+    }
+
+    /**
+     * Files.createFile, createDirectory, createDirectories, createTempFile and createTempDirectory throw
+     * UnsupportedOperationException "if the array contains an attribute that cannot be set atomically when creating
+     * the file". No attribute can be set here, so any attribute is rejected rather than ignored.
+     */
+    public static void checkNoAttributes(TFileAttribute<?>[] attrs) {
+        if (attrs.length > 0) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    /**
+     * As {@link #createDirectory(TPath, TFileAttribute[])}. With {@code ownerOnly}, a file system with POSIX
+     * permissions gives the directory mode 0700 (Files.createTempDirectory uses it).
+     */
+    public void createDirectory(TPath dir, boolean ownerOnly) throws IOException {
         var defaultPath = (TDefaultPath) dir;
         var parent = defaultPath.getParent();
         if (parent == null) {
@@ -247,10 +303,15 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
             throw new NoSuchFileException(parent.pathString);
         }
         var childVfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (childVfile != null && childVfile.exists()) {
+        // A symbolic link is an existing entry, also when its target does not exist.
+        if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
             throw new TFileAlreadyExistsException(defaultPath.pathString);
         }
-        if (!vfile.createDirectory(defaultPath.getFileName().pathString)) {
+        if (!vfile.createDirectory(defaultPath.getFileName().pathString, ownerOnly)) {
+            if (childVfile != null && (childVfile.exists() || childVfile.isSymbolicLink())) {
+                // created since the check above
+                throw new TFileAlreadyExistsException(defaultPath.pathString);
+            }
             throw new TFileSystemException("Failed to create directory " + defaultPath.pathString);
         }
     }
@@ -259,13 +320,26 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
     public void delete(TPath path) throws IOException {
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // As in the JDK, delete removes a symbolic link itself, also one whose target does not exist.
+        if (vfile == null || !vfile.exists() && !vfile.isSymbolicLink()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
         if (!vfile.delete()) {
             if (vfile.isDirectory() && vfile.listFiles().length > 0) {
                 throw new DirectoryNotEmptyException(defaultPath.pathString);
             }
+            throw new IOException();
+        }
+    }
+
+    public void setLastModifiedTime(TPath path, TFileTime time) throws IOException {
+        var defaultPath = (TDefaultPath) path;
+        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+        if (vfile == null || !vfile.exists()) {
+            throw new NoSuchFileException(defaultPath.pathString);
+        }
+        // Not File.setLastModified: it rejects times before the epoch, which Files accepts
+        if (!vfile.setLastModified(time.toMillis())) {
             throw new IOException();
         }
     }
@@ -310,17 +384,18 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
                 throw new FileSystemException(defaultTarget.pathString);
             }
         } else {
-            var targetParent = defaultTarget.getParent();
-            if (targetParent == null) {
-                targetParent = defaultTarget.getFileSystem().getPath(".");
+            if (!createEntry(defaultTarget, false) && !replace) {
+                throw new FileAlreadyExistsException(defaultTarget.pathString);
             }
-            var parentVfile = defaultTarget.getFileSystem().vfs.getFile(targetParent.pathString);
-            parentVfile.createFile(defaultTarget.getFileName().toString());
             targetVfile = defaultTarget.getFileSystem().vfs.getFile(defaultTarget.pathString);
         }
 
+        var targetAccessor = targetVfile.createAccessor(false, true, false);
+        if (targetAccessor == null) {
+            throw new FileSystemException(defaultTarget.pathString);
+        }
         try (var input = new TFileInputStream(srcVfile.createAccessor(true, false, false));
-                var output = new TFileOutputStream(targetVfile.createAccessor(false, true, false))) {
+                var output = new TFileOutputStream(targetAccessor)) {
             input.transferTo(output);
         }
     }
@@ -425,14 +500,19 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // With NOFOLLOW_LINKS, a symbolic link describes itself (lstat): it exists even when its target does not,
+        // and it is neither a directory nor a regular file. Its size is 0. Its times are its target's, because
+        // VirtualFile has no lstat times.
+        var isLink = vfile != null && Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)
+                && vfile.isSymbolicLink();
+        if (vfile == null || !isLink && !vfile.exists()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
         //noinspection unchecked
         return (A) new TBasicFileAttributes() {
             @Override
             public long size() {
-                return vfile.length();
+                return isLink ? 0 : vfile.length();
             }
 
             @Override
@@ -447,12 +527,12 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isSymbolicLink() {
-                return false;
+                return isLink;
             }
 
             @Override
             public boolean isRegularFile() {
-                return vfile.isFile();
+                return !isLink && vfile.isFile();
             }
 
             @Override
@@ -462,7 +542,7 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isDirectory() {
-                return vfile.isDirectory();
+                return !isLink && vfile.isDirectory();
             }
 
             @Override

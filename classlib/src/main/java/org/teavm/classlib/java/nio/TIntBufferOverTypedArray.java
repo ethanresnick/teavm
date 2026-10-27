@@ -98,7 +98,7 @@ class TIntBufferOverTypedArray extends TIntBufferImpl implements TArrayBufferVie
     void putImpl(int index, TIntBuffer src, int offset, int length) {
         if (src instanceof TIntBufferOverTypedArray) {
             var srcImpl = (TIntBufferOverTypedArray) src;
-            var slice = new Int32Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 4, length);
+            var slice = new Int32Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 4, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {

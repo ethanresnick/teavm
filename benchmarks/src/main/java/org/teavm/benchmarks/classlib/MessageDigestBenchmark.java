@@ -15,6 +15,7 @@
  */
 package org.teavm.benchmarks.classlib;
 
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +46,7 @@ public class MessageDigestBenchmark {
 
     private MessageDigest digest;
     private byte[] data;
+    private ByteBuffer buffer;
 
     @Setup
     public void setup() throws NoSuchAlgorithmException {
@@ -53,6 +55,7 @@ public class MessageDigestBenchmark {
         for (var i = 0; i < size; ++i) {
             data[i] = (byte) (i * 31 + 7);
         }
+        buffer = ByteBuffer.wrap(data);
     }
 
     /**
@@ -71,6 +74,16 @@ public class MessageDigestBenchmark {
         for (var offset = 0; offset < size; offset += 64) {
             digest.update(data, offset, 64);
         }
+        return digest.digest();
+    }
+
+    /**
+     * Digests a heap buffer with update(ByteBuffer), which may read its backing array or copy it out.
+     */
+    @Benchmark
+    public byte[] heapByteBuffer() {
+        buffer.clear();
+        digest.update(buffer);
         return digest.digest();
     }
 }

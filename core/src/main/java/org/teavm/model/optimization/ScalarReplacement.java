@@ -96,27 +96,24 @@ public class ScalarReplacement implements MethodOptimization {
                     continue;
                 }
 
+                // EscapeAnalysis gives a phi receiver the fields of all its incomings, so a phi without fields
+                // merges no replaced objects and stays as it is.
                 FieldReference[] fields = escapeAnalysis.getFields(phi.getReceiver().getIndex());
-                if (fields != null) {
-                    for (FieldReference field : fields) {
-                        Phi phiReplacement = new Phi();
-                        phiReplacement.setReceiver(fieldMappings.get(phi.getReceiver().getIndex()).get(field));
+                if (fields == null) {
+                    continue;
+                }
+                for (FieldReference field : fields) {
+                    Phi phiReplacement = new Phi();
+                    phiReplacement.setReceiver(fieldMappings.get(phi.getReceiver().getIndex()).get(field));
 
-                        for (Incoming incoming : phi.getIncomings()) {
-                            Incoming incomingReplacement = new Incoming();
-                            incomingReplacement.setSource(incoming.getSource());
-                            incomingReplacement.setValue(fieldMappings.get(incoming.getValue().getIndex()).get(field));
-                            phiReplacement.getIncomings().add(incomingReplacement);
-                        }
+                    for (Incoming incoming : phi.getIncomings()) {
+                        Incoming incomingReplacement = new Incoming();
+                        incomingReplacement.setSource(incoming.getSource());
+                        incomingReplacement.setValue(fieldMappings.get(incoming.getValue().getIndex()).get(field));
+                        phiReplacement.getIncomings().add(incomingReplacement);
+                    }
 
-                        additionalPhis.add(phiReplacement);
-                    }
-                } else {
-                    boolean isClass = phi.getIncomings().stream()
-                            .anyMatch(incoming -> escapeAnalysis.getFields(incoming.getValue().getIndex()) != null);
-                    if (!isClass) {
-                        continue;
-                    }
+                    additionalPhis.add(phiReplacement);
                 }
                 block.getPhis().remove(i--);
             }

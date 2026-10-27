@@ -60,6 +60,7 @@ import org.teavm.model.instructions.GetElementInstruction;
 import org.teavm.model.instructions.GetFieldInstruction;
 import org.teavm.model.instructions.InvocationType;
 import org.teavm.model.instructions.InvokeInstruction;
+import org.teavm.model.instructions.NullCheckInstruction;
 import org.teavm.model.instructions.PutElementInstruction;
 import org.teavm.model.instructions.PutFieldInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
@@ -181,6 +182,20 @@ public class ClassInference {
         return subclassListProvider.getMethods(descriptor);
     }
 
+    /**
+     * Returns the class whose methods a virtual call on a value of the given type resolves against, or
+     * {@code null} if the type cannot be a call receiver. Arrays inherit the methods of {@code java.lang.Object}.
+     */
+    public static String receiverClassName(ValueType type) {
+        if (type instanceof ValueType.Object) {
+            return ((ValueType.Object) type).getClassName();
+        }
+        if (type instanceof ValueType.Array) {
+            return "java.lang.Object";
+        }
+        return null;
+    }
+
     public ValueType[] typesOf(int variableIndex) {
         IntHashSet typeSet = types[nodeMapping[packNodeAndDegree(variableIndex, 0)]];
         if (typeSet == null) {
@@ -206,6 +221,7 @@ public class ClassInference {
             for (Instruction insn : block) {
                 insn.acceptVisitor(visitor);
             }
+            ImplicitExceptions.read(block, type -> propagateException(type, block));
 
             if (block.getExceptionVariable() != null) {
                 getNodeTypes(packNodeAndDegree(block.getExceptionVariable().getIndex(), 0));
@@ -604,9 +620,9 @@ public class ClassInference {
                     if (callSite.knownClasses.contains(type.value)) {
                         continue;
                     }
-                    var valueType = typeList.get(type.value);
-                    if (valueType instanceof ValueType.Object) {
-                        instanceNodeTypes.add(((ValueType.Object) valueType).getClassName());
+                    var className = receiverClassName(typeList.get(type.value));
+                    if (className != null) {
+                        instanceNodeTypes.add(className);
                     }
                 }
                 receiverTypes = instanceNodeTypes;
@@ -801,6 +817,11 @@ public class ClassInference {
         public void visit(CastInstruction insn) {
             casts.add(new ValueCast(insn.getValue().getIndex(), insn.getReceiver().getIndex(), insn.getTargetType()));
             getNodeTypes(packNodeAndDegree(insn.getReceiver().getIndex(), 0));
+        }
+
+        @Override
+        public void visit(NullCheckInstruction insn) {
+            assignmentGraphBuilder.addEdge(insn.getValue().getIndex(), insn.getReceiver().getIndex());
         }
 
         @Override

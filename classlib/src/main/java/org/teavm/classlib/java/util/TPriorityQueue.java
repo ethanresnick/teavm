@@ -27,6 +27,7 @@ import org.teavm.classlib.java.lang.TNullPointerException;
  * @param <E>
  */
 public class TPriorityQueue<E> extends TAbstractQueue<E> implements TSerializable {
+    private static final int REMOVE_MOVED_UP = -2;
     private Object[] data;
     private TComparator<Object> comparator;
     private TComparator<? super E> originalComparator;
@@ -113,17 +114,7 @@ public class TPriorityQueue<E> extends TAbstractQueue<E> implements TSerializabl
             throw new TNullPointerException();
         }
         ensureCapacity(size + 1);
-        int current = size;
-        while (current > 0) {
-            int parent = (current - 1) / 2;
-            if (comparator.compare(e, data[parent]) < 0) {
-                data[current] = data[parent];
-                current = parent;
-            } else {
-                break;
-            }
-        }
-        data[current] = e;
+        siftUp(size, e);
         ++size;
         ++version;
         return true;
@@ -159,34 +150,72 @@ public class TPriorityQueue<E> extends TAbstractQueue<E> implements TSerializabl
         return new TIterator<E>() {
             private int index;
             private int knownVersion = version;
+            // Array index of the last returned element, REMOVE_MOVED_UP if it is removeElement, which was returned
+            // from movedUp, or -1 if there is nothing to remove
             private int removeIndex = -1;
+            private Object removeElement;
+            // Elements that a removal moved from beyond the cursor to before it; returned after the array scan
+            private Object[] movedUp;
+            private int movedUpCount;
+            private int movedUpIndex;
+
             @Override public boolean hasNext() {
-                if (version != knownVersion) {
-                    throw new TConcurrentModificationException();
-                }
-                return index < size;
+                checkVersion();
+                return index < size || movedUpIndex < movedUpCount;
             }
-            @SuppressWarnings("unchecked")@Override public E next() {
-                if (version != knownVersion) {
-                    throw new TConcurrentModificationException();
+
+            @SuppressWarnings("unchecked")
+            @Override public E next() {
+                checkVersion();
+                if (index < size) {
+                    removeIndex = index;
+                    return (E) data[index++];
                 }
-                if (index >= size) {
-                    throw new TNoSuchElementException();
+                if (movedUpIndex < movedUpCount) {
+                    removeIndex = REMOVE_MOVED_UP;
+                    removeElement = movedUp[movedUpIndex];
+                    movedUp[movedUpIndex++] = null;
+                    return (E) removeElement;
                 }
-                removeIndex = index;
-                return (E) data[index++];
+                throw new TNoSuchElementException();
             }
+
             @Override public void remove() {
-                if (version != knownVersion) {
-                    throw new TConcurrentModificationException();
-                }
-                if (removeIndex < 0) {
+                checkVersion();
+                if (removeIndex >= 0) {
+                    Object moved = removeAt(removeIndex);
+                    if (moved == null) {
+                        // The slot now holds an element that has not been returned yet (or is past the end)
+                        index = removeIndex;
+                    } else {
+                        // The slot now holds an already returned element, while an element that has not been
+                        // returned yet moved before the cursor
+                        if (movedUp == null) {
+                            movedUp = new Object[4];
+                        } else if (movedUpCount == movedUp.length) {
+                            movedUp = Arrays.copyOf(movedUp, movedUpCount * 2);
+                        }
+                        movedUp[movedUpCount++] = moved;
+                    }
+                } else if (removeIndex == REMOVE_MOVED_UP) {
+                    for (int i = 0; i < size; ++i) {
+                        if (data[i] == removeElement) {
+                            removeAt(i);
+                            break;
+                        }
+                    }
+                    removeElement = null;
+                } else {
                     throw new TIllegalStateException();
                 }
-                removeAt(removeIndex);
                 removeIndex = -1;
-                --index;
                 knownVersion = version;
+            }
+
+            private void checkVersion() {
+                if (version != knownVersion) {
+                    throw new TConcurrentModificationException();
+                }
             }
         };
     }
@@ -200,18 +229,49 @@ public class TPriorityQueue<E> extends TAbstractQueue<E> implements TSerializabl
         ++version;
     }
 
-    private void removeAt(int index) {
+    /**
+     * Removes the element at the given index and fills the gap with the last element, which may have to move
+     * either down or up the heap.
+     *
+     * @return the last element if it moved to an index lower than the given one, otherwise {@code null}.
+     */
+    private Object removeAt(int index) {
         ++version;
-        Object item = data[size - 1];
-        while (true) {
-            int left = index * 2 + 1;
-            int right = left + 1;
-            int next;
-            if (left >= size) {
+        int last = --size;
+        Object item = data[last];
+        data[last] = null;
+        if (index == last) {
+            return null;
+        }
+        if (siftDown(index, item) == index && siftUp(index, item) != index) {
+            return item;
+        }
+        return null;
+    }
+
+    // Puts item into the hole at index, moving the hole up until item is not less than its parent
+    private int siftUp(int index, Object item) {
+        while (index > 0) {
+            int parent = (index - 1) / 2;
+            if (comparator.compare(item, data[parent]) >= 0) {
                 break;
-            } else if (right >= size || comparator.compare(data[left], data[right]) < 0) {
-                next = left;
-            } else {
+            }
+            data[index] = data[parent];
+            index = parent;
+        }
+        data[index] = item;
+        return index;
+    }
+
+    // Puts item into the hole at index, moving the hole down until item is not greater than its children
+    private int siftDown(int index, Object item) {
+        while (true) {
+            int next = index * 2 + 1;
+            if (next >= size) {
+                break;
+            }
+            int right = next + 1;
+            if (right < size && comparator.compare(data[right], data[next]) < 0) {
                 next = right;
             }
             if (comparator.compare(item, data[next]) <= 0) {
@@ -221,7 +281,7 @@ public class TPriorityQueue<E> extends TAbstractQueue<E> implements TSerializabl
             index = next;
         }
         data[index] = item;
-        data[--size] = null;
+        return index;
     }
 
     private void ensureCapacity(int capacity) {

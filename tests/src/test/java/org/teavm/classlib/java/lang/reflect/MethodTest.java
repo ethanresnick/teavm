@@ -17,6 +17,7 @@ package org.teavm.classlib.java.lang.reflect;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.lang.annotation.Inherited;
@@ -556,6 +557,38 @@ public class MethodTest {
             Thread.sleep(1);
             ++y;
             return x + y;
+        }
+    }
+
+    // The C backend does not support async methods in reflection; see asyncReflection.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void asyncReflectionFailedInitializer() throws Exception {
+        var method = ClassWithFailingAsyncInitializer.class.getMethod("foo", int.class);
+        assertThrows(ExceptionInInitializerError.class, () -> method.invoke(null, 23));
+        assertThrows(NoClassDefFoundError.class, () -> method.invoke(null, 23));
+    }
+
+    static class ClassWithFailingAsyncInitializer {
+        static {
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            if (failInitializer()) {
+                throw new IllegalStateException();
+            }
+        }
+
+        private static boolean failInitializer() {
+            return true;
+        }
+
+        @Reflectable
+        public static int foo(int x) throws InterruptedException {
+            Thread.sleep(1);
+            return x;
         }
     }
 }

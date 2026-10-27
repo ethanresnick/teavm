@@ -97,18 +97,25 @@ public final class DoubleAnalyzer {
                 : mulAndShiftRight((mantissa << 1) - (1L << shift), mantissa10Table[decExponent + 1],
                         mantissaShift - 1);
 
-        // The value is mantissa * 2^(binExp + 1), and decMantissa has units of 10^decExp. A computed bound is up to
-        // 3 units below the exact one. When the exact bound is a whole number of units, a decimal can sit exactly
+        // The value is mantissa * 2^(binExp + 1), and decMantissa has units of 10^decExp. A computed bound is a few
+        // units below the exact one. When the exact bound is a whole number of units, a decimal can sit exactly
         // on it. The JDK includes both bounds when the mantissa is even, and excludes them when it is odd.
-        // binExp >= decExp is needed for such a bound to exist.
+        // binExp >= decExp is needed for such a bound to exist. The bound mantissa is below 2^55 < 5^24, so for
+        // decExp >= 24 it cannot be a whole number of units.
         var decExp = decExponent - MAX_ABS_DEC_EXP - 17;
         var binExp = exponent - 1076;
-        if (binExp >= decExp) {
+        if (binExp >= decExp && decExp < 24) {
             var even = ((mantissa >>> shift) & 1) == 0;
-            decMantissaHi = exactBound(decMantissaHi, decExp, (mantissa << 1) + (1L << shift), binExp, even, true);
-            decMantissaLow = powerOfTwo
-                    ? exactBound(decMantissaLow, decExp, (mantissa << 2) - 1, binExp - 1, even, false)
-                    : exactBound(decMantissaLow, decExp, (mantissa << 1) - (1L << shift), binExp, even, false);
+            // For decExp > 0 a bound mantissa that is not divisible by 5 cannot give a whole number of units
+            var hiMantissa = (mantissa << 1) + (1L << shift);
+            if (decExp <= 0 || isDivisibleBy5(hiMantissa)) {
+                decMantissaHi = exactBound(decMantissaHi, decExp, hiMantissa, binExp, even, true);
+            }
+            var lowMantissa = powerOfTwo ? (mantissa << 2) - 1 : (mantissa << 1) - (1L << shift);
+            if (decExp <= 0 || isDivisibleBy5(lowMantissa)) {
+                decMantissaLow = exactBound(decMantissaLow, decExp, lowMantissa, powerOfTwo ? binExp - 1 : binExp,
+                        even, false);
+            }
         }
 
         var exactMantissa = decMantissa;
@@ -120,11 +127,28 @@ public final class DoubleAnalyzer {
         } else if (posCmp < 0) {
             decMantissa = Long.divideUnsigned(decMantissa, upperPos) * upperPos + upperPos;
         } else {
-            var lower = Long.divideUnsigned(decMantissa, upperPos);
-            var half = upperPos / 2;
-            if (half > 0 && isExact(lower * upperPos + half, decExp, mantissa, binExp + 1)) {
-                // The value is exactly halfway between two decimals. The JDK takes the one with the even digit.
-                decMantissa = ((lower & 1) == 0 ? lower : lower + 1) * upperPos;
+            var half = upperPos >>> 1;
+            // The value is mantissa * 2^(binExp + 1). A halfway decimal is 10^(k-1) * (10 * lower + 5) * 10^decExp
+            // with upperPos = 10^k, so its power of two is 2^(k - 1 + decExp), and k - 1 < 19 is the number of
+            // trailing zeros of half. The value can be exactly halfway only if the powers of two match. Both are
+            // counted with int operations, which are faster than long ones on JS.
+            var lowBits = (int) mantissa;
+            var mantissaZeros = lowBits != 0
+                    ? Integer.numberOfTrailingZeros(lowBits)
+                    : 32 + Integer.numberOfTrailingZeros((int) (mantissa >>> 32));
+            if (half > 0 && binExp + 1 + mantissaZeros - decExp == Integer.numberOfTrailingZeros((int) half)) {
+                var lower = Long.divideUnsigned(decMantissa, upperPos);
+                var lowerMantissa = lower * upperPos;
+                var remainder = decMantissa - lowerMantissa;
+                // decMantissa is within 3 units of the exact value, so only a remainder near half can be exact
+                // (the window has one more unit of slack)
+                if (remainder >= half - 4 && remainder <= half + 4 && isExact(lowerMantissa + half, decExp,
+                        mantissa, binExp + 1)) {
+                    // The value is exactly halfway between two decimals. The JDK takes the one with the even digit.
+                    decMantissa = (lower & 1) == 0 ? lowerMantissa : lowerMantissa + upperPos;
+                } else {
+                    decMantissa = remainder >= upperPos - half ? lowerMantissa + upperPos : lowerMantissa;
+                }
             } else {
                 decMantissa = Long.divideUnsigned(decMantissa + half, upperPos) * upperPos;
             }
@@ -156,35 +180,89 @@ public final class DoubleAnalyzer {
 
     // Returns the bound for the comparisons in findLowerDistance (decimal > bound) and findUpperDistance
     // (decimal <= bound). If the exact bound is binMantissa * 2^binExp, a whole number of units of 10^decExp,
-    // the result includes or excludes it exactly.
+    // the result includes or excludes it exactly. The exact bound, binMantissa * 2^binExp / 10^decExp, is computed
+    // directly, and it is used only if it is a whole number 0 to 2 units above the computed bound.
     private static long exactBound(long bound, int decExp, long binMantissa, int binExp, boolean inclusive,
             boolean upper) {
-        for (var i = 0; i < 3; ++i) {
-            if (isExact(bound + i, decExp, binMantissa, binExp)) {
-                return upper == inclusive ? bound + i : bound + i - 1;
-            }
+        var shift = binExp - decExp;
+        // A negative shift happens only for the lower bound below a power of two, and then binMantissa is odd
+        if (shift < 0 || shift >= 64 || decExp >= POW5.length || decExp <= -POW5.length) {
+            return bound;
         }
-        return bound;
+        long exact;
+        if (decExp >= 0) {
+            // binMantissa is divisible by 5^decExp exactly when this product is at most (2^64 - 1) / 5^decExp,
+            // and then the product is the quotient
+            var quotient = binMantissa * INV_POW5[decExp];
+            if (Long.compareUnsigned(quotient, INV_POW5_LIMIT[decExp]) > 0) {
+                return bound;
+            }
+            exact = quotient << shift;
+        } else {
+            exact = (binMantissa << shift) * POW5[-decExp];
+        }
+        // The exact value is at most bound + 3, so it fits in 64 bits unless bound is within 4 of 2^64. In that
+        // case a wrapped value is below bound and is rejected.
+        if (Long.compareUnsigned(exact, bound) < 0 || Long.compareUnsigned(exact - bound, 2) > 0) {
+            return bound;
+        }
+        return upper == inclusive ? exact : exact - 1;
+    }
+
+    // Multiplication by the inverse of 5 modulo 2^64, see INV_POW5
+    private static boolean isDivisibleBy5(long value) {
+        return Long.compareUnsigned(value * -3689348814741910323L, 3689348814741910323L) <= 0;
     }
 
     // Checks that decMantissa * 10^decExp == binMantissa * 2^binExp exactly. decMantissa is unsigned.
-    static boolean isExact(long decMantissa, int decExp, long binMantissa, int binExp) {
+    private static boolean isExact(long decMantissa, int decExp, long binMantissa, int binExp) {
+        if (decExp >= POW5.length || decExp <= -POW5.length) {
+            return false;
+        }
         var decZeros = Long.numberOfTrailingZeros(decMantissa);
         var binZeros = Long.numberOfTrailingZeros(binMantissa);
         // Powers of two must match, then the odd parts must differ by exactly 5^|decExp|
-        if (decZeros + decExp != binZeros + binExp || decExp > 27 || decExp < -27) {
+        if (decZeros + decExp != binZeros + binExp) {
             return false;
         }
         var decOdd = decMantissa >>> decZeros;
         var binOdd = binMantissa >>> binZeros;
-        long pow5 = 1;
-        for (var i = Math.abs(decExp); i > 0; --i) {
-            pow5 *= 5;
+        if (decExp >= 0) {
+            var pow5 = POW5[decExp];
+            return binOdd % pow5 == 0 && binOdd / pow5 == decOdd;
+        } else {
+            var pow5 = POW5[-decExp];
+            return Long.remainderUnsigned(decOdd, pow5) == 0 && Long.divideUnsigned(decOdd, pow5) == binOdd;
         }
-        return decExp >= 0
-                ? binOdd % pow5 == 0 && binOdd / pow5 == decOdd
-                : Long.remainderUnsigned(decOdd, pow5) == 0 && Long.divideUnsigned(decOdd, pow5) == binOdd;
     }
+
+    // Powers of 5 that fit in a long
+    private static final long[] POW5 = {
+            1L, 5L, 25L, 125L, 625L, 3125L, 15625L, 78125L, 390625L, 1953125L, 9765625L, 48828125L,
+            244140625L, 1220703125L, 6103515625L, 30517578125L, 152587890625L, 762939453125L,
+            3814697265625L, 19073486328125L, 95367431640625L, 476837158203125L, 2384185791015625L,
+            11920928955078125L, 59604644775390625L, 298023223876953125L, 1490116119384765625L,
+            7450580596923828125L
+    };
+
+    // Inverses of POW5 modulo 2^64
+    private static final long[] INV_POW5 = {
+            1L, -3689348814741910323L, -8116567392432202711L, 2066035336255469781L, -3276141747490816367L,
+            6723469279985657373L, 8723391485480952121L, -1944670517645719899L, -4078282918271054303L,
+            -8194354213138031507L, 5739826786856214345L, 1147965357371242869L, 3918941886216158897L,
+            -6594909252240588867L, 6059715779035702873L, 8590640785290961221L, -1971220657683718079L,
+            -4083592946278653939L, -4506067403997641111L, 2788135333942382101L, -3131721747953433903L,
+            -8005041979074507427L, 5777689233668919161L, -2533810968008126491L, 3182586621140285025L,
+            636517324228057005L, 127303464845611401L, -3663888121772788043L
+    };
+
+    // (2^64 - 1) / POW5, unsigned
+    private static final long[] INV_POW5_LIMIT = {
+            -1L, 3689348814741910323L, 737869762948382064L, 147573952589676412L, 29514790517935282L,
+            5902958103587056L, 1180591620717411L, 236118324143482L, 47223664828696L, 9444732965739L,
+            1888946593147L, 377789318629L, 75557863725L, 15111572745L, 3022314549L, 604462909L, 120892581L,
+            24178516L, 4835703L, 967140L, 193428L, 38685L, 7737L, 1547L, 309L, 61L, 12L, 2L
+    };
 
     static long findLowerDistance(long mantissa, long lower) {
         long pos = 1;

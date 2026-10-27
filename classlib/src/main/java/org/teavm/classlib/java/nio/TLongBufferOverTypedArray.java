@@ -98,7 +98,7 @@ class TLongBufferOverTypedArray extends TLongBufferImpl implements TArrayBufferV
     void putImpl(int index, TLongBuffer src, int offset, int length) {
         if (src instanceof TLongBufferOverTypedArray) {
             var srcImpl = (TLongBufferOverTypedArray) src;
-            var slice = new BigInt64Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 8, length);
+            var slice = new BigInt64Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 8, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {

@@ -894,7 +894,9 @@ public class ReflectionMetadataGenerator {
         WasmFunction callee = null;
         var virtual = false;
         if (method.hasModifier(ElementModifier.STATIC)) {
-            initClass(classInfo, method.getOwnerName(), function);
+            // The callee initializes its class: ClassInitializerInsertionTransformer starts every static method of a
+            // class with a dynamic initializer with an InitClassInstruction. When the initializer can suspend, that
+            // makes the callee async, so this caller gets the coroutine transformation below.
             callee = functions.forStaticMethod(method.getReference());
         } else {
             virtual = !method.hasModifier(ElementModifier.FINAL) && method.getLevel() != AccessLevel.PRIVATE
