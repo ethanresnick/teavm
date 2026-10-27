@@ -44,6 +44,7 @@ import org.teavm.model.instructions.ArrayElementType;
 import org.teavm.model.instructions.BinaryOperation;
 import org.teavm.model.instructions.NumericOperandType;
 import org.teavm.model.text.ListingBuilder;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 
 class DependencyGraphBuilder {
     private static final MethodDescriptor GET_CLASS = new MethodDescriptor("getClass", Class.class);
@@ -266,12 +267,13 @@ class DependencyGraphBuilder {
         public void binary(BinaryOperation op, VariableReader receiver, VariableReader first, VariableReader second,
                 NumericOperandType type) {
             super.binary(op, receiver, first, second, type);
-            if (dependencyAnalyzer.integerDivisionChecked
-                    && (op == BinaryOperation.DIVIDE || op == BinaryOperation.MODULO)
-                    && (type == NumericOperandType.INT || type == NumericOperandType.LONG)) {
-                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
-                        ArithmeticException.class.getName()));
+            if (dependencyAnalyzer.integerDivisionChecked && DivisionCheckInsertion.isIntegerDivision(op, type)) {
+                throwsArithmeticException();
             }
+        }
+
+        private void throwsArithmeticException() {
+            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(ArithmeticException.class.getName()));
         }
 
         @Override
@@ -387,6 +389,10 @@ class DependencyGraphBuilder {
                 List<? extends VariableReader> arguments) {
             if (handleSpecialMethod(receiver, instance, method)) {
                 return;
+            }
+            if (dependencyAnalyzer.integerDivisionChecked && instance == null
+                    && DivisionCheckInsertion.isUnsignedDivision(method)) {
+                throwsArithmeticException();
             }
 
             CallLocation callLocation = getCallLocation();

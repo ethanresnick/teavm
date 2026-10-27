@@ -66,6 +66,7 @@ import org.teavm.backend.c.generators.WeakReferenceGenerator;
 import org.teavm.backend.c.intrinsic.AddressIntrinsic;
 import org.teavm.backend.c.intrinsic.CResourcesIntrinsic;
 import org.teavm.backend.c.intrinsic.ConsoleIntrinsic;
+import org.teavm.backend.c.intrinsic.DivisionCheckIntrinsic;
 import org.teavm.backend.c.intrinsic.ExceptionHandlingIntrinsic;
 import org.teavm.backend.c.intrinsic.FunctionClassIntrinsic;
 import org.teavm.backend.c.intrinsic.FunctionIntrinsic;
@@ -345,6 +346,8 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
                 "throwArrayIndexOutOfBoundsException", void.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(ExceptionHandling.class, "throwNoClassDefFoundError",
                 void.class)).use();
+        dependencyAnalyzer.linkMethod(new MethodReference(ExceptionHandling.class, "throwArithmeticException",
+                void.class)).use();
         DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.MARK_FAILED).use();
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.INITIALIZER_ERROR)
@@ -482,6 +485,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         intrinsics.add(new FiberIntrinsic());
         intrinsics.add(new LongIntrinsic());
         intrinsics.add(new IntegerIntrinsic());
+        intrinsics.add(new DivisionCheckIntrinsic());
         intrinsics.add(new StringsIntrinsic());
         intrinsics.add(new ConsoleIntrinsic());
         intrinsics.add(new CResourcesIntrinsic());

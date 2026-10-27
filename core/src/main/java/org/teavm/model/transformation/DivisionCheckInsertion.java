@@ -15,12 +15,14 @@
  */
 package org.teavm.model.transformation;
 
+import java.util.HashMap;
 import java.util.function.Predicate;
 import org.teavm.dependency.DependencyAnalyzer;
 import org.teavm.model.BasicBlock;
 import org.teavm.model.Instruction;
 import org.teavm.model.MethodReference;
 import org.teavm.model.Program;
+import org.teavm.model.Variable;
 import org.teavm.model.instructions.BinaryInstruction;
 import org.teavm.model.instructions.BinaryOperation;
 import org.teavm.model.instructions.IntegerConstantInstruction;
@@ -32,8 +34,9 @@ import org.teavm.runtime.DivisionCheck;
 
 /**
  * Makes an integer division or remainder by zero throw ArithmeticException, as Java requires. The divisor goes
- * through {@link DivisionCheck} first, unless it is a constant other than zero. The backends do not check the
- * divisor themselves: JS gives 0, Wasm traps and C has undefined behavior.
+ * through {@link DivisionCheck} first, unless it is a constant other than zero. The same goes for the divisor of
+ * {@code Integer} and {@code Long} {@code divideUnsigned} and {@code remainderUnsigned}. The backends do not
+ * check the divisor themselves: JS gives 0, Wasm traps and C has undefined behavior.
  */
 public class DivisionCheckInsertion {
     public static final MethodReference CHECK_INT = new MethodReference(DivisionCheck.class, "checkDivisor",
@@ -71,33 +74,71 @@ public class DivisionCheckInsertion {
             }
         }
 
+        // A divisor that a block has already checked needs no second check later in the block, as in a / b
+        // followed by a % b.
+        var checked = new HashMap<Variable, Variable>();
         for (BasicBlock block : program.getBasicBlocks()) {
+            checked.clear();
             for (Instruction instruction : block) {
-                if (!(instruction instanceof BinaryInstruction binary)) {
-                    continue;
+                if (instruction instanceof BinaryInstruction binary) {
+                    var type = binary.getOperandType();
+                    var divisor = binary.getSecondOperand();
+                    if (isIntegerDivision(binary.getOperation(), type)
+                            && !isNonZeroConstant(nonZeroConstants, divisor)) {
+                        binary.setSecondOperand(checked.computeIfAbsent(divisor, d -> insertCheck(program, binary,
+                                d, type == NumericOperandType.LONG)));
+                    }
+                } else if (instruction instanceof InvokeInstruction invoke
+                        && isUnsignedDivision(invoke.getMethod())) {
+                    var arguments = invoke.getArguments().toArray(new Variable[0]);
+                    if (!isNonZeroConstant(nonZeroConstants, arguments[1])) {
+                        var isLong = invoke.getMethod().getClassName().equals(Long.class.getName());
+                        arguments[1] = checked.computeIfAbsent(arguments[1], d -> insertCheck(program, invoke, d,
+                                isLong));
+                        invoke.setArguments(arguments);
+                    }
                 }
-                if (binary.getOperation() != BinaryOperation.DIVIDE
-                        && binary.getOperation() != BinaryOperation.MODULO) {
-                    continue;
-                }
-                var type = binary.getOperandType();
-                if (type != NumericOperandType.INT && type != NumericOperandType.LONG) {
-                    continue;
-                }
-                var divisor = binary.getSecondOperand();
-                if (divisor.getIndex() < nonZeroConstants.length && nonZeroConstants[divisor.getIndex()]) {
-                    continue;
-                }
-
-                var check = new InvokeInstruction();
-                check.setType(InvocationType.SPECIAL);
-                check.setMethod(type == NumericOperandType.INT ? CHECK_INT : CHECK_LONG);
-                check.setArguments(divisor);
-                check.setReceiver(program.createVariable());
-                check.setLocation(binary.getLocation());
-                binary.insertPrevious(check);
-                binary.setSecondOperand(check.getReceiver());
             }
         }
+    }
+
+    /**
+     * Whether the instruction is an integer division or remainder, which throws ArithmeticException for a zero
+     * divisor.
+     */
+    public static boolean isIntegerDivision(BinaryOperation operation, NumericOperandType type) {
+        return (operation == BinaryOperation.DIVIDE || operation == BinaryOperation.MODULO)
+                && (type == NumericOperandType.INT || type == NumericOperandType.LONG);
+    }
+
+    public static boolean isCheck(MethodReference method) {
+        return method.equals(CHECK_INT) || method.equals(CHECK_LONG);
+    }
+
+    /**
+     * Whether the method is {@code Integer} or {@code Long} {@code divideUnsigned} or {@code remainderUnsigned},
+     * which the backends implement with the same division instructions and which throw ArithmeticException for a
+     * zero divisor as well.
+     */
+    public static boolean isUnsignedDivision(MethodReference method) {
+        return (method.getName().equals("divideUnsigned") || method.getName().equals("remainderUnsigned"))
+                && method.parameterCount() == 2
+                && (method.getClassName().equals(Integer.class.getName())
+                    || method.getClassName().equals(Long.class.getName()));
+    }
+
+    private static boolean isNonZeroConstant(boolean[] nonZeroConstants, Variable variable) {
+        return variable.getIndex() < nonZeroConstants.length && nonZeroConstants[variable.getIndex()];
+    }
+
+    private static Variable insertCheck(Program program, Instruction division, Variable divisor, boolean isLong) {
+        var check = new InvokeInstruction();
+        check.setType(InvocationType.SPECIAL);
+        check.setMethod(isLong ? CHECK_LONG : CHECK_INT);
+        check.setArguments(divisor);
+        check.setReceiver(program.createVariable());
+        check.setLocation(division.getLocation());
+        division.insertPrevious(check);
+        return check.getReceiver();
     }
 }
