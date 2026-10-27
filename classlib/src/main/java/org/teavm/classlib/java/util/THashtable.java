@@ -669,7 +669,7 @@ public class THashtable<K, V> extends TDictionary<K, V> implements TMap<K, V>,
         checkModCount(mc);
         if (newValue != null) {
             put(key, newValue);
-        } else {
+        } else if (oldValue != null) {
             remove(key);
         }
         return newValue;

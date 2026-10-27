@@ -164,10 +164,6 @@ public class TTreeMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
 
     @Override
     public V put(K key, V value) {
-        return putImpl(key, value);
-    }
-
-    private V putImpl(K key, V value) {
         // As in the JDK, only a structural change (a new key) counts as a modification. Replacing the value of an
         // existing key leaves modCount, so an iterator that runs meanwhile (for example, putAll of a map into
         // itself) does not throw ConcurrentModificationException.
@@ -658,11 +654,9 @@ public class TTreeMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
             map.root = null;
             map.modCount = 0;
             map.cachedEntrySet = null;
-            // Not putAll or put, which a subclass may override: as in the JDK, clone does not call them.
-            for (TIterator<Entry<K, V>> it = entrySet().iterator(); it.hasNext();) {
-                var entry = it.next();
-                map.putImpl(entry.getKey(), entry.getValue());
-            }
+            // Not putAll or put, which a subclass may override: as in the JDK, clone builds the tree directly.
+            Entry<K, V>[] entries = (Entry<K, V>[]) new Entry<?, ?>[size()];
+            map.fillMap(entrySet().toArray(entries));
 
             return map;
         } catch (TCloneNotSupportedException e) {
