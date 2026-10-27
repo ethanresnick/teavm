@@ -16,9 +16,8 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/ConcurrentLinkedDeque.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, and plain-field helpers in place of VarHandles.
+ * The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea and Martin Buchholz with assistance from members of
@@ -26,16 +25,10 @@
  * at http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: EmptyBlock|EmptyForIteratorPad|EmptyStatement|ImportOrder|InnerAssignment|LeftCurly
+// CHECKSTYLE.OFF: EmptyBlock|EmptyForIteratorPad|EmptyStatement|InnerAssignment|LeftCurly
 // CHECKSTYLE.OFF: MultipleVariableDeclarations|NeedBraces|OperatorWrap|RedundantModifier|RightCurly
 // CHECKSTYLE.OFF: UnnecessaryParentheses|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
-
-
 
 import java.util.AbstractCollection;
 import java.util.Arrays;
@@ -103,7 +96,7 @@ public class TConcurrentLinkedDeque<E>
      * required to support the entire Deque interface.
      *
      * We extend the techniques developed for TConcurrentLinkedQueue and
-     * TLinkedTransferQueue (see the internal docs for those classes).
+     * LinkedTransferQueue (see the internal docs for those classes).
      * Understanding the TConcurrentLinkedQueue implementation is a
      * prerequisite for understanding the implementation of this class.
      *

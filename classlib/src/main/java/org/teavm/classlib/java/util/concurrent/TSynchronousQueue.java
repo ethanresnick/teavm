@@ -16,9 +16,9 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/SynchronousQueue.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, and
+ * EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is kept.
+ * See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea, Bill Scherer, and Michael Scott with
@@ -27,19 +27,10 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: EmptyBlock|EmptyStatement|ImportOrder|InnerAssignment|LeftCurly|MultipleVariableDeclarations
-// CHECKSTYLE.OFF: NeedBraces|OperatorWrap|RedundantImport|RedundantModifier|RightCurly|UnnecessaryParentheses
-// CHECKSTYLE.OFF: UnusedImports|WhitespaceAfter|WhitespaceAround
+// CHECKSTYLE.OFF: EmptyBlock|EmptyStatement|InnerAssignment|LeftCurly|MultipleVariableDeclarations
+// CHECKSTYLE.OFF: NeedBraces|OperatorWrap|RedundantModifier|RightCurly|UnnecessaryParentheses
+// CHECKSTYLE.OFF: WhitespaceAfter|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
-import org.teavm.classlib.java.util.concurrent.locks.TCondition;
-import org.teavm.classlib.java.util.concurrent.locks.TLockSupport;
-import org.teavm.classlib.java.util.concurrent.locks.TReentrantLock;
-
-
 
 import java.util.AbstractQueue;
 import java.util.Collection;
@@ -48,6 +39,8 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.teavm.classlib.java.util.concurrent.locks.TLockSupport;
 import org.teavm.classlib.java.util.concurrent.locks.TReentrantLock;
 
@@ -97,7 +90,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
     /*
      * This class implements extensions of the dual stack and dual
      * queue algorithms described in "Nonblocking Concurrent Objects
-     * with TCondition Synchronization", by W. N. Scherer III and
+     * with Condition Synchronization", by W. N. Scherer III and
      * M. L. Scott.  18th Annual Conf. on Distributed Computing,
      * Oct. 2004 (see also
      * http://www.cs.rochester.edu/u/scott/synchronization/pseudocode/duals.html).
@@ -310,13 +303,6 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
             }
 
             private static void SWAITER$setOpaque(SNode o, Thread v) { o.waiter = v; }
-
-            static {
-                try {
-                } catch (RuntimeException e) {
-                    throw new ExceptionInInitializerError(e);
-                }
-            }
         }
 
         /** The head (top) of the stack */
@@ -494,17 +480,10 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
             o.head = v;
             return true;
         }
-
-        static {
-            try {
-            } catch (RuntimeException e) {
-                throw new ExceptionInInitializerError(e);
-            }
-        }
     }
 
     /** Dual Queue */
-    static final class TTransferQueue<E> extends Transferer<E> {
+    static final class TransferQueue<E> extends Transferer<E> {
         /*
          * This extends Scherer-Scott dual queue algorithm, differing,
          * among other ways, by using modes within nodes rather than
@@ -514,7 +493,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
          * from non-null to null (for put) or vice versa (for take).
          */
 
-        /** Node class for TTransferQueue. */
+        /** Node class for TransferQueue. */
         static final class QNode implements org.teavm.classlib.EmulSupport.ManagedBlocker {
             volatile QNode next;          // next node in queue
             volatile Object item;         // CAS'ed to or from null
@@ -590,13 +569,6 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
             }
 
             private static void QWAITER$setOpaque(QNode o, Thread v) { o.waiter = v; }
-
-            static {
-                try {
-                } catch (RuntimeException e) {
-                    throw new ExceptionInInitializerError(e);
-                }
-            }
         }
 
         /** Head of queue */
@@ -610,7 +582,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
          */
         transient volatile QNode cleanMe;
 
-        TTransferQueue() {
+        TransferQueue() {
             QNode h = new QNode(null, false); // initialize to dummy node.
             head = h;
             tail = h;
@@ -803,29 +775,22 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
         }
 
         // VarHandle mechanics
-        private static boolean QHEAD$compareAndSet(TTransferQueue o, QNode e, QNode v) {
+        private static boolean QHEAD$compareAndSet(TransferQueue o, QNode e, QNode v) {
             if (o.head != e) { return false; }
             o.head = v;
             return true;
         }
 
-        private static boolean QTAIL$compareAndSet(TTransferQueue o, QNode e, QNode v) {
+        private static boolean QTAIL$compareAndSet(TransferQueue o, QNode e, QNode v) {
             if (o.tail != e) { return false; }
             o.tail = v;
             return true;
         }
 
-        private static boolean QCLEANME$compareAndSet(TTransferQueue o, QNode e, QNode v) {
+        private static boolean QCLEANME$compareAndSet(TransferQueue o, QNode e, QNode v) {
             if (o.cleanMe != e) { return false; }
             o.cleanMe = v;
             return true;
-        }
-
-        static {
-            try {
-            } catch (RuntimeException e) {
-                throw new ExceptionInInitializerError(e);
-            }
         }
     }
 
@@ -852,7 +817,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
      *        access; otherwise the order is unspecified.
      */
     public TSynchronousQueue(boolean fair) {
-        transferer = fair ? new TTransferQueue<E>() : new TransferStack<E>();
+        transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
     }
 
     /**
@@ -1158,7 +1123,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
      */
     private void writeObject(java.io.ObjectOutputStream s)
         throws java.io.IOException {
-        boolean fair = transferer instanceof TTransferQueue;
+        boolean fair = transferer instanceof TransferQueue;
         if (fair) {
             qlock = new TReentrantLock(true);
             waitingProducers = new FifoWaitQueue();
@@ -1183,7 +1148,7 @@ public class TSynchronousQueue<E> extends AbstractQueue<E>
         throws java.io.IOException, ClassNotFoundException {
         s.defaultReadObject();
         if (waitingProducers instanceof FifoWaitQueue)
-            transferer = new TTransferQueue<E>();
+            transferer = new TransferQueue<E>();
         else
             transferer = new TransferStack<E>();
     }

@@ -16,9 +16,8 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/ConcurrentLinkedQueue.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, and plain-field helpers in place of VarHandles.
+ * The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea and Martin Buchholz with assistance from members of
@@ -26,15 +25,9 @@
  * at http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: EmptyBlock|EmptyForIteratorPad|ImportOrder|InnerAssignment|LeftCurly|MultipleVariableDeclarations
+// CHECKSTYLE.OFF: EmptyBlock|EmptyForIteratorPad|InnerAssignment|LeftCurly|MultipleVariableDeclarations
 // CHECKSTYLE.OFF: NeedBraces|OperatorWrap|RightCurly|UnnecessaryParentheses|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
-
-
 
 import java.util.AbstractQueue;
 import java.util.Arrays;
@@ -151,7 +144,7 @@ public class TConcurrentLinkedQueue<E> extends AbstractQueue<E>
      *
      * Both head and tail are permitted to lag.  In fact, failing to
      * update them every time one could is a significant optimization
-     * (fewer CASes). As with TLinkedTransferQueue (see the internal
+     * (fewer CASes). As with LinkedTransferQueue (see the internal
      * documentation for that class), we use a slack threshold of two;
      * that is, we update head/tail when the current pointer appears
      * to be two or more steps away from the first/last node.
@@ -1081,11 +1074,4 @@ public class TConcurrentLinkedQueue<E> extends AbstractQueue<E>
     }
     private static void NEXT$set(Node o, Node v) { o.next = v; }
     private static void NEXT$setRelease(Node o, Node v) { o.next = v; }
-
-    static {
-        try {
-        } catch (RuntimeException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-    }
 }
