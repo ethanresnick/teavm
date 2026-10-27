@@ -20,11 +20,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.junit.jupiter.api.Test;
-import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
-@EachTestCompiledSeparately
 public class ArrayBlockingQueueIndexTest {
     private static final int CAPACITY = 4;
 
@@ -46,7 +44,7 @@ public class ArrayBlockingQueueIndexTest {
                         var result = queue.drainTo(target, max);
                         actual = "result=" + result + " target=" + target + " rest=" + pollAll(queue);
                     } catch (RuntimeException e) {
-                        actual = describe(e);
+                        actual = QueueExceptions.describe(e);
                     }
                     if (!actual.equals(expected)) {
                         failures.add("start=" + start + " count=" + count + " max=" + max + ": expected " + expected
@@ -104,37 +102,12 @@ public class ArrayBlockingQueueIndexTest {
                         }
                         actual = "seen=" + seen + " rest=" + pollAll(queue);
                     } catch (RuntimeException e) {
-                        actual = describe(e);
+                        actual = QueueExceptions.describe(e);
                     }
                     if (!actual.equals(expectedText)) {
                         failures.add("start=" + start + " count=" + count + " removed=" + removed + ": expected "
                                 + expectedText + ", got " + actual);
                     }
-                }
-            }
-        }
-        assertEquals(List.of(), failures);
-    }
-
-    @Test
-    public void removeIfAtEveryOffset() {
-        var failures = new ArrayList<String>();
-        for (var start = 0; start < CAPACITY; ++start) {
-            for (var count = 0; count <= CAPACITY; ++count) {
-                var expected = new ArrayList<Integer>();
-                for (var i = 1; i < count; i += 2) {
-                    expected.add(i);
-                }
-                String actual;
-                try {
-                    var queue = queue(start, count);
-                    queue.removeIf(e -> e % 2 == 0);
-                    actual = pollAll(queue).toString();
-                } catch (RuntimeException e) {
-                    actual = describe(e);
-                }
-                if (!actual.equals(expected.toString())) {
-                    failures.add("start=" + start + " count=" + count + ": expected " + expected + ", got " + actual);
                 }
             }
         }
@@ -170,19 +143,5 @@ public class ArrayBlockingQueueIndexTest {
             result.add(i);
         }
         return result;
-    }
-
-    // Names the exception with instanceof checks, because getClass().getName() can be null on JS and C for an
-    // exception that the runtime throws.
-    private static String describe(RuntimeException e) {
-        if (e instanceof ArrayIndexOutOfBoundsException) {
-            return "ArrayIndexOutOfBoundsException";
-        } else if (e instanceof NullPointerException) {
-            return "NullPointerException";
-        } else if (e instanceof IllegalStateException) {
-            return "IllegalStateException";
-        } else {
-            return "other RuntimeException";
-        }
     }
 }

@@ -322,6 +322,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
 
             @Override
             public boolean hasNext() {
+                // remaining ends the iteration. The null check stops it early when another operation took elements.
                 return remaining > 0 && array[index] != null;
             }
 

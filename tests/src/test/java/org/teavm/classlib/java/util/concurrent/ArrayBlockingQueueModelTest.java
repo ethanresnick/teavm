@@ -107,7 +107,7 @@ public class ArrayBlockingQueueModelTest {
                         } catch (Mismatch e) {
                             failures.add(e.getMessage());
                         } catch (RuntimeException e) {
-                            failures.add(description + ": " + describe(e));
+                            failures.add(description + ": " + QueueExceptions.describe(e));
                         }
                     }
                 }
@@ -148,20 +148,19 @@ public class ArrayBlockingQueueModelTest {
     private static void run(String description, ArrayBlockingQueue<Integer> queue, List<Integer> initial,
             int capacity, Random random, List<String> failures) {
         var model = new ArrayList<>(initial);
-        var step = 0;
+        var step = -1;
         var operation = "initial";
         try {
-            checkState(description + " " + operation, queue, model, capacity);
+            checkState(operation, queue, model, capacity);
             for (step = 0; step < OPERATIONS; ++step) {
+                operation = "random operation";
                 operation = apply(queue, model, capacity, random);
-                checkState(description + " step " + step + " " + operation, queue, model, capacity);
+                checkState(operation, queue, model, capacity);
             }
         } catch (Mismatch e) {
-            // A mismatch in an operation's own result names only the operation.
-            var message = e.getMessage();
-            failures.add(message.startsWith(description) ? message : description + " step " + step + " " + message);
+            failures.add(description + " step " + step + " " + e.getMessage());
         } catch (RuntimeException e) {
-            failures.add(description + " step " + step + " " + operation + ": " + describe(e));
+            failures.add(description + " step " + step + " " + operation + ": " + QueueExceptions.describe(e));
         }
     }
 
@@ -414,22 +413,6 @@ public class ArrayBlockingQueueModelTest {
     private static void check(String description, String what, Object expected, Object actual) {
         if (expected == null ? actual != null : !expected.equals(actual)) {
             throw new Mismatch(description + ": " + what + " expected " + expected + ", got " + actual);
-        }
-    }
-
-    // Names the exception with instanceof checks, because getClass().getName() can be null on JS and C for an
-    // exception that the runtime throws.
-    private static String describe(RuntimeException e) {
-        if (e instanceof ArrayIndexOutOfBoundsException) {
-            return "ArrayIndexOutOfBoundsException";
-        } else if (e instanceof NullPointerException) {
-            return "NullPointerException";
-        } else if (e instanceof IllegalStateException) {
-            return "IllegalStateException";
-        } else if (e instanceof NoSuchElementException) {
-            return "NoSuchElementException";
-        } else {
-            return "other RuntimeException";
         }
     }
 

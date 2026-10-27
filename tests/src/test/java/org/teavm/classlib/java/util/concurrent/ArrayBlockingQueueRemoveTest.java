@@ -20,11 +20,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.junit.jupiter.api.Test;
-import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
-@EachTestCompiledSeparately
 public class ArrayBlockingQueueRemoveTest {
     private static final int CAPACITY = 4;
 
@@ -95,21 +93,7 @@ public class ArrayBlockingQueueRemoveTest {
             }
             return "size=" + size + " iterated=" + iterated + " offered=" + offered + " polled=" + polled;
         } catch (RuntimeException e) {
-            return describe(e);
-        }
-    }
-
-    // TeaVM's JS and C backends return null from getClass().getName() for an exception that the runtime throws, such
-    // as a failed array bounds check. So the test names the exception with instanceof checks.
-    private static String describe(RuntimeException e) {
-        if (e instanceof ArrayIndexOutOfBoundsException) {
-            return "ArrayIndexOutOfBoundsException";
-        } else if (e instanceof NullPointerException) {
-            return "NullPointerException";
-        } else if (e instanceof IllegalStateException) {
-            return "IllegalStateException";
-        } else {
-            return "other RuntimeException";
+            return QueueExceptions.describe(e);
         }
     }
 
