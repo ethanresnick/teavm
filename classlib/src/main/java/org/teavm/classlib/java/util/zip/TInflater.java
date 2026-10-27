@@ -28,9 +28,8 @@ public class TInflater implements TAutoCloseable {
     int inLength;
     int inRead;
     private boolean needsDictionary;
-    // The zlib header's two bytes, kept as inflate consumes them (see the Z_NEED_DICT case).
+    // The zlib header's two bytes, kept as inflate consumes them. jzlib does not expose them.
     private final byte[] header = new byte[2];
-    private int headerLength;
     private Inflater impl;
 
     public TInflater() {
@@ -109,33 +108,29 @@ public class TInflater implements TAutoCloseable {
             throw new IllegalStateException();
         }
 
+        // As in the JDK, 0 means "call needsInput() or needsDictionary()". jzlib reports an error for both:
+        // before any setInput, and again for each call until setDictionary.
+        if (needsDictionary || impl.next_in == null) {
+            return 0;
+        }
+
         long lastInSize = impl.total_in;
         long lastOutSize = impl.total_out;
-        boolean neededDict = needsDictionary;
-        needsDictionary = false;
         impl.setOutput(buf, off, nbytes);
 
         byte[] inArray = impl.next_in;
         int inIndex = impl.next_in_index;
         int errCode = impl.inflate(0);
-        if (!nowrap && headerLength < 2) {
-            long upTo = Math.min(2, impl.total_in);
-            for (long k = Math.max(lastInSize, headerLength); k < upTo; k++) {
-                header[(int) k] = inArray[inIndex + (int) (k - lastInSize)];
+        if (!nowrap && lastInSize < 2) {
+            // Keep the header bytes as inflate consumes them, which may take more than one call.
+            int upTo = (int) Math.min(2, impl.total_in);
+            for (int k = (int) lastInSize; k < upTo; k++) {
+                header[k] = inArray[inIndex + k - (int) lastInSize];
             }
-            headerLength = (int) upTo;
-            // Zlib's header checks, in zlib's order. jzlib checks none of them before it inflates.
-            if (headerLength == 2) {
-                int cmf = header[0] & 0xFF;
-                if (((cmf << 8) | (header[1] & 0xFF)) % 31 != 0) {
-                    throw new TDataFormatException();
-                }
-                if ((cmf & 0x0F) != 8) {
-                    throw new TDataFormatException();
-                }
-                if ((cmf >> 4) + 8 > 15) {
-                    throw new TDataFormatException();
-                }
+            // jzlib accepts a header that fails the FCHECK test (CMF * 256 + FLG a multiple of 31) when its method
+            // is deflate. It does check the method and the window size, as zlib does.
+            if (upTo == 2 && (((header[0] & 0xFF) << 8) | (header[1] & 0xFF)) % 31 != 0) {
+                throw new TDataFormatException();
             }
         }
         switch (errCode) {
@@ -155,10 +150,6 @@ public class TInflater implements TAutoCloseable {
                 throw new TDataFormatException("Error occurred: " + errCode);
         }
 
-        if (needsDictionary && neededDict) {
-            throw new TDataFormatException();
-        }
-
         inRead += impl.total_in - lastInSize;
         return (int) (impl.total_out - lastOutSize);
     }
@@ -172,7 +163,6 @@ public class TInflater implements TAutoCloseable {
     }
 
     public void reset() {
-        headerLength = 0;
         if (impl == null) {
             throw new NullPointerException();
         }
@@ -199,6 +189,7 @@ public class TInflater implements TAutoCloseable {
                 buf = Arrays.copyOfRange(buf, off, buf.length);
             }
             impl.setDictionary(buf, nbytes);
+            needsDictionary = false;
         } else {
             throw new ArrayIndexOutOfBoundsException();
         }
