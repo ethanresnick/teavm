@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
@@ -689,6 +690,31 @@ public class FilesTest {
         }
     }
 
+    // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
+    @Test
+    public void accessChecksFollowFilePermissions() throws IOException {
+        var file = new File("test-file-permissions");
+        var path = Path.of("test-file-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(Files.isReadable(path));
+            assertTrue(Files.isWritable(path));
+            assertFalse(Files.isExecutable(path));
+
+            assertTrue(file.setExecutable(true));
+            assertTrue(Files.isExecutable(path));
+            assertTrue(file.setReadable(false));
+            assertFalse(Files.isReadable(path));
+            assertTrue(file.setWritable(false));
+            assertFalse(Files.isWritable(path));
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+        assertFalse(Files.isExecutable(path));
+    }
+
     // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike
     // the createDirectory method, an exception is not thrown if the directory could not be created because it
     // already exists." It returns "the directory".
@@ -905,6 +931,17 @@ public class FilesTest {
                 output.write(1);
             }
             assertFalse(Files.exists(path));
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    @Test
+    public void readString() throws IOException {
+        var path = Path.of("test-file-string");
+        try {
+            Files.write(path, "héllo".getBytes(StandardCharsets.UTF_8));
+            assertEquals("héllo", Files.readString(path));
         } finally {
             Files.deleteIfExists(path);
         }
