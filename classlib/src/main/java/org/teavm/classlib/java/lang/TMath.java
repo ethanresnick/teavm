@@ -80,8 +80,9 @@ public final class TMath extends TObject {
     public static native double log(double a);
 
     public static double log10(double a) {
-        if (PlatformDetector.isWebAssemblyGC()) {
-            // V8 calls an imported Math.log10 much slower than Math.log, while fdlibm compiled to Wasm is fast
+        if (PlatformDetector.isWebAssemblyGC() || PlatformDetector.isC()) {
+            // V8 calls an imported Math.log10 much slower than Math.log, while fdlibm compiled to Wasm is fast.
+            // On C, glibc's log10 can be more than 1 ulp off.
             return TStrictMath.log10(a);
         }
         return log10Impl(a);
@@ -100,9 +101,10 @@ public final class TMath extends TObject {
 
     // cbrt, expm1, log1p, sinh, cosh and tanh use StrictMath's fdlibm ports on Wasm GC, since V8 calls these Math
     // imports 2-4 times slower than the ports run. On JS, the host's functions are faster than the ports (whose bit
-    // manipulation goes through BigInt), and C uses libm.
+    // manipulation goes through BigInt), and C uses libm, except for cbrt: glibc's cbrt can be 1 ulp off, which the
+    // Javadoc's bound doesn't allow.
     public static double cbrt(double a) {
-        if (PlatformDetector.isWebAssemblyGC()) {
+        if (PlatformDetector.isWebAssemblyGC() || PlatformDetector.isC()) {
             return TStrictMath.cbrt(a);
         }
         return cbrtImpl(a);
