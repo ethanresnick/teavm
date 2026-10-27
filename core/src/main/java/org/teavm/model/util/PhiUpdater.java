@@ -506,6 +506,11 @@ public class PhiUpdater {
             List<List<Variable>> builder = new ArrayList<>(Collections.nCopies(program.basicBlockCount(), null));
             for (Phi phi : program.basicBlockAt(frontier).getPhis()) {
                 for (Incoming incoming : phi.getIncomings()) {
+                    // Only a phi of the variable itself merges it. A phi of another variable that takes it as an
+                    // incoming value does not: the variable can still be used after the frontier.
+                    if (incoming.getValue() != phi.getReceiver()) {
+                        continue;
+                    }
                     List<Variable> variables = builder.get(incoming.getSource().getIndex());
                     if (variables == null) {
                         variables = new ArrayList<>();
