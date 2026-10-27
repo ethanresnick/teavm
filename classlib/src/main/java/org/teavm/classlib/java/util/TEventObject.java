@@ -31,9 +31,4 @@ public class TEventObject implements TSerializable {
     public Object getSource() {
         return source;
     }
-
-    @Override
-    public String toString() {
-        return getClass().getName() + "[source=" + source + "]";
-    }
 }

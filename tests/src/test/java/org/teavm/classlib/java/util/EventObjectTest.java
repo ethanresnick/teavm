@@ -15,34 +15,57 @@
  */
 package org.teavm.classlib.java.util;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.EventObject;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
 public class EventObjectTest {
+    // EventObject(Object source) Javadoc: "Throws: IllegalArgumentException - if source is null"
     @Test
     public void nullSourceRejected() {
-        try {
-            new EventObject(null);
-            fail();
-        } catch (IllegalArgumentException e) {
-            // ok
+        assertThrows(IllegalArgumentException.class, () -> new EventObject(null));
+        assertThrows(IllegalArgumentException.class, () -> new SubEvent(null));
+    }
+
+    // getSource() Javadoc: "Returns: the object on which the Event initially occurred"
+    @Test
+    public void getSourceReturnsConstructorArgument() {
+        Object[] sources = { new Object(), "", "src", 0, new int[0], new EventObject("inner") };
+        for (Object source : sources) {
+            assertSame(source, new EventObject(source).getSource());
+            assertSame(source, new SubEvent(source).getSource());
         }
     }
 
+    // Field summary: "protected Object source - The object on which the Event initially occurred."
+    // The field is protected and not final, so subclasses can both read and assign it.
     @Test
-    public void toStringNamesSource() {
-        assertEquals("java.util.EventObject[source=src]", new EventObject("src").toString());
+    public void subclassReadsSourceField() {
+        var source = new Object();
+        var event = new SubEvent(source);
+        assertSame(source, event.sourceField());
     }
 
     @Test
-    public void subclassReadsSourceField() {
-        var event = new SubEvent("src");
-        assertSame(event.getSource(), event.sourceField());
+    public void subclassAssignsSourceField() {
+        var event = new SubEvent("first");
+        var replacement = new Object();
+        event.setSourceField(replacement);
+        assertSame(replacement, event.getSource());
+        event.setSourceField(null);
+        assertNull(event.getSource());
+    }
+
+    // toString() Javadoc: "Returns a String representation of this EventObject." The format is
+    // unspecified, so only check that one is returned.
+    @Test
+    public void toStringReturnsString() {
+        assertNotNull(new EventObject("src").toString());
     }
 
     static class SubEvent extends EventObject {
@@ -52,6 +75,10 @@ public class EventObjectTest {
 
         Object sourceField() {
             return source;
+        }
+
+        void setSourceField(Object source) {
+            this.source = source;
         }
     }
 }
