@@ -605,4 +605,22 @@ public class FilesTest {
             new File("test-file-3").delete();
         }
     }
+
+    @Test
+    public void createTempFileTakesAnyPrefix() throws IOException {
+        var dir = Files.createDirectories(Path.of("test-temp-file-dir"));
+        try {
+            var shortPrefix = Files.createTempFile(dir, "ab", ".x");
+            assertTrue(shortPrefix.getFileName().toString().startsWith("ab"));
+            assertTrue(shortPrefix.getFileName().toString().endsWith(".x"));
+            assertTrue(Files.exists(shortPrefix));
+            var noPrefix = Files.createTempFile(dir, null, null);
+            assertTrue(noPrefix.getFileName().toString().endsWith(".tmp"));
+            assertTrue(Files.exists(noPrefix));
+            Files.delete(shortPrefix);
+            Files.delete(noPrefix);
+        } finally {
+            Files.delete(dir);
+        }
+    }
 }

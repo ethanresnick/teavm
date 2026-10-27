@@ -97,12 +97,12 @@ public final class TFiles {
 
     public static TPath createTempFile(TPath dir, String prefix, String suffix, TFileAttribute<?>... attrs)
             throws IOException {
-        if (prefix.length() < 3) {
-            throw new IllegalArgumentException();
-        }
-
+        // As in the JDK, there is no minimum prefix length (that rule is File.createTempFile's), and a null prefix
+        // is empty.
         var sb = new StringBuilder();
-        sb.append(prefix);
+        if (prefix != null) {
+            sb.append(prefix);
+        }
         generateRandomName(sb);
         sb.append(suffix != null ? suffix : ".tmp");
         return createFile(dir.resolve(sb.toString()), attrs);
