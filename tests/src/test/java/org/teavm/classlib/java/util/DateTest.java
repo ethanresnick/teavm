@@ -16,6 +16,8 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import java.time.Instant;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -44,5 +46,39 @@ public class DateTest {
         assertEquals(2023, date.getYear());
         assertEquals(1, date.getMonth());
         assertEquals(20, date.getDate());
+    }
+
+    // Date.toInstant(): "Converts this Date object to an Instant. The conversion creates an Instant that
+    // represents the same point on the time-line as this Date."
+    @Test
+    public void toInstant() {
+        for (var millis : new long[] { 0, 1, -1, 1600000000123L, -1600000000123L, Long.MAX_VALUE }) {
+            assertEquals(Instant.ofEpochMilli(millis), new Date(millis).toInstant(), String.valueOf(millis));
+            assertEquals(millis, new Date(millis).toInstant().toEpochMilli());
+        }
+    }
+
+    // Date.from(Instant): "Instant uses a precision of nanoseconds, whereas Date uses a precision of
+    // milliseconds. The conversion will truncate any excess precision information as though the amount in
+    // nanoseconds was subject to integer division by one million."
+    // "Throws: NullPointerException - if instant is null. IllegalArgumentException - if the instant is too
+    // large to represent as a Date"
+    @Test
+    public void from() {
+        assertEquals(5, Date.from(Instant.ofEpochMilli(5)).getTime());
+        assertEquals(-5, Date.from(Instant.ofEpochMilli(-5)).getTime());
+        assertEquals(1999, Date.from(Instant.ofEpochSecond(1, 999_999_999)).getTime());
+        // Instant.toEpochMilli() rounds towards negative infinity: -1 s + 1 ns is -999.999999 ms.
+        assertEquals(-1000, Date.from(Instant.ofEpochSecond(-1, 1)).getTime());
+        assertEquals(Long.MAX_VALUE, Date.from(Instant.ofEpochMilli(Long.MAX_VALUE)).getTime());
+        for (var millis : new long[] { 0, 7, -7, 1600000000123L, -1600000000123L }) {
+            var date = new Date(millis);
+            assertEquals(date, Date.from(date.toInstant()));
+        }
+        assertThrows(NullPointerException.class, () -> Date.from(null));
+        assertThrows(IllegalArgumentException.class, () -> Date.from(Instant.MAX));
+        assertThrows(IllegalArgumentException.class, () -> Date.from(Instant.MIN));
+        assertThrows(IllegalArgumentException.class, () -> Date.from(Instant.ofEpochMilli(Long.MAX_VALUE)
+                .plusMillis(1)));
     }
 }

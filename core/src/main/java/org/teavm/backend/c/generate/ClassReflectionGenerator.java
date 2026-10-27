@@ -268,7 +268,7 @@ class ClassReflectionGenerator {
         var nameIndex = context.getStringPool().getStringIndex(method.getName());
         writer.print(".name = TEAVM_GET_STRING_ADDRESS(").print(String.valueOf(nameIndex)).println("),");
 
-        var modifiers = ElementModifier.asModifiersInfo(method.readModifiers(), method.getLevel());
+        var modifiers = ElementModifier.declaredModifiersInfo(context.getDependencies().getClassSource(), method);
         writer.print(".modifiers = ").print(String.valueOf(modifiers)).println(",");
 
         writer.print(".returnType = ");

@@ -365,6 +365,19 @@ public class TDate implements TComparable<TDate> {
         return value;
     }
 
+    // The JDK 8 conversions.
+    public java.time.Instant toInstant() {
+        return java.time.Instant.ofEpochMilli(getTime());
+    }
+
+    public static TDate from(java.time.Instant instant) {
+        try {
+            return new TDate(instant.toEpochMilli());
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException(e);
+        }
+    }
+
     public void setTime(long time) {
         value = time;
     }
