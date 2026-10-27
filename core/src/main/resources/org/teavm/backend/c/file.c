@@ -107,6 +107,14 @@ int32_t teavm_file_exists(char16_t* name, int32_t nameSize) {
     return statResult == 0;
 }
 
+int32_t teavm_file_isSymbolicLink(char16_t* name, int32_t nameSize) {
+    struct stat s;
+    char* mbName = teavm_char16ToMb(name, nameSize);
+    int statResult = lstat(mbName, &s);
+    free(mbName);
+    return statResult == 0 && S_ISLNK(s.st_mode);
+}
+
 int32_t teavm_file_canRead(char16_t* name, int32_t nameSize) {
     char* mbName = teavm_char16ToMb(name, nameSize);
     int result = access(mbName, R_OK);
@@ -408,6 +416,12 @@ int32_t teavm_file_isDir(char16_t* name, int32_t nameSize) {
 int32_t teavm_file_exists(char16_t* name, int32_t nameSize) {
     DWORD attributes = teavm_file_getAttributes(name, nameSize);
     return attributes != INVALID_FILE_ATTRIBUTES;
+}
+
+int32_t teavm_file_isSymbolicLink(char16_t* name, int32_t nameSize) {
+    // GetFileAttributesW describes the link itself. A reparse point is a symbolic link or a junction.
+    DWORD attributes = teavm_file_getAttributes(name, nameSize);
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_REPARSE_POINT);
 }
 
 static int32_t teavm_file_checkExistingFileAccess(char16_t* name, int32_t nameSize, DWORD desiredAccess) {

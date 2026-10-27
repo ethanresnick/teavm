@@ -390,18 +390,6 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         return false;
     }
 
-    // As in the JDK, exists with NOFOLLOW_LINKS asks about the link itself (lstat). The inherited version calls
-    // checkAccess, which follows the link, so a dangling link did not exist.
-    @Override
-    public boolean exists(TPath path, TLinkOption... options) {
-        try {
-            readAttributes(path, TBasicFileAttributes.class, options);
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
     @Override
     public void checkAccess(TPath path, TAccessMode... modes) throws IOException {
         var defaultPath = (TDefaultPath) path;

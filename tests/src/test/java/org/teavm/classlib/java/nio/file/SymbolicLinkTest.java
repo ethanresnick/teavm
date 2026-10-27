@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -80,6 +81,34 @@ public class SymbolicLinkTest {
         assertEquals(Set.of("dir /links", "dir /links/target-dir", "file /links/target-dir/a.txt",
                 "link /links/dangling", "link /links/link-to-dir"), visited);
 
+        // walkFileTree: "If the options parameter contains the FOLLOW_LINKS option then symbolic links are
+        // followed. When following links, and the attributes of the target cannot be read, then this method
+        // attempts to get the BasicFileAttributes of the link. If they can be read then the visitFile method is
+        // invoked with the attributes of the link."
+        Set<String> followed = new TreeSet<>();
+        Files.walkFileTree(Path.of("/links"), Set.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE,
+                new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                        followed.add("dir " + dir);
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                        followed.add((attrs.isSymbolicLink() ? "link " : "file ") + file);
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                        followed.add("failed " + file);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+        assertEquals(Set.of("dir /links", "dir /links/target-dir", "file /links/target-dir/a.txt",
+                "dir /links/link-to-dir", "file /links/link-to-dir/a.txt", "link /links/dangling"), followed);
+
         // A link whose target does not exist: only a NOFOLLOW_LINKS query sees it, and delete removes it.
         var dangling = Path.of("/links/dangling");
         assertFalse(Files.exists(dangling));
@@ -90,6 +119,14 @@ public class SymbolicLinkTest {
         Files.delete(dangling);
         assertFalse(Files.exists(dangling, LinkOption.NOFOLLOW_LINKS));
         assertTrue(Files.exists(Path.of("/links/target-dir")));
+
+        // Files.delete: "If the file is a symbolic link then the symbolic link itself, not the final target of the
+        // link, is deleted." The target directory is not empty, so deleting it instead would fail.
+        Files.delete(link);
+        assertFalse(Files.exists(link, LinkOption.NOFOLLOW_LINKS));
+        assertTrue(Files.isDirectory(Path.of("/links/target-dir")));
+        assertTrue(Files.isRegularFile(Path.of("/links/target-dir/a.txt")));
+        assertFalse(Files.deleteIfExists(dangling));
     }
 
     // Delegates to an in-memory file system and reports some paths as symbolic links to others.
@@ -109,11 +146,32 @@ public class SymbolicLinkTest {
 
         @Override
         public VirtualFile getFile(String path) {
+            // As an operating system does, follow links among the parents; the last component stays a link.
+            // After 40 links, give up, as ELOOP does.
+            for (var hops = 0;; ++hops) {
+                var resolved = resolveParent(path);
+                if (resolved == null) {
+                    break;
+                }
+                if (hops == 40) {
+                    return null;
+                }
+                path = resolved;
+            }
             var target = links.get(path);
             if (target != null) {
                 return new LinkFile(delegate.getFile(path), delegate.getFile(target));
             }
             return delegate.getFile(path);
+        }
+
+        private String resolveParent(String path) {
+            for (var link : links.entrySet()) {
+                if (path.startsWith(link.getKey() + "/")) {
+                    return link.getValue() + path.substring(link.getKey().length());
+                }
+            }
+            return null;
         }
 
         @Override

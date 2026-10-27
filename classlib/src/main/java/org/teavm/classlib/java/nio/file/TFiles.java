@@ -346,9 +346,10 @@ public final class TFiles {
 
     public static TPath walkFileTree(TPath start, Set<TFileVisitOption> options, int maxDepth,
             TFileVisitor<? super TPath> visitor) throws IOException {
-        // As the JDK's FileTreeWalker, the walk does not follow symbolic links unless the caller asks for
-        // FOLLOW_LINKS: a link to a directory is visited as a file. With FOLLOW_LINKS, the JDK also detects cycles
-        // (FileSystemLoopException); this walk does not.
+        // "By default, symbolic links are not automatically followed by this method. If the options parameter
+        // contains the FOLLOW_LINKS option then symbolic links are followed." A link to a directory is then visited
+        // as a file. With FOLLOW_LINKS, this walk does not detect cycles (FileSystemLoopException), because
+        // VirtualFile has no file keys.
         TLinkOption[] linkOptions = options.contains(TFileVisitOption.FOLLOW_LINKS)
                 ? new TLinkOption[0]
                 : new TLinkOption[] { TLinkOption.NOFOLLOW_LINKS };
@@ -366,6 +367,16 @@ public final class TFiles {
         } catch (IOException e) {
             exc = e;
             attrs = null;
+            if (linkOptions.length == 0) {
+                // "When following links, and the attributes of the target cannot be read, then this method attempts
+                // to get the BasicFileAttributes of the link."
+                try {
+                    attrs = readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
+                    exc = null;
+                } catch (IOException e2) {
+                    // report the first error
+                }
+            }
         }
         if (exc != null) {
             return visitor.visitFileFailed(path, exc);
