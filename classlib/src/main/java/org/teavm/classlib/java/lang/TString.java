@@ -31,8 +31,11 @@ import org.teavm.classlib.java.util.TArrays;
 import org.teavm.classlib.java.util.TComparator;
 import org.teavm.classlib.java.util.TFormatter;
 import org.teavm.classlib.java.util.TLocale;
+import org.teavm.classlib.java.util.function.TFunction;
 import org.teavm.classlib.java.util.regex.TPattern;
 import org.teavm.classlib.java.util.stream.TIntStream;
+import org.teavm.classlib.java.util.stream.TStream;
+import org.teavm.classlib.java.util.stream.impl.TStringLinesStream;
 import org.teavm.classlib.java.util.stream.intimpl.TStringCharsStream;
 import org.teavm.classlib.java.util.stream.intimpl.TStringCodePointsStream;
 import org.teavm.dependency.PluggableDependency;
@@ -95,6 +98,20 @@ public final class TString extends TObject implements TSerializable, TComparable
 
     public TString(byte[] bytes, int offset, int length) {
         initWithBytes(bytes, offset, length, TUTF8Charset.INSTANCE);
+    }
+
+    public TString(byte[] ascii, int hibyte, int offset, int count) {
+        Objects.checkFromIndexSize(offset, count, ascii.length);
+        char[] chars = new char[count];
+        int high = (hibyte & 0xff) << 8;
+        for (int i = 0; i < count; i++) {
+            chars[i] = (char) (high | (ascii[offset + i] & 0xff));
+        }
+        takeCharArray(chars);
+    }
+
+    public TString(byte[] ascii, int hibyte) {
+        this(ascii, hibyte, 0, ascii.length);
     }
 
     public TString(byte[] bytes) {
@@ -1161,6 +1178,40 @@ public final class TString extends TObject implements TSerializable, TComparable
             }
         }
         return new TString(chars, 0, j);
+    }
+
+    public TStream<TString> lines() {
+        return new TStringLinesStream(this);
+    }
+
+    public TString indent(int n) {
+        int length = length();
+        if (length == 0) {
+            return this;
+        }
+        var sb = new TStringBuilder();
+        int start = 0;
+        while (start < length) {
+            int end = TStringLinesStream.lineEnd(this, start);
+            if (n > 0) {
+                for (int i = 0; i < n; ++i) {
+                    sb.append(' ');
+                }
+            } else if (n < 0) {
+                // Compared this way, neither start - n nor -n can overflow (n may be Integer.MIN_VALUE)
+                int limit = n <= start - end ? end : start - n;
+                while (start < limit && Character.isWhitespace(charAt(start))) {
+                    start++;
+                }
+            }
+            sb.append(this, start, end).append('\n');
+            start = TStringLinesStream.nextLineStart(this, end);
+        }
+        return new TString(sb);
+    }
+
+    public <R> R transform(TFunction<? super TString, ? extends R> f) {
+        return f.apply(this);
     }
 
     public TString stripIndent() {
