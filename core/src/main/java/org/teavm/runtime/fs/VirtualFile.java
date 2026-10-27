@@ -50,5 +50,14 @@ public interface VirtualFile {
 
     boolean setReadOnly(boolean readOnly);
 
+    /**
+     * Sets ({@code enable}) or clears the POSIX permission bits {@code modeBits} (for example 0444 for read by
+     * everyone). java.io.File's setReadable, setWritable, and setExecutable use it. A file system without
+     * permission bits returns false.
+     */
+    default boolean setAccess(int modeBits, boolean enable) {
+        return false;
+    }
+
     int length();
 }

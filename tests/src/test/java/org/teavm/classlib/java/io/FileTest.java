@@ -1900,4 +1900,30 @@ public class FileTest {
     private static boolean isTeaVM() {
         return false;
     }
+
+    @Test
+    public void permissionSettersOnMissingFileReturnFalse() {
+        var file = new File("no-such-file-for-permissions");
+        assertFalse(file.setWritable(false));
+        assertFalse(file.setWritable(true, false));
+        assertFalse(file.setReadable(false));
+        assertFalse(file.setReadable(true, false));
+        assertFalse(file.setExecutable(true));
+        assertFalse(file.setExecutable(true, false));
+    }
+
+    @Test
+    public void setWritableChangesAnExistingFile() throws IOException {
+        var file = new File("file-for-set-writable");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setWritable(false));
+            assertFalse(file.canWrite());
+            assertTrue(file.setWritable(true));
+            assertTrue(file.canWrite());
+        } finally {
+            file.setWritable(true);
+            file.delete();
+        }
+    }
 }

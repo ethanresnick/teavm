@@ -385,9 +385,37 @@ public class TFile implements Serializable, Comparable<TFile> {
         return file.setReadOnly(true);
     }
 
-    public boolean setWritable(boolean writable) {
+    // As in the JDK, the one-argument forms change only the owner's bit, and each returns false when the operation
+    // fails. A file system without permission bits (setAccess returns false) still supports the write bit through
+    // setReadOnly.
+    public boolean setWritable(boolean writable, boolean ownerOnly) {
         VirtualFile file = findVirtualFile();
-        return file.setReadOnly(!writable);
+        if (file == null) {
+            return false;
+        }
+        return file.setAccess(ownerOnly ? 0200 : 0222, writable) || file.setReadOnly(!writable);
+    }
+
+    public boolean setWritable(boolean writable) {
+        return setWritable(writable, true);
+    }
+
+    public boolean setReadable(boolean readable, boolean ownerOnly) {
+        VirtualFile file = findVirtualFile();
+        return file != null && file.setAccess(ownerOnly ? 0400 : 0444, readable);
+    }
+
+    public boolean setReadable(boolean readable) {
+        return setReadable(readable, true);
+    }
+
+    public boolean setExecutable(boolean executable, boolean ownerOnly) {
+        VirtualFile file = findVirtualFile();
+        return file != null && file.setAccess(ownerOnly ? 0100 : 0111, executable);
+    }
+
+    public boolean setExecutable(boolean executable) {
+        return setExecutable(executable, true);
     }
 
     public long length() {
