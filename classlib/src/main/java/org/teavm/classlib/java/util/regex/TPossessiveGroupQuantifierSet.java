@@ -51,7 +51,9 @@ class TPossessiveGroupQuantifierSet extends TGroupQuantifierSet {
     @Override
     public int matches(int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
         int nextIndex;
-        while ((nextIndex = innerSet.matches(stringIndex, testString, matchResult)) > 0) {
+        // Stop when an iteration consumes nothing, as the JDK and TPosPlusGroupQuantifierSet do. With
+        // "> 0", a group that matches the empty string, as in (a?)*+, looped forever.
+        while ((nextIndex = innerSet.matches(stringIndex, testString, matchResult)) > stringIndex) {
             stringIndex = nextIndex;
         }
 

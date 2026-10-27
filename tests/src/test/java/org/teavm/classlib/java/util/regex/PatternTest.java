@@ -1670,4 +1670,21 @@ public class PatternTest {
         checkHitEnd("x[a-z]*+", "xab", true, true);
         checkHitEnd("(?:a|ab)c", "ab", true, true);
     }
+
+    @Test
+    public void repeatedGroupCapturesLastIteration() {
+        var matcher = Pattern.compile("(.)+x").matcher("abcx");
+        assertTrue(matcher.find());
+        assertEquals(2, matcher.start(1));
+    }
+
+    // Without the fix, the first pattern loops forever, so this test hangs instead of failing.
+    @Test
+    public void possessiveQuantifiersOverGroups() {
+        assertTrue(Pattern.compile("(a?)*+b").matcher("aab").matches());
+        assertTrue(Pattern.compile("(\\b)*+x").matcher("x").matches());
+        var matcher = Pattern.compile("(.){0,2}+c").matcher("abc");
+        assertTrue(matcher.matches());
+        assertEquals("b", matcher.group(1));
+    }
 }

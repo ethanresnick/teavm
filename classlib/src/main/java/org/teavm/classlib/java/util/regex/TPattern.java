@@ -197,6 +197,11 @@ public final class TPattern implements Serializable {
             return new String[] { "" }; //$NON-NLS-1$
         } else {
             while (mat.find() && (index + 1 < limit || limit <= 0)) {
+                // As in the JDK since Java 8, a zero-width match at the start of the input makes no
+                // empty leading string.
+                if (curPos == 0 && mat.start() == 0 && mat.end() == 0) {
+                    continue;
+                }
                 res.add(inputSeq.subSequence(curPos, mat.start()).toString());
                 curPos = mat.end();
                 index++;

@@ -33,6 +33,7 @@
 
 package org.teavm.classlib.java.util.regex;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.regex.Pattern;
@@ -144,5 +145,12 @@ public class SplitTest {
         assertEquals("p", tokens[0]);
         assertTrue(tokens[1].equals(""));
         assertEquals("dle z", tokens[2]);
+    }
+
+    @Test
+    public void zeroWidthMatchAtStartGivesNoLeadingEmptyString() {
+        assertArrayEquals(new String[] { "a", "bc" }, "abc".split("(?=b)"));
+        assertArrayEquals(new String[] { "a", "b", "c" }, "abc".split(""));
+        assertArrayEquals(new String[] { "abc" }, Pattern.compile("(?=a)").split("abc"));
     }
 }
