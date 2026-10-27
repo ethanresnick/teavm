@@ -605,4 +605,35 @@ public class FilesTest {
             new File("test-file-3").delete();
         }
     }
+
+    @Test
+    public void createDirectoriesWithAbsolutePath() throws IOException {
+        var dir = Path.of("test-abs-dirs").toAbsolutePath();
+        var leaf = dir.resolve("a").resolve("b");
+        try {
+            Files.createDirectories(leaf);
+            assertTrue(Files.isDirectory(leaf));
+        } finally {
+            Files.deleteIfExists(leaf);
+            Files.deleteIfExists(dir.resolve("a"));
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    @Test
+    public void createDirectoriesAcceptsExistingDirectory() throws IOException {
+        var dir = Path.of("test-existing-dir");
+        try {
+            Files.createDirectory(dir);
+            assertEquals(dir, Files.createDirectories(dir));
+            assertEquals(dir.toAbsolutePath(), Files.createDirectories(dir.toAbsolutePath()));
+        } finally {
+            Files.deleteIfExists(dir);
+        }
+        // On macOS, /tmp is a symbolic link to a directory. The in-memory file system of JS and Wasm GC has no /tmp.
+        var tmp = Path.of("/tmp");
+        if (Files.isDirectory(tmp)) {
+            assertEquals(tmp, Files.createDirectories(tmp));
+        }
+    }
 }
