@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.function.Supplier;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -361,6 +362,22 @@ public class StringBuilderTest {
                             where);
                 }
             }
+        }
+    }
+
+    // Known gap, not fixed here: the range inserts don't check dstOffset. insert(int dstOffset, CharSequence s,
+    // int start, int end) throws IndexOutOfBoundsException "if dstOffset is negative or greater than
+    // this.length()", and insert(int index, char[] str, int offset, int len) throws StringIndexOutOfBoundsException
+    // "if index is negative or greater than length()".
+    @Test
+    @Disabled("insert(int, CharSequence, int, int) and insert(int, char[], int, int) don't check the insert index")
+    public void rangeInsertRejectsInvalidIndex() {
+        for (int index : new int[] { -1, 3, 4 }) {
+            int i = index;
+            assertEquals("IOOBE", outcome(() -> new StringBuilder("ab").insert(i, "xy", 0, 1)), "index=" + i);
+            assertEquals("IOOBE", outcome(() -> new StringBuilder("ab").insert(i, new char[] { 'x' }, 0, 1)),
+                    "index=" + i);
+            assertEquals("IOOBE", outcome(() -> new StringBuffer("ab").insert(i, "xy", 0, 1)), "index=" + i);
         }
     }
 

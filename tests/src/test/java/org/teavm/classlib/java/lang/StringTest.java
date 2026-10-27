@@ -400,6 +400,36 @@ public class StringTest {
         assertEquals("null/a/null", String.join("/", Arrays.asList(null, "a", null)));
         assertEquals("null", String.join("/", Arrays.asList(nullSequence)));
     }
+
+    // String.substring(int beginIndex, int endIndex) throws IndexOutOfBoundsException "if the beginIndex is
+    // negative, or endIndex is larger than the length of this String object, or beginIndex is larger than
+    // endIndex". subSequence(int, int) behaves as substring. This holds for empty ranges too.
+    @Test
+    public void substringChecksBounds() {
+        String str = "null";
+        for (int begin = -1; begin <= 5; ++begin) {
+            for (int end = -1; end <= 5; ++end) {
+                String expected = begin >= 0 && begin <= end && end <= 4 ? "null".substring(begin, end) : "IOOBE";
+                String where = "begin=" + begin + ", end=" + end;
+                String actual;
+                try {
+                    actual = str.substring(begin, end);
+                } catch (IndexOutOfBoundsException e) {
+                    actual = "IOOBE";
+                }
+                assertEquals(expected, actual, where);
+                try {
+                    actual = str.subSequence(begin, end).toString();
+                } catch (IndexOutOfBoundsException e) {
+                    actual = "IOOBE";
+                }
+                assertEquals(expected, actual, where);
+            }
+        }
+        assertThrows(IndexOutOfBoundsException.class, () -> str.substring(5));
+        assertThrows(IndexOutOfBoundsException.class, () -> str.substring(-1));
+        assertEquals("", str.substring(4));
+    }
     
     @Test
     public void testIsBlank() {

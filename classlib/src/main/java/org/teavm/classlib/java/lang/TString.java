@@ -447,6 +447,9 @@ public final class TString extends TObject implements TSerializable, TComparable
     public TString substring(int beginIndex, int endIndex) {
         int length = charactersLength();
         if (beginIndex == endIndex) {
+            if (beginIndex < 0 || beginIndex > length) {
+                throw new TStringIndexOutOfBoundsException();
+            }
             return EMPTY;
         }
 
