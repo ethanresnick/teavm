@@ -23,6 +23,7 @@ import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystemException;
 import java.nio.file.NoSuchFileException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -426,18 +427,11 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         // With NOFOLLOW_LINKS, a symbolic link describes itself (lstat): it exists even when its target does not,
         // and it is neither a directory nor a regular file. Its size is 0. Its times are its target's, because
         // VirtualFile has no lstat times.
-        var link = false;
-        if (vfile != null) {
-            for (var option : options) {
-                if (option == TLinkOption.NOFOLLOW_LINKS && vfile.isSymbolicLink()) {
-                    link = true;
-                }
-            }
-        }
-        if (vfile == null || !link && !vfile.exists()) {
+        var isLink = vfile != null && Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)
+                && vfile.isSymbolicLink();
+        if (vfile == null || !isLink && !vfile.exists()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
-        var isLink = link;
         //noinspection unchecked
         return (A) new TBasicFileAttributes() {
             @Override
