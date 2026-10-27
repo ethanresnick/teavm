@@ -53,35 +53,47 @@ class TCompositeGroupQuantifierSet extends TGroupQuantifierSet {
         this.setCounter = setCounter;
     }
 
+    /*
+     * The enter counter holds the number of iterations done so far. Every call restores the value it was entered
+     * with before it returns, and the counter is 0 while the rest of the pattern runs, so that a group quantified
+     * again from outside, as in ((ab){2})+, counts its iterations anew.
+     */
     @Override
     public int matches(int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
         int enterCounter = matchResult.getEnterCounter(setCounter);
-
-        if (!innerSet.hasConsumed(matchResult)) {
-            return next.matches(stringIndex, testString, matchResult);
+        if (isDone(enterCounter, matchResult)) {
+            return matchNext(enterCounter, stringIndex, testString, matchResult);
         }
-
-        // can't go inner set;
-        if (enterCounter >= quantifier.max()) {
-            return next.matches(stringIndex, testString, matchResult);
-        }
-
-        // go inner set;
-        matchResult.setEnterCounter(setCounter, ++enterCounter);
-        int nextIndex = innerSet.matches(stringIndex, testString, matchResult);
-
-        if (nextIndex < 0) {
-            matchResult.setEnterCounter(setCounter, --enterCounter);
-            if (enterCounter >= quantifier.min()) {
-                return next.matches(stringIndex, testString, matchResult);
-            } else {
-                matchResult.setEnterCounter(setCounter, 0);
-                return -1;
-            }
-        } else {
-            matchResult.setEnterCounter(setCounter, 0);
+        int nextIndex = matchInner(enterCounter, stringIndex, testString, matchResult);
+        if (nextIndex >= 0) {
             return nextIndex;
         }
+        return enterCounter >= quantifier.min() ? matchNext(enterCounter, stringIndex, testString, matchResult) : -1;
+    }
+
+    /**
+     * No more iterations: the maximum is reached, or the last iteration matched the empty string. Before the first
+     * iteration, the group may still hold the capture of an earlier attempt, so it is not asked.
+     */
+    final boolean isDone(int enterCounter, TMatchResultImpl matchResult) {
+        return enterCounter >= quantifier.max() || (enterCounter > 0 && !innerSet.hasConsumed(matchResult));
+    }
+
+    final int matchInner(int enterCounter, int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
+        matchResult.setEnterCounter(setCounter, enterCounter + 1);
+        int nextIndex = innerSet.matches(stringIndex, testString, matchResult);
+        matchResult.setEnterCounter(setCounter, enterCounter);
+        return nextIndex;
+    }
+
+    final int matchNext(int enterCounter, int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
+        if (enterCounter == 0) {
+            return next.matches(stringIndex, testString, matchResult);
+        }
+        matchResult.setEnterCounter(setCounter, 0);
+        int nextIndex = next.matches(stringIndex, testString, matchResult);
+        matchResult.setEnterCounter(setCounter, enterCounter);
+        return nextIndex;
     }
 
     public void reset() {

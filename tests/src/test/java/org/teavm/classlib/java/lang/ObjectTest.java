@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -223,6 +224,34 @@ public class ObjectTest {
         assertTrue(state[3], "notify() after an interrupted wait() did not wake the waiting thread");
     }
 
+    // wait(): "InterruptedException - if any thread interrupted the current thread before or while the current
+    // thread was waiting. The interrupted status of the current thread is cleared when this exception is thrown."
+    @Test
+    public void waitThrowsForEarlierInterrupt() {
+        var current = Thread.currentThread();
+        var lock = new Object();
+        var names = List.of("wait()", "wait(5000)", "wait(5000, 1)");
+        var actions = List.<WaitAction>of(Object::wait, o -> o.wait(5000), o -> o.wait(5000, 1));
+        for (var i = 0; i < actions.size(); ++i) {
+            synchronized (lock) {
+                current.interrupt();
+                long start = System.currentTimeMillis();
+                var watchdog = interruptLater(current);
+                var threw = false;
+                try {
+                    actions.get(i).run(lock);
+                } catch (InterruptedException e) {
+                    threw = true;
+                }
+                watchdog.interrupt();
+                assertTrue(threw, names.get(i) + " did not throw");
+                assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+                assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+                assertTrue(Thread.holdsLock(lock), names.get(i) + " released the monitor");
+            }
+        }
+    }
+
     @Test
     public void endedWaitsDoNotKeepThreadsAlive() throws InterruptedException {
         // Each case waits on its own lock: a notify() on a lock removes the dead listeners in front of the one it
@@ -334,5 +363,20 @@ public class ObjectTest {
             }
             Thread.sleep(10);
         }
+    }
+
+    // Ends a call that blocks although it should throw at once, so that the test fails on its time check instead
+    // of hanging. Stop the returned thread with interrupt().
+    private static Thread interruptLater(Thread target) {
+        var watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            target.interrupt();
+        });
+        watchdog.start();
+        return watchdog;
     }
 }

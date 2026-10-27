@@ -293,6 +293,12 @@ public class TThread extends TObject implements TRunnable {
         return interruptedFlag;
     }
 
+    // For the interrupt handlers of blocking calls in other packages. As in the JDK, a blocked call that an
+    // interrupt makes throw InterruptedException clears the thread's interrupt status.
+    public void clearInterruptStatus() {
+        interruptedFlag = false;
+    }
+
     public boolean isAlive() {
         return alive;
     }

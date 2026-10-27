@@ -186,4 +186,50 @@ public class SetTest {
             assertEquals(Arrays.asList(elements).contains(probe), set.contains(probe));
         }
     }
+
+    // Set: "Unmodifiable Sets ... disallow null elements. Attempts to create them with null elements result in
+    // NullPointerException." Checked for every overload of Set.of and every position of the null.
+    @Test
+    public void ofRejectsNullAtAnyPosition() {
+        for (int size = 1; size <= 11; ++size) {
+            for (int nullAt = 0; nullAt < size; ++nullAt) {
+                Object[] e = new Object[size];
+                for (int i = 0; i < size; ++i) {
+                    e[i] = i == nullAt ? null : "e" + i;
+                }
+                String what = size + " elements, null at " + nullAt;
+                assertThrows(NullPointerException.class, () -> setOf(e), "Set.of with " + what);
+                assertThrows(NullPointerException.class, () -> Set.copyOf(Arrays.asList(e)), "Set.copyOf with " + what);
+            }
+        }
+        assertThrows(NullPointerException.class, () -> Set.of((Object[]) null));
+        assertThrows(NullPointerException.class, () -> Set.copyOf(null));
+    }
+
+    private static Set<Object> setOf(Object[] e) {
+        switch (e.length) {
+            case 1:
+                return Set.of(e[0]);
+            case 2:
+                return Set.of(e[0], e[1]);
+            case 3:
+                return Set.of(e[0], e[1], e[2]);
+            case 4:
+                return Set.of(e[0], e[1], e[2], e[3]);
+            case 5:
+                return Set.of(e[0], e[1], e[2], e[3], e[4]);
+            case 6:
+                return Set.of(e[0], e[1], e[2], e[3], e[4], e[5]);
+            case 7:
+                return Set.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6]);
+            case 8:
+                return Set.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+            case 9:
+                return Set.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]);
+            case 10:
+                return Set.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9]);
+            default:
+                return Set.of(e);
+        }
+    }
 }

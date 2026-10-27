@@ -19,6 +19,7 @@ package org.teavm.classlib.java.io;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.File;
@@ -30,6 +31,9 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
@@ -2052,6 +2056,63 @@ public class FileTest {
         } finally {
             file.delete();
             dir.delete();
+        }
+    }
+
+    // File.toPath: "Returns a java.nio.file.Path object constructed from this abstract path. The resulting Path is
+    // associated with the default-filesystem. The first invocation of this method works as if invoking it were
+    // equivalent to evaluating the expression: FileSystems.getDefault().getPath(this.getPath()); Subsequent
+    // invocations of this method return the same Path."
+    @Test
+    public void toPath() {
+        var files = new File[] {
+            new File("dir", "name.txt"),
+            new File("name.txt"),
+            new File("dir/sub/"),
+            new File("/"),
+            new File("/abs/name.txt"),
+            new File(new File("parent"), "child"),
+            new File("a/../b/./c"),
+            new File("dir", "name.txt").getAbsoluteFile(),
+        };
+        for (var file : files) {
+            var path = file.toPath();
+            assertEquals(FileSystems.getDefault().getPath(file.getPath()), path, file.getPath());
+            assertSame(FileSystems.getDefault(), path.getFileSystem(), file.getPath());
+            assertSame(path, file.toPath(), file.getPath());
+            assertEquals(file.isAbsolute(), path.isAbsolute(), file.getPath());
+            assertEquals(file.getPath(), path.toString(), file.getPath());
+            // Path.toFile gives "a File object representing this path"; it need not equal the original File, but
+            // here its abstract path is the same.
+            assertEquals(file, path.toFile(), file.getPath());
+        }
+        assertEquals(Path.of("dir", "name.txt"), new File("dir", "name.txt").toPath());
+    }
+
+    // "If this abstract pathname is the empty abstract pathname then this method returns a Path that may be used to
+    // access the current user directory."
+    @Test
+    public void emptyFileToPath() throws IOException {
+        var path = new File("").toPath();
+        assertEquals(Path.of(""), path);
+        assertTrue(Files.isDirectory(path));
+        var name = "toPath-empty-test-file";
+        var file = new File(name);
+        try {
+            assertTrue(file.createNewFile());
+            assertEquals(Path.of(name), path.resolve(name));
+            assertTrue(Files.isRegularFile(path.resolve(name)));
+            var found = false;
+            try (var entries = Files.newDirectoryStream(path)) {
+                for (var entry : entries) {
+                    if (entry.equals(Path.of(name))) {
+                        found = true;
+                    }
+                }
+            }
+            assertTrue(found);
+        } finally {
+            file.delete();
         }
     }
 }

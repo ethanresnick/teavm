@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -219,6 +220,86 @@ public class MapTest {
             assertEquals(member, map.containsKey(probe));
             assertEquals(member, map.get(probe) != null);
             assertEquals(member, map.keySet().contains(probe));
+        }
+    }
+
+    // Map: "Unmodifiable Maps ... disallow null keys and values. Attempts to create them with null keys or values
+    // result in NullPointerException." Checked for every overload of Map.of and every position of the null, and for
+    // Map.ofEntries, Map.entry, Map.copyOf and Map.Entry.copyOf.
+    @Test
+    public void factoriesRejectNullAtAnyPosition() {
+        for (int pairs = 1; pairs <= 11; ++pairs) {
+            for (int nullAt = 0; nullAt < 2 * pairs; ++nullAt) {
+                Object[] kv = new Object[2 * pairs];
+                for (int i = 0; i < kv.length; ++i) {
+                    kv[i] = i == nullAt ? null : "e" + i;
+                }
+                String what = pairs + " pairs, null at " + nullAt;
+                if (pairs <= 10) {
+                    assertThrows(NullPointerException.class, () -> mapOf(kv), "Map.of with " + what);
+                }
+                assertThrows(NullPointerException.class, () -> ofEntries(kv), "Map.ofEntries with " + what);
+                Map<Object, Object> hashMap = new HashMap<>();
+                for (int i = 0; i < kv.length; i += 2) {
+                    hashMap.put(kv[i], kv[i + 1]);
+                }
+                assertThrows(NullPointerException.class, () -> Map.copyOf(hashMap), "Map.copyOf with " + what);
+            }
+            Map.Entry<?, ?>[] entries = new Map.Entry<?, ?>[pairs];
+            for (int i = 0; i < pairs; ++i) {
+                entries[i] = Map.entry("k" + i, "v" + i);
+            }
+            for (int nullAt = 0; nullAt < pairs; ++nullAt) {
+                Map.Entry<?, ?>[] withNull = entries.clone();
+                withNull[nullAt] = null;
+                assertThrows(NullPointerException.class, () -> Map.ofEntries(withNull),
+                        "Map.ofEntries with " + pairs + " entries, null entry at " + nullAt);
+            }
+        }
+        assertThrows(NullPointerException.class, () -> Map.ofEntries((Map.Entry<Object, Object>[]) null));
+        assertThrows(NullPointerException.class, () -> Map.copyOf(null));
+        assertThrows(NullPointerException.class, () -> Map.entry(null, "v"));
+        assertThrows(NullPointerException.class, () -> Map.entry("k", null));
+        assertThrows(NullPointerException.class, () -> Map.Entry.copyOf(null));
+        assertThrows(NullPointerException.class, () -> Map.Entry.copyOf(new AbstractMap.SimpleEntry<>(null, "v")));
+        assertThrows(NullPointerException.class, () -> Map.Entry.copyOf(new AbstractMap.SimpleEntry<>("k", null)));
+    }
+
+    private static Map<Object, Object> ofEntries(Object[] kv) {
+        @SuppressWarnings("unchecked")
+        Map.Entry<Object, Object>[] entries = new Map.Entry[kv.length / 2];
+        for (int i = 0; i < entries.length; ++i) {
+            entries[i] = new AbstractMap.SimpleEntry<>(kv[2 * i], kv[2 * i + 1]);
+        }
+        return Map.ofEntries(entries);
+    }
+
+    private static Map<Object, Object> mapOf(Object[] e) {
+        switch (e.length / 2) {
+            case 1:
+                return Map.of(e[0], e[1]);
+            case 2:
+                return Map.of(e[0], e[1], e[2], e[3]);
+            case 3:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5]);
+            case 4:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+            case 5:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9]);
+            case 6:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11]);
+            case 7:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11],
+                        e[12], e[13]);
+            case 8:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11],
+                        e[12], e[13], e[14], e[15]);
+            case 9:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11],
+                        e[12], e[13], e[14], e[15], e[16], e[17]);
+            default:
+                return Map.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9], e[10], e[11],
+                        e[12], e[13], e[14], e[15], e[16], e[17], e[18], e[19]);
         }
     }
 }

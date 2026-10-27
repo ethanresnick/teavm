@@ -51,13 +51,14 @@ class TPosCompositeGroupQuantifierSet extends TCompositeGroupQuantifierSet {
 
     @Override
     public int matches(int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
-        int nextIndex;
+        int nextIndex = stringIndex;
         int counter = 0;
         int max = quantifier.max();
 
-        while (true) {
+        // Check the count before matching, so that no iteration past the maximum sets the group's capture.
+        while (counter < max) {
             nextIndex = innerSet.matches(stringIndex, testString, matchResult);
-            if (nextIndex <= stringIndex || counter >= max) {
+            if (nextIndex <= stringIndex) {
                 break;
             }
             counter++;

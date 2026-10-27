@@ -24,6 +24,8 @@ import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Objects;
 import org.teavm.classlib.java.lang.TSystem;
+import org.teavm.classlib.java.nio.file.TFileSystems;
+import org.teavm.classlib.java.nio.file.TPath;
 import org.teavm.classlib.java.util.TRandom;
 import org.teavm.runtime.fs.VirtualFile;
 import org.teavm.runtime.fs.VirtualFileSystem;
@@ -31,6 +33,7 @@ import org.teavm.runtime.fs.VirtualFileSystemProvider;
 
 public class TFile implements Serializable, Comparable<TFile> {
     private String path;
+    private transient TPath filePath;
 
     public static final char separatorChar = fs().isWindows() ? '\\' : '/';
     public static final String separator = String.valueOf(separatorChar);
@@ -152,6 +155,15 @@ public class TFile implements Serializable, Comparable<TFile> {
         result.append(path);
 
         return result.toString();
+    }
+
+    public TPath toPath() {
+        var result = filePath;
+        if (result == null) {
+            result = TFileSystems.getDefault().getPath(getPath());
+            filePath = result;
+        }
+        return result;
     }
 
     public TFile getAbsoluteFile() {
