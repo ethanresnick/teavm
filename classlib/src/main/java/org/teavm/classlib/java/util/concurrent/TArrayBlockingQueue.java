@@ -65,7 +65,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         for (E e : c) {
             array[index++] = Objects.requireNonNull(e);
         }
-        tail = c.size();
+        tail = index == capacity ? 0 : index;
     }
 
     @Override
@@ -302,10 +302,10 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         if (c == this) {
             throw new IllegalArgumentException("The specified collection is this queue");
         }
-        if (isEmpty()) {
+        Objects.requireNonNull(c);
+        if (maxElements <= 0) {
             return 0;
         }
-        Objects.requireNonNull(c);
         maxElements = Math.min(maxElements, size());
         for (int i = 0; i < maxElements; ++i) {
             c.add(removeImpl());

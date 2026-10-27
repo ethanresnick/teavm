@@ -307,7 +307,7 @@ public class TArrayDeque<E> extends TAbstractCollection<E> implements TDeque<E>,
                 }
                 boolean toLeft = removeAt(lastIndex);
                 if (toLeft) {
-                    index = modInc(index, array.length);
+                    index = lastIndex;
                 }
                 lastIndex = -1;
             }
