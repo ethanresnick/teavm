@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,17 +33,21 @@ import java.nio.file.FileSystemException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.NotDirectoryException;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -621,6 +626,227 @@ public class FilesTest {
             Files.delete(noPrefix);
         } finally {
             Files.delete(dir);
+        }
+    }
+
+    // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike
+    // the createDirectory method, an exception is not thrown if the directory could not be created because it
+    // already exists." It returns "the directory".
+    // Every depth of an existing prefix (none, some, all), for a relative and an absolute path.
+    @Test
+    public void createDirectoriesWithEveryExistingPrefix() throws IOException {
+        var relative = Path.of("test-dirs-prefix", "a", "b");
+        for (var leaf : new Path[] { relative, relative.toAbsolutePath() }) {
+            var levels = new Path[] { leaf.getParent().getParent(), leaf.getParent(), leaf };
+            for (var existing = 0; existing <= levels.length; ++existing) {
+                try {
+                    for (var i = 0; i < existing; ++i) {
+                        Files.createDirectory(levels[i]);
+                    }
+                    assertEquals(leaf, Files.createDirectories(leaf));
+                    for (var level : levels) {
+                        assertTrue(Files.isDirectory(level), level + ", " + existing + " existing");
+                    }
+                } finally {
+                    for (var i = levels.length - 1; i >= 0; --i) {
+                        Files.deleteIfExists(levels[i]);
+                    }
+                }
+            }
+        }
+    }
+
+    // The same, for a path with a single name, relative and absolute.
+    @Test
+    public void createDirectoriesAcceptsExistingDirectory() throws IOException {
+        var dir = Path.of("test-existing-dir");
+        try {
+            Files.createDirectory(dir);
+            assertEquals(dir, Files.createDirectories(dir));
+            assertEquals(dir.toAbsolutePath(), Files.createDirectories(dir.toAbsolutePath()));
+            assertTrue(Files.isDirectory(dir));
+        } finally {
+            Files.deleteIfExists(dir);
+        }
+        var root = Path.of("/");
+        assertEquals(root, Files.createDirectories(root));
+        // On macOS, /tmp is a symbolic link to a directory. The in-memory file system of JS and Wasm GC has no /tmp.
+        var tmp = Path.of("/tmp");
+        if (Files.isDirectory(tmp)) {
+            assertEquals(tmp, Files.createDirectories(tmp));
+        }
+    }
+
+    // "FileAlreadyExistsException - if dir exists but is not a directory (optional specific exception)".
+    @Test
+    public void createDirectoriesRejectsExistingFile() throws IOException {
+        var file = Path.of("test-dirs-file");
+        var nested = Path.of("test-dirs-parent", "file");
+        try {
+            Files.createFile(file);
+            Files.createDirectory(nested.getParent());
+            Files.createFile(nested);
+            for (var path : new Path[] { file, file.toAbsolutePath(), nested, nested.toAbsolutePath() }) {
+                assertThrows(FileAlreadyExistsException.class, () -> Files.createDirectories(path), path.toString());
+                assertTrue(Files.isRegularFile(path));
+            }
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(nested);
+            Files.deleteIfExists(nested.getParent());
+        }
+    }
+
+    // createDirectory and createFile with an absolute path create the entry at that path.
+    @Test
+    public void createDirectoryAndFileWithAbsolutePath() throws IOException {
+        var dir = Path.of("test-abs-dir").toAbsolutePath();
+        var file = dir.resolve("file");
+        try {
+            assertEquals(dir, Files.createDirectory(dir));
+            assertTrue(Files.isDirectory(dir));
+            assertTrue(Files.isDirectory(Path.of("test-abs-dir")));
+            assertEquals(file, Files.createFile(file));
+            assertTrue(Files.isRegularFile(Path.of("test-abs-dir", "file")));
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    // Files.newInputStream: "If no options are present then it is equivalent to opening the file with the READ
+    // option." Every combination of READ and NOFOLLOW_LINKS opens the file for reading.
+    @Test
+    public void newInputStreamAcceptsReadOptions() throws IOException {
+        var path = Path.of("test-file-read-option");
+        var optionSets = new OpenOption[][] {
+            {},
+            { StandardOpenOption.READ },
+            { LinkOption.NOFOLLOW_LINKS },
+            { StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS },
+            { LinkOption.NOFOLLOW_LINKS, StandardOpenOption.READ },
+            { StandardOpenOption.READ, StandardOpenOption.READ },
+        };
+        try {
+            Files.write(path, new byte[] { 1, 2 });
+            for (var options : optionSets) {
+                try (var input = Files.newInputStream(path, options)) {
+                    assertArrayEquals(new byte[] { 1, 2 }, input.readAllBytes(), Arrays.toString(options));
+                }
+            }
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    // Files.newInputStream throws "IllegalArgumentException - if an invalid combination of options is specified"
+    // or "UnsupportedOperationException - if an unsupported option is specified". A stream for reading cannot
+    // write, so WRITE and APPEND are one or the other, with or without READ.
+    @Test
+    public void newInputStreamRejectsWriteOptions() throws IOException {
+        var path = Path.of("test-file-read-write-option");
+        try {
+            Files.write(path, new byte[] { 1, 2 });
+            for (var option : new OpenOption[] { StandardOpenOption.WRITE, StandardOpenOption.APPEND }) {
+                for (var options : new OpenOption[][] { { option }, { StandardOpenOption.READ, option } }) {
+                    try {
+                        Files.newInputStream(path, options).close();
+                        fail("No exception for " + Arrays.toString(options));
+                    } catch (IllegalArgumentException | UnsupportedOperationException e) {
+                        // expected
+                    }
+                }
+            }
+            assertArrayEquals(new byte[] { 1, 2 }, Files.readAllBytes(path));
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    // Files.newOutputStream: "This method opens or creates a file in exactly the manner specified by the
+    // newByteChannel method with the exception that the READ option may not be present in the array of options."
+    // It throws "IllegalArgumentException - if options contains an invalid combination of options".
+    // StandardOpenOption.APPEND: "This option may not be used in conjunction with the READ or TRUNCATE_EXISTING
+    // options."
+    @Test
+    public void newOutputStreamRejectsInvalidCombinations() throws IOException {
+        var path = Path.of("test-file-write-invalid");
+        var optionSets = new OpenOption[][] {
+            { StandardOpenOption.READ },
+            { StandardOpenOption.READ, StandardOpenOption.WRITE },
+            { StandardOpenOption.WRITE, StandardOpenOption.READ },
+            { StandardOpenOption.APPEND, StandardOpenOption.TRUNCATE_EXISTING },
+            { StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.APPEND },
+            { StandardOpenOption.WRITE, StandardOpenOption.APPEND, StandardOpenOption.TRUNCATE_EXISTING },
+        };
+        try {
+            Files.write(path, new byte[] { 1, 2 });
+            for (var options : optionSets) {
+                assertThrows(IllegalArgumentException.class, () -> Files.newOutputStream(path, options).close(),
+                        Arrays.toString(options));
+                assertArrayEquals(new byte[] { 1, 2 }, Files.readAllBytes(path), Arrays.toString(options));
+            }
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    // Each option newOutputStream supports, on an existing file. Without TRUNCATE_EXISTING the file keeps its
+    // length and writing starts at the beginning ("By default reading or writing commence at the beginning of the
+    // file"); APPEND: "bytes will be written to the end of the file rather than the beginning";
+    // TRUNCATE_EXISTING: "the existing file is truncated to a size of 0 bytes"; CREATE: "an existing file is opened
+    // if it exists". SYNC, DSYNC, SPARSE and NOFOLLOW_LINKS do not change the content.
+    @Test
+    public void newOutputStreamOptionsOnExistingFile() throws IOException {
+        var path = Path.of("test-file-write-options");
+        var options = new OpenOption[] {
+            StandardOpenOption.WRITE,
+            StandardOpenOption.APPEND,
+            StandardOpenOption.TRUNCATE_EXISTING,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.SYNC,
+            StandardOpenOption.DSYNC,
+            StandardOpenOption.SPARSE,
+            LinkOption.NOFOLLOW_LINKS,
+        };
+        var expected = new byte[][] {
+            { 9, 2, 3 },
+            { 1, 2, 3, 9 },
+            { 9 },
+            { 9, 2, 3 },
+            { 9, 2, 3 },
+            { 9, 2, 3 },
+            { 9, 2, 3 },
+            { 9, 2, 3 },
+        };
+        try {
+            for (var i = 0; i < options.length; ++i) {
+                Files.write(path, new byte[] { 1, 2, 3 });
+                try (var output = Files.newOutputStream(path, options[i])) {
+                    output.write(9);
+                }
+                assertArrayEquals(expected[i], Files.readAllBytes(path), options[i].toString());
+            }
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    // StandardOpenOption.DELETE_ON_CLOSE: "When this option is present then the implementation makes a best effort
+    // attempt to delete the file when closed by the appropriate close method." TeaVM accepts the option but never
+    // deletes the file.
+    @Test
+    @Disabled("newOutputStream accepts DELETE_ON_CLOSE but does not delete the file when the stream is closed")
+    public void newOutputStreamDeleteOnClose() throws IOException {
+        var path = Path.of("test-file-delete-on-close");
+        try {
+            try (var output = Files.newOutputStream(path, StandardOpenOption.CREATE_NEW,
+                    StandardOpenOption.DELETE_ON_CLOSE)) {
+                output.write(1);
+            }
+            assertFalse(Files.exists(path));
+        } finally {
+            Files.deleteIfExists(path);
         }
     }
 }

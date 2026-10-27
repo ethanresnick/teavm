@@ -565,6 +565,331 @@ public class VMTest {
     }
 
     @Test
+    public void exceptionHandlerChecksNull() {
+        var cell = new Cell();
+        assertEquals("set", setOrClear(new Cell[] { cell }, false));
+        assertEquals("value", cell.value);
+        try {
+            setOrClear(new Cell[] { null }, true);
+            fail("NullPointerException expected");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    private static String setOrClear(Cell[] cells, boolean fail) {
+        var cell = cells[0];
+        try {
+            failIf(fail);
+            cell.set("value");
+            return "set";
+        } catch (IllegalStateException e) {
+            cell.clear();
+            return "cleared " + e.getMessage();
+        }
+    }
+
+    @Test
+    public void exceptionHandlerSuccessorChecksNull() {
+        var cell = new Cell();
+        setAfterCatch(new Cell[] { cell }, false);
+        assertEquals("after", cell.value);
+        setAfterCatch(new Cell[] { cell }, true);
+        assertEquals("after", cell.value);
+        for (var fail : new boolean[] { false, true }) {
+            try {
+                setAfterCatch(new Cell[] { null }, fail);
+                fail("NullPointerException expected");
+            } catch (NullPointerException e) {
+                // expected
+            }
+        }
+    }
+
+    private static void setAfterCatch(Cell[] cells, boolean fail) {
+        var cell = cells[0];
+        try {
+            failIf(fail);
+            cell.set("try");
+        } catch (IllegalStateException e) {
+            // continue
+        }
+        cell.set("after");
+    }
+
+    @Test
+    public void nestedExceptionHandlerChecksNull() {
+        assertEquals("value", readInNestedHandler(new Cell[] { new Cell() }, false, false));
+        assertEquals("inner", readInNestedHandler(new Cell[] { new Cell() }, false, true));
+        assertEquals("outer", readInNestedHandler(new Cell[] { new Cell() }, true, false));
+        assertEquals("outer", readInNestedHandler(new Cell[] { new Cell() }, true, true));
+        for (var failInner : new boolean[] { false, true }) {
+            for (var failOuter : new boolean[] { false, true }) {
+                try {
+                    readInNestedHandler(new Cell[] { null }, failOuter, failInner);
+                    fail("NullPointerException expected");
+                } catch (NullPointerException e) {
+                    // expected
+                }
+            }
+        }
+    }
+
+    private static String readInNestedHandler(Cell[] cells, boolean failOuter, boolean failInner) {
+        var cell = cells[0];
+        try {
+            failIf(failOuter);
+            cell.set("outer try");
+            try {
+                failIf(failInner);
+                cell.set("value");
+                return (String) cell.value;
+            } catch (IllegalStateException e) {
+                cell.set("inner");
+                return (String) cell.value;
+            }
+        } catch (IllegalStateException e) {
+            cell.set("outer");
+            return (String) cell.value;
+        }
+    }
+
+    @Test
+    public void exceptionHandlerChecksBounds() {
+        for (var fail : new boolean[] { false, true }) {
+            var array = new int[2];
+            storeInHandler(array, 1, fail);
+            assertEquals(fail ? 2 : 1, array[1]);
+            for (var index : new int[] { -1, 2, 3 }) {
+                try {
+                    storeInHandler(array, index, fail);
+                    fail("ArrayIndexOutOfBoundsException expected");
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    // expected
+                }
+            }
+        }
+    }
+
+    private static void storeInHandler(int[] arrayParam, int indexParam, boolean fail) {
+        // Read the values from the heap, so they are local variables rather than parameters
+        var array = new int[][] { arrayParam }[0];
+        var index = new int[] { indexParam }[0];
+        try {
+            failIf(fail);
+            array[index] = 1;
+        } catch (IllegalStateException e) {
+            array[index] = 2;
+        }
+    }
+
+    @Test
+    public void exceptionHandlerSuccessorChecksBounds() {
+        for (var fail : new boolean[] { false, true }) {
+            var array = new int[2];
+            storeAfterCatch(array, 1, fail);
+            assertEquals(2, array[1]);
+            for (var index : new int[] { -1, 2, 3 }) {
+                try {
+                    storeAfterCatch(array, index, fail);
+                    fail("ArrayIndexOutOfBoundsException expected");
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    // expected
+                }
+            }
+        }
+    }
+
+    private static void storeAfterCatch(int[] arrayParam, int indexParam, boolean fail) {
+        var array = new int[][] { arrayParam }[0];
+        var index = new int[] { indexParam }[0];
+        try {
+            failIf(fail);
+            array[index] = 1;
+        } catch (IllegalStateException e) {
+            // continue
+        }
+        array[index] = 2;
+    }
+
+    @Test
+    public void exceptionPathChecksParameters() {
+        for (var fail : new boolean[] { false, true }) {
+            try {
+                setParameterAfterCatch(null, fail);
+                fail("NullPointerException expected");
+            } catch (NullPointerException e) {
+                // expected
+            }
+            try {
+                setParameterInHandler(null, fail);
+                fail("NullPointerException expected");
+            } catch (NullPointerException e) {
+                // expected
+            }
+            for (var index : new int[] { -1, 2, 3 }) {
+                try {
+                    storeParameterInHandler(new int[2], index, fail);
+                    fail("ArrayIndexOutOfBoundsException expected");
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    // expected
+                }
+            }
+        }
+    }
+
+    private static void setParameterAfterCatch(Cell cell, boolean fail) {
+        try {
+            failIf(fail);
+            cell.set("try");
+        } catch (IllegalStateException e) {
+            // continue
+        }
+        cell.set("after");
+    }
+
+    private static void setParameterInHandler(Cell cell, boolean fail) {
+        try {
+            failIf(fail);
+            cell.set("try");
+        } catch (IllegalStateException e) {
+            cell.set("handler");
+        }
+    }
+
+    private static void storeParameterInHandler(int[] array, int index, boolean fail) {
+        try {
+            failIf(fail);
+            array[index] = 1;
+        } catch (IllegalStateException e) {
+            array[index] = 2;
+        }
+    }
+
+    static class Cell {
+        Object value;
+
+        void set(Object value) {
+            this.value = value;
+        }
+
+        void clear() {
+            value = null;
+        }
+    }
+
+    @Test
+    public void exceptionHandlerReliesOnCheckBeforeTryBlock() {
+        assertEquals("cleared", checkBeforeTryBlock(new Cell[] { new Cell() }));
+        assertThrowsNpe(() -> checkBeforeTryBlock(new Cell[] { null }));
+    }
+
+    private static String checkBeforeTryBlock(Cell[] cells) {
+        var cell = cells[0];
+        cell.set("value");
+        try {
+            failIf(true);
+            return "ok";
+        } catch (IllegalStateException e) {
+            cell.clear();
+            return "cleared";
+        }
+    }
+
+    @Test
+    public void exceptionHandlerOfSeveralBlocksChecksNull() {
+        assertEquals("cleared", checkInLaterBlock(new Cell[] { new Cell() }, 1));
+        assertThrowsNpe(() -> checkInLaterBlock(new Cell[] { null }, 0));
+    }
+
+    private static String checkInLaterBlock(Cell[] cells, int failAt) {
+        var cell = cells[0];
+        try {
+            for (var i = 0; i < 3; ++i) {
+                failIf(i == failAt);
+                cell.set(i);
+            }
+            return "done";
+        } catch (IllegalStateException e) {
+            cell.clear();
+            return "cleared";
+        }
+    }
+
+    @Test
+    public void nestedExceptionHandlersCheckNull() {
+        assertEquals("inner cleared", checkInNestedTry(new Cell[] { new Cell() }, false, true));
+        assertEquals("outer cleared", checkInNestedTry(new Cell[] { new Cell() }, true, false));
+        assertThrowsNpe(() -> checkInNestedTry(new Cell[] { null }, true, false));
+    }
+
+    private static String checkInNestedTry(Cell[] cells, boolean failOuter, boolean failInner) {
+        var cell = cells[0];
+        try {
+            failIf(failOuter);
+            cell.set("outer");
+            try {
+                failIf(failInner);
+                return "inner ok";
+            } catch (IllegalStateException e) {
+                cell.clear();
+                return "inner cleared";
+            }
+        } catch (IllegalStateException e) {
+            cell.clear();
+            return "outer cleared";
+        }
+    }
+
+    @Test
+    public void exceptionHandlerInLoopChecksNull() {
+        assertEquals("cs", checkInLoop(new Cell[] { new Cell() }));
+        assertThrowsNpe(() -> checkInLoop(new Cell[] { null }));
+    }
+
+    private static String checkInLoop(Cell[] cells) {
+        var cell = cells[0];
+        var sb = new StringBuilder();
+        for (var i = 0; i < 2; ++i) {
+            try {
+                failIf(i == 0);
+                cell.set(i);
+                sb.append('s');
+            } catch (IllegalStateException e) {
+                cell.clear();
+                sb.append('c');
+            }
+        }
+        return sb.toString();
+    }
+
+    @Test
+    public void finallyBlockChecksNull() {
+        assertEquals("set", checkInFinally(new Cell[] { new Cell() }, false));
+        assertThrowsNpe(() -> checkInFinally(new Cell[] { null }, true));
+    }
+
+    private static String checkInFinally(Cell[] cells, boolean fail) {
+        var cell = cells[0];
+        try {
+            failIf(fail);
+            cell.set("value");
+            return "set";
+        } finally {
+            cell.clear();
+        }
+    }
+
+    private static void assertThrowsNpe(Runnable runnable) {
+        try {
+            runnable.run();
+            fail("NullPointerException expected");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
     public void arrayMonitor() throws InterruptedException {
         int[] array = { 1, 2, 3 };
         synchronized (array) {
@@ -720,6 +1045,35 @@ public class VMTest {
             return InitInHandler.A.name();
         } catch (IllegalStateException e) {
             return InitInHandler.B.name();
+        }
+    }
+
+    @Test
+    public void exceptionHandlerSuccessorInitializesClass() {
+        assertEquals("initialized", readAfterCatch(true));
+        assertEquals("initialized", readAfterCatch(false));
+        assertEquals(List.of("InitAfterCatch"), INIT_LOG);
+    }
+
+    private static String readAfterCatch(boolean fail) {
+        try {
+            failIf(fail);
+            InitAfterCatch.touched = true;
+        } catch (IllegalStateException e) {
+            // continue
+        }
+        return InitAfterCatch.value;
+    }
+
+    static final List<String> INIT_LOG = new ArrayList<>();
+
+    static class InitAfterCatch {
+        static boolean touched;
+        static String value;
+
+        static {
+            INIT_LOG.add("InitAfterCatch");
+            value = "initialized";
         }
     }
 

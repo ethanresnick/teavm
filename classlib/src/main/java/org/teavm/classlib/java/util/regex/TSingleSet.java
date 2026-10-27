@@ -63,22 +63,38 @@ class TSingleSet extends TJointSet {
         return -1;
     }
 
+    /**
+     * The start of the group's first iteration, while kid.find has not found it yet. Under X+ the first iteration
+     * enters through find and later ones through matches, which set their own start; find must not overwrite it,
+     * or (.)+x captures the first character, not the last. While kid.find runs, the group's start reads as this
+     * value. A group that a back reference reads is a TBackReferencedSingleSet, which sets its start first.
+     */
+    private static final int FIRST_ITERATION = Integer.MIN_VALUE;
+
     @Override
     public int find(int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
+        int saved = matchResult.getStart(groupIndex);
+        matchResult.setStart(groupIndex, FIRST_ITERATION);
         int res = kid.find(stringIndex, testString, matchResult);
-        if (res >= 0) {
-            matchResult.setStart(groupIndex, res);
-        }
+        settleStart(res, saved, matchResult);
         return res;
     }
 
     @Override
     public int findBack(int stringIndex, int lastIndex, CharSequence testString, TMatchResultImpl matchResult) {
+        int saved = matchResult.getStart(groupIndex);
+        matchResult.setStart(groupIndex, FIRST_ITERATION);
         int res = kid.findBack(stringIndex, lastIndex, testString, matchResult);
-        if (res >= 0) {
+        settleStart(res, saved, matchResult);
+        return res;
+    }
+
+    private void settleStart(int res, int saved, TMatchResultImpl matchResult) {
+        if (res < 0) {
+            matchResult.setStart(groupIndex, saved);
+        } else if (matchResult.getStart(groupIndex) == FIRST_ITERATION) {
             matchResult.setStart(groupIndex, res);
         }
-        return res;
     }
 
     @Override

@@ -21,6 +21,12 @@ import org.teavm.classlib.java.net.TURLConnection;
 import org.teavm.classlib.java.net.TURLStreamHandler;
 
 public class TXHRStreamHandler extends TURLStreamHandler {
+    private int defaultPort;
+
+    public TXHRStreamHandler(int defaultPort) {
+        this.defaultPort = defaultPort;
+    }
+
     @Override
     protected TURLConnection openConnection(TURL u) throws IOException {
         return new TXHRURLConnection(u);
@@ -28,6 +34,6 @@ public class TXHRStreamHandler extends TURLStreamHandler {
 
     @Override
     protected int getDefaultPort() {
-        return 80;
+        return defaultPort;
     }
 }

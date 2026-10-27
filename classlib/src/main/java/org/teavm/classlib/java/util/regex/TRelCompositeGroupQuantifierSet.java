@@ -51,34 +51,16 @@ class TRelCompositeGroupQuantifierSet extends TCompositeGroupQuantifierSet {
     @Override
     public int matches(int stringIndex, CharSequence testString, TMatchResultImpl matchResult) {
         int enterCounter = matchResult.getEnterCounter(setCounter);
-
-        if (!innerSet.hasConsumed(matchResult)) {
-            return next.matches(stringIndex, testString, matchResult);
+        if (isDone(enterCounter, matchResult)) {
+            return matchNext(enterCounter, stringIndex, testString, matchResult);
         }
-
-        // can't go inner set;
-        if (enterCounter >= quantifier.max()) {
-            matchResult.setEnterCounter(setCounter, 0);
-            return next.matches(stringIndex, testString, matchResult);
-        }
-
-        int nextIndex;
-
         if (enterCounter >= quantifier.min()) {
-            nextIndex = next.matches(stringIndex, testString, matchResult);
-            if (nextIndex < 0) {
-                matchResult.setEnterCounter(setCounter, ++enterCounter);
-                nextIndex = innerSet.matches(stringIndex, testString, matchResult);
-            } else {
-                matchResult.setEnterCounter(setCounter, 0);
+            int nextIndex = matchNext(enterCounter, stringIndex, testString, matchResult);
+            if (nextIndex >= 0) {
                 return nextIndex;
             }
-        } else {
-            matchResult.setEnterCounter(setCounter, ++enterCounter);
-            nextIndex = innerSet.matches(stringIndex, testString, matchResult);
         }
-
-        return nextIndex;
+        return matchInner(enterCounter, stringIndex, testString, matchResult);
     }
 
     @Override

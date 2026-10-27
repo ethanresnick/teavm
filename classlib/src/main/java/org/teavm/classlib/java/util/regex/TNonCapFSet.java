@@ -51,7 +51,13 @@ class TNonCapFSet extends TFSet {
         int gr = getGroupIndex();
         matchResult.setConsumed(gr, stringIndex - matchResult.getConsumed(gr));
 
-        return next.matches(stringIndex, testString, matchResult);
+        int shift = next.matches(stringIndex, testString, matchResult);
+        if (shift < 0) {
+            // Restore the start for the iteration's other alternatives, as TFSet restores the group's end. A failed
+            // match restores what it changed, so the length set above is still there.
+            matchResult.setConsumed(gr, stringIndex - matchResult.getConsumed(gr));
+        }
+        return shift;
     }
 
     @Override
