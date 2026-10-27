@@ -197,16 +197,21 @@ TeaVM_StringList* teavm_file_listFiles(char16_t* name, int32_t nameSize) {
     return strings;
 }
 
-int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize) {
+// ownerOnly gives mode 0700, as the JDK's Files.createTempDirectory does on POSIX.
+int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     char* mbName = teavm_char16ToMb(name, nameSize);
-    int result = mkdir(mbName, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    mode_t mode = ownerOnly ? S_IRWXU : (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    int result = mkdir(mbName, mode);
     free(mbName);
     return result == 0;
 }
 
-int32_t teavm_file_createFile(char16_t* name, int32_t nameSize) {
+// O_EXCL makes the check and the creation one step, and fails for any existing entry, including a symbolic link
+// (it does not follow one). ownerOnly gives mode 0600, as the JDK's Files.createTempFile does on POSIX.
+int32_t teavm_file_createFile(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     char* mbName = teavm_char16ToMb(name, nameSize);
-    int result = open(mbName, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    mode_t mode = ownerOnly ? (S_IRUSR | S_IWUSR) : (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    int result = open(mbName, O_RDWR | O_CREAT | O_EXCL, mode);
     free(mbName);
     if (result >= 0) {
         close(result);
@@ -466,14 +471,16 @@ int32_t teavm_file_canExecute(char16_t* name, int32_t nameSize) {
     return teavm_file_exists(name, nameSize);
 }
 
-int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize) {
+// Windows has no POSIX modes, so ownerOnly is ignored here and in teavm_file_createFile: the entry inherits the
+// directory's access control list.
+int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     WCHAR* nativeName = teavm_file_convertPath(name, nameSize);
     int32_t result = CreateDirectoryW(nativeName, NULL);
     free(nativeName);
     return result;
 }
 
-int32_t teavm_file_createFile(char16_t* name, int32_t nameSize) {
+int32_t teavm_file_createFile(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     WCHAR* nativeName = teavm_file_convertPath(name, nameSize);
     #if TEAVM_WINDOWS_UWP
         HANDLE fileHandle = CreateFile2(nativeName, GENERIC_WRITE,
