@@ -16,11 +16,13 @@
 package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
-// The class name of each exception that the runtime creates. The program never names these classes.
+// The class name and simple name of each exception that the runtime creates, caught by a supertype, and
+// catching it by its exact type. The program never names these classes otherwise.
 @TeaVMTest
 @EachTestCompiledSeparately
 public class RuntimeExceptionClassNameTest {
@@ -30,6 +32,8 @@ public class RuntimeExceptionClassNameTest {
     private static int[] nullArray;
     private static Object notString = 1;
     private static Holder nullHolder;
+    private static int intSink;
+    private static Object sink;
 
     static class Holder {
         int field;
@@ -39,28 +43,51 @@ public class RuntimeExceptionClassNameTest {
         }
     }
 
+    private static String names(Throwable e) {
+        return e.getClass().getName() + " " + e.getClass().getSimpleName();
+    }
+
     @Test
     public void arrayLoadOutOfBounds() {
         var array = new int[4];
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + array[index];
+            intSink = array[index];
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.ArrayIndexOutOfBoundsException", name);
+        assertEquals("java.lang.ArrayIndexOutOfBoundsException ArrayIndexOutOfBoundsException", names);
+
+        var caught = false;
+        try {
+            intSink = array[-1];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            caught = true;
+        }
+        assertTrue(caught);
+    }
+
+    @Test
+    public void arrayStoreOutOfBounds() {
+        var array = new long[4];
+        String names = "no exception";
+        try {
+            array[index] = 1;
+        } catch (RuntimeException e) {
+            names = names(e);
+        }
+        assertEquals("java.lang.ArrayIndexOutOfBoundsException ArrayIndexOutOfBoundsException", names);
     }
 
     @Test
     public void thrownByCallee() {
-        String name;
+        String names = "no exception";
         try {
             storeOutOfBounds(new Object[4]);
-            name = "no exception";
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.ArrayIndexOutOfBoundsException", name);
+        assertEquals("java.lang.ArrayIndexOutOfBoundsException ArrayIndexOutOfBoundsException", names);
     }
 
     private static void storeOutOfBounds(Object[] array) {
@@ -69,89 +96,126 @@ public class RuntimeExceptionClassNameTest {
 
     @Test
     public void fieldOfNull() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + nullHolder.field;
+            intSink = nullHolder.field;
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
+
+        var caught = false;
+        try {
+            nullHolder.field = 1;
+        } catch (NullPointerException e) {
+            caught = true;
+        }
+        assertTrue(caught);
     }
 
     @Test
     public void methodOfNull() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + nullHolder.get();
+            intSink = nullHolder.get();
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
     }
 
     @Test
     public void virtualMethodOfNull() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + nullObject.hashCode();
+            intSink = nullObject.hashCode();
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
     }
 
     @Test
     public void lengthOfNullArray() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + nullArray.length;
+            intSink = nullArray.length;
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
     }
 
     @Test
     public void elementOfNullArray() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + nullArray[0];
+            intSink = nullArray[0];
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
+    }
+
+    @Test
+    public void synchronizeOnNull() {
+        String names = "no exception";
+        try {
+            synchronized (nullObject) {
+                intSink = 1;
+            }
+        } catch (RuntimeException e) {
+            names = names(e);
+        }
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
     }
 
     @Test
     public void failedCast() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + ((String) notString).length();
+            sink = (String) notString;
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.ClassCastException", name);
+        assertEquals("java.lang.ClassCastException ClassCastException", names);
+
+        var caught = false;
+        try {
+            sink = (Integer[]) new Object[0];
+        } catch (ClassCastException e) {
+            caught = true;
+        }
+        assertTrue(caught);
     }
 
     @Test
     public void negativeArraySize() {
-        String name;
+        String names = "no exception";
         try {
-            name = "no exception " + new int[negative].length;
+            sink = new int[negative];
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NegativeArraySizeException", name);
+        assertEquals("java.lang.NegativeArraySizeException NegativeArraySizeException", names);
+
+        var caught = false;
+        try {
+            sink = new Object[2][negative];
+        } catch (NegativeArraySizeException e) {
+            caught = true;
+        }
+        assertTrue(caught);
     }
 
     @Test
     public void throwNull() {
-        String name;
+        String names;
         try {
             throw (RuntimeException) nullObject;
         } catch (RuntimeException e) {
-            name = e.getClass().getName();
+            names = names(e);
         }
-        assertEquals("java.lang.NullPointerException", name);
+        assertEquals("java.lang.NullPointerException NullPointerException", names);
     }
 }
