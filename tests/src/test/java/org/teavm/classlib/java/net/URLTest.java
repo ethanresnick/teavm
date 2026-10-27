@@ -29,7 +29,9 @@ import java.net.URLConnection;
 import java.net.URLStreamHandler;
 import java.net.URLStreamHandlerFactory;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
+import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 public class URLTest {
@@ -42,6 +44,34 @@ public class URLTest {
     boolean caught;
     
     
+    @Test
+    public void openStreamOfUnsupportedProtocolThrowsIOException() throws MalformedURLException {
+        // On C, this test also checks that a program that opens a URL builds.
+        var url = new URL("ftp://example.com/file");
+        try {
+            url.openStream();
+            fail();
+        } catch (IOException e) {
+            // ok
+        }
+    }
+
+    @Test
+    @SkipPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
+    public void openStreamOfHttpThrowsIOExceptionWithoutXHR() throws MalformedURLException {
+        // C has no HTTP client: opening an http or https URL must fail loudly, not return an empty stream.
+        // On the JVM, nothing listens on port 1, so the connection is refused.
+        for (var spec : new String[] { "http://localhost:1/file", "https://localhost:1/file" }) {
+            var url = new URL(spec);
+            try {
+                url.openStream().close();
+                fail(spec);
+            } catch (IOException e) {
+                // ok
+            }
+        }
+    }
+
     @Test
     public void test_ConstructorLjava_lang_String() throws IOException {
         // Tests for multiple URL instantiation basic parsing test
@@ -579,6 +609,15 @@ public class URLTest {
         assertEquals(80, u.getDefaultPort());
         u = new URL("ftp://member12.c++.com:9999/");
         assertEquals(21, u.getDefaultPort());
+        u = new URL("https://member12.c++.com:9999/");
+        assertEquals(443, u.getDefaultPort());
+    }
+
+    @Test
+    public void sameFileTreatsExplicitDefaultPortAsDefault() throws MalformedURLException {
+        assertTrue(new URL("http://example.com/a").sameFile(new URL("http://example.com:80/a")));
+        assertTrue(new URL("https://example.com/a").sameFile(new URL("https://example.com:443/a")));
+        assertFalse(new URL("https://example.com/a").sameFile(new URL("https://example.com:80/a")));
     }
 
     @Test
