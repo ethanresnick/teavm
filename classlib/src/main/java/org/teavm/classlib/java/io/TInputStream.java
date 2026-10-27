@@ -180,6 +180,9 @@ public abstract class TInputStream extends TObject implements TCloseable {
     }
 
     public long transferTo(OutputStream out) throws IOException {
+        if (out == null) {
+            throw new NullPointerException();
+        }
         var buffer = new byte[BUFFER_SIZE];
         var bytesTransferred = 0L;
         while (true) {

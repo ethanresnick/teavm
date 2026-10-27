@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
@@ -902,6 +903,17 @@ public class FilesTest {
         try {
             Files.write(path, new byte[] { 1 });
             assertThrows(NullPointerException.class, () -> Files.setLastModifiedTime(path, null));
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    @Test
+    public void readString() throws IOException {
+        var path = Path.of("test-file-string");
+        try {
+            Files.write(path, "héllo".getBytes(StandardCharsets.UTF_8));
+            assertEquals("héllo", Files.readString(path));
         } finally {
             Files.deleteIfExists(path);
         }
