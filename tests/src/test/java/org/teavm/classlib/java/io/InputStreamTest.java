@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.io;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -68,6 +69,15 @@ public class InputStreamTest {
         for (var i = 0; i < bytes.length; ++i) {
             assertEquals(bytes[i], i % 17, "wrong element at position " + i);
         }
+    }
+
+    // InputStream.transferTo: "Throws: NullPointerException - if out is null". This holds even when there is
+    // nothing to transfer.
+    @Test
+    @SuppressWarnings("resource")
+    public void transferToNullThrows() {
+        assertThrows(NullPointerException.class, () -> new ChunkedInputStream(17, 0).transferTo(null));
+        assertThrows(NullPointerException.class, () -> new ChunkedInputStream(17, 10).transferTo(null));
     }
 
     @Test
