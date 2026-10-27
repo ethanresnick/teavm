@@ -25,6 +25,8 @@ public class TSecureRandom extends TRandom {
     /** stored instance for seed generation in getSeed() */
     private static TSecureRandom seedGenerator;
 
+    private String algorithm = "NativePRNG";
+
     public TSecureRandom() {
     }
 
@@ -44,16 +46,19 @@ public class TSecureRandom extends TRandom {
         if (!Crypto.isSupported()) {
             throw new TNoSuchAlgorithmException();
         }
-        return new TSecureRandom();
+        var result = new TSecureRandom();
+        result.algorithm = algorithm;
+        return result;
     }
 
-    // crypto.getRandomValues is the strongest source available, the same one that getInstance("NativePRNG") uses.
+    // All instances read crypto.getRandomValues, a CSPRNG, which is the strongest source available.
+    // On C there is no entropy source, so getInstance throws NoSuchAlgorithmException.
     public static TSecureRandom getInstanceStrong() throws TNoSuchAlgorithmException {
         return getInstance("NativePRNGBlocking");
     }
 
     public String getAlgorithm() {
-        return "NativePRNG";
+        return algorithm;
     }
 
     public void setSeed(@SuppressWarnings("unused") byte[] seed) {
