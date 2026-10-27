@@ -20,6 +20,8 @@ import java.util.Arrays;
 import org.teavm.classlib.impl.Base64Impl;
 
 public final class TBase64 {
+    private static final byte[] MIME_LINE_SEPARATOR = { '\r', '\n' };
+
     private TBase64() {
     }
 
@@ -32,7 +34,7 @@ public final class TBase64 {
     }
 
     public static Encoder getMimeEncoder() {
-        return new Encoder(Base64Impl.alphabet, true, new byte[] { '\r', '\n' }, 76);
+        return new Encoder(Base64Impl.alphabet, true, MIME_LINE_SEPARATOR, 76);
     }
 
     public static Encoder getMimeEncoder(int lineLength, byte[] lineSeparator) {
@@ -207,10 +209,7 @@ public final class TBase64 {
                 var c = src.charAt(i);
                 if (c > 0xFF) {
                     // As in the JDK, which decodes src.getBytes(ISO_8859_1): such a character becomes '?', which
-                    // only the MIME decoder accepts (and skips).
-                    if (!mime) {
-                        throw new IllegalArgumentException();
-                    }
+                    // the MIME decoder skips and the other decoders reject.
                     c = '?';
                 }
                 bytes[i] = (byte) c;
