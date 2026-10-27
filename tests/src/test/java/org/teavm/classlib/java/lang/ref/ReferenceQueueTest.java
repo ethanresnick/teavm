@@ -18,6 +18,7 @@ package org.teavm.classlib.java.lang.ref;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.ReferenceQueue;
@@ -70,6 +71,30 @@ public class ReferenceQueueTest {
         }
     }
 
+    // Thread.currentThread(): "Returns the Thread object for the current thread." An interrupt that ends a
+    // remove() must not resume the waiter inside Thread.interrupt(), on the interrupting thread.
+    @Test
+    public void currentThreadAfterInterruptingRemove() throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        var seenByWaiter = new Thread[1];
+        var waiter = new Thread(() -> {
+            try {
+                queue.remove();
+            } catch (InterruptedException e) {
+                seenByWaiter[0] = Thread.currentThread();
+            }
+        });
+        var current = Thread.currentThread();
+        waiter.start();
+        Thread.sleep(50);
+        waiter.interrupt();
+        assertSame(current, Thread.currentThread(), "the interrupting thread changed");
+        waiter.join(2000);
+        assertFalse(waiter.isAlive(), "the waiter did not end");
+        assertSame(waiter, seenByWaiter[0], "the interrupted waiter did not run as itself");
+        assertSame(current, Thread.currentThread(), "the interrupting thread changed after join()");
+    }
+
     // Object.wait(), which the JDK's ReferenceQueue waits in: "InterruptedException - if any thread interrupted
     // the current thread before or while the current thread was waiting. The interrupted status of the current
     // thread is cleared when this exception is thrown."
@@ -81,6 +106,7 @@ public class ReferenceQueueTest {
         for (var i = 0; i < names.size(); ++i) {
             current.interrupt();
             long start = System.currentTimeMillis();
+            var watchdog = interruptLater(current);
             try {
                 if (i == 0) {
                     queue.remove();
@@ -91,6 +117,7 @@ public class ReferenceQueueTest {
             } catch (InterruptedException e) {
                 // expected
             }
+            watchdog.interrupt();
             assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
             assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
         }
@@ -126,5 +153,20 @@ public class ReferenceQueueTest {
         sleeper.interrupt();
         sleeper.join(2000);
         assertTrue(interrupted[0], "after a timed-out remove(), interrupt() did not wake a sleeping thread");
+    }
+
+    // Ends a call that blocks although it should throw at once, so that the test fails on its time check instead
+    // of hanging. Stop the returned thread with interrupt().
+    private static Thread interruptLater(Thread target) {
+        var watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            target.interrupt();
+        });
+        watchdog.start();
+        return watchdog;
     }
 }

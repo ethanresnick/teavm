@@ -367,6 +367,7 @@ public class ThreadTest {
         for (var i = 0; i < joins.size(); ++i) {
             current.interrupt();
             long start = System.currentTimeMillis();
+            var watchdog = interruptLater(current);
             var threw = false;
             try {
                 joins.get(i).run();
@@ -375,6 +376,7 @@ public class ThreadTest {
             } catch (Exception e) {
                 fail(names.get(i) + ": " + e);
             }
+            watchdog.interrupt();
             assertTrue(threw, names.get(i) + " did not throw");
             assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
             assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
@@ -509,5 +511,20 @@ public class ThreadTest {
         } finally {
             current.setContextClassLoader(original);
         }
+    }
+
+    // Ends a call that blocks although it should throw at once, so that the test fails on its time check instead
+    // of hanging. Stop the returned thread with interrupt().
+    private static Thread interruptLater(Thread target) {
+        var watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            target.interrupt();
+        });
+        watchdog.start();
+        return watchdog;
     }
 }

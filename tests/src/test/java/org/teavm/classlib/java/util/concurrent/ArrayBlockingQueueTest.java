@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.WeakReference;
@@ -301,12 +302,14 @@ public class ArrayBlockingQueueTest {
             }
             current.interrupt();
             long start = System.currentTimeMillis();
+            var watchdog = interruptLater(current);
             try {
                 actions.get(i).run(queue);
                 fail(names.get(i) + " did not throw");
             } catch (InterruptedException e) {
                 // expected
             }
+            watchdog.interrupt();
             assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
             assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
             assertEquals(i >= 2 ? List.of(1) : List.of(), new ArrayList<>(queue), names.get(i) + " changed the queue");
@@ -316,6 +319,53 @@ public class ArrayBlockingQueueTest {
     // A wait that ends must clear only its own thread's interrupt handler. A timed-out wait ends from a timer, and
     // a wait that add() wakes ends from a posted event; there, the current thread can be another thread, which is
     // blocked in sleep(). If that thread's handler is cleared, interrupt() no longer wakes it.
+    // Thread.currentThread(): "Returns the Thread object for the current thread." An interrupt that ends a take()
+    // must not resume the waiter inside Thread.interrupt(), on the interrupting thread: the waiter must run as
+    // itself, and the interrupting thread must stay itself. A pool worker blocks in take() again after the
+    // interrupt, so cover that too.
+    @Test
+    public void currentThreadAfterInterruptingTake() throws InterruptedException {
+        for (var blocksAgain : new boolean[] { false, true }) {
+            var name = blocksAgain ? "take() again after the interrupt" : "one take()";
+            var queue = new ArrayBlockingQueue<Integer>(1);
+            var seenByWaiter = new Thread[2];
+            var taken = new Integer[1];
+            var waiter = new Thread(() -> {
+                try {
+                    queue.take();
+                } catch (InterruptedException e) {
+                    seenByWaiter[0] = Thread.currentThread();
+                }
+                if (blocksAgain) {
+                    try {
+                        taken[0] = queue.take();
+                    } catch (InterruptedException e) {
+                        // fails the test below
+                    }
+                    seenByWaiter[1] = Thread.currentThread();
+                }
+            });
+            var current = Thread.currentThread();
+            waiter.start();
+            Thread.sleep(50);
+            waiter.interrupt();
+            assertSame(current, Thread.currentThread(), name + ": the interrupting thread changed");
+            Thread.sleep(50);
+            assertSame(current, Thread.currentThread(), name + ": the interrupting thread changed after a sleep");
+            if (blocksAgain) {
+                queue.add(1);
+            }
+            waiter.join(2000);
+            assertFalse(waiter.isAlive(), name + ": the waiter did not end");
+            assertSame(waiter, seenByWaiter[0], name + ": the interrupted waiter did not run as itself");
+            if (blocksAgain) {
+                assertEquals(Integer.valueOf(1), taken[0], name + ": the second take() did not get the element");
+                assertSame(waiter, seenByWaiter[1], name + ": the waiter did not run as itself after take()");
+            }
+            assertSame(current, Thread.currentThread(), name + ": the interrupting thread changed after join()");
+        }
+    }
+
     @Test
     public void endedWaitDoesNotClearAnotherThreadsInterruptHandler() throws InterruptedException {
         var names = List.of("poll(100 ms) timed out", "offer(100 ms) timed out", "take() woken by add()");
@@ -449,5 +499,20 @@ public class ArrayBlockingQueueTest {
         waiter.join(2000);
         assertFalse(waiter.isAlive(), "the waiter did not end");
         return new WeakReference<>(waiter);
+    }
+
+    // Ends a call that blocks although it should throw at once, so that the test fails on its time check instead
+    // of hanging. Stop the returned thread with interrupt().
+    private static Thread interruptLater(Thread target) {
+        var watchdog = new Thread(() -> {
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                return;
+            }
+            target.interrupt();
+        });
+        watchdog.start();
+        return watchdog;
     }
 }
