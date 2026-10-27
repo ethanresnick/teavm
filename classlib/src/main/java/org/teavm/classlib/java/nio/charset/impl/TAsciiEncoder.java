@@ -36,7 +36,7 @@ public class TAsciiEncoder extends TBufferedEncoder {
                 inPos++;
             } else if (Character.isHighSurrogate(c)) {
                 if (inPos + 1 >= inSize) {
-                    if (!controller.hasMoreInput(2)) {
+                    if (!controller.hasMoreInput()) {
                         result = TCoderResult.UNDERFLOW;
                     }
                     break;

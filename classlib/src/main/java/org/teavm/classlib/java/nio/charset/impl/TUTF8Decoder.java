@@ -31,105 +31,80 @@ public class TUTF8Decoder extends TBufferedDecoder {
     protected TCoderResult arrayDecode(byte[] inArray, int inPos, int inSize, char[] outArray, int outPos, int outSize,
             Controller controller) {
         TCoderResult result = null;
+        // The position stays on the lead byte until a whole sequence is decoded, so that a result reports the
+        // input from there, and the caller skips the reported length.
         while (inPos < inSize && outPos < outSize) {
-            int b = inArray[inPos++] & 0xFF;
+            int b = inArray[inPos] & 0xFF;
+            int avail = inSize - inPos - 1;
             if (b < 0x80) {
                 outArray[outPos++] = (char) b;
+                inPos++;
             } else if (b >= 0xC2 && b <= 0xDF) {
-                if (inPos >= inSize) {
-                    --inPos;
-                    if (!controller.hasMoreInput(2)) {
-                        result = TCoderResult.UNDERFLOW;
-                    }
+                if (avail < 1) {
+                    result = controller.hasMoreInput() ? null : TCoderResult.UNDERFLOW;
                     break;
                 }
-                int b2 = inArray[inPos];
+                int b2 = inArray[inPos + 1];
                 if (!isContinuation(b2)) {
-                    --inPos;
                     result = TCoderResult.malformedForLength(1);
                     break;
                 }
-                inPos++;
                 outArray[outPos++] = (char) (((b & 0x1F) << 6) | (b2 & 0x3F));
+                inPos += 2;
             } else if ((b & 0xF0) == 0xE0) {
-                int avail = inSize - inPos;
+                if (avail >= 1 && isMalformed3Prefix(b, inArray[inPos + 1])) {
+                    result = TCoderResult.malformedForLength(1);
+                    break;
+                }
                 if (avail < 2) {
-                    if (avail == 1 && isMalformed3Prefix(b, inArray[inPos])) {
-                        --inPos;
-                        result = TCoderResult.malformedForLength(1);
-                        break;
-                    }
-                    --inPos;
-                    if (!controller.hasMoreInput(3)) {
-                        result = TCoderResult.UNDERFLOW;
-                    }
+                    result = controller.hasMoreInput() ? null : TCoderResult.UNDERFLOW;
                     break;
                 }
-                int b2 = inArray[inPos];
-                int b3 = inArray[inPos + 1];
-                if (isMalformed3Prefix(b, b2) || !isContinuation(b3)) {
-                    --inPos;
-                    result = TCoderResult.malformedForLength(isMalformed3Prefix(b, b2) ? 1 : 2);
+                int b3 = inArray[inPos + 2];
+                if (!isContinuation(b3)) {
+                    result = TCoderResult.malformedForLength(2);
                     break;
                 }
-                char c = (char) (((b & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F));
+                char c = (char) (((b & 0x0F) << 12) | ((inArray[inPos + 1] & 0x3F) << 6) | (b3 & 0x3F));
                 if (Character.isSurrogate(c)) {
-                    --inPos;
                     result = TCoderResult.malformedForLength(3);
                     break;
                 }
-                inPos += 2;
                 outArray[outPos++] = c;
-            } else if ((b & 0xF8) == 0xF0) {
-                int avail = inSize - inPos;
-                if (avail < 3) {
-                    if (avail >= 1 && isMalformed4Prefix(b, inArray[inPos] & 0xFF)) {
-                        --inPos;
-                        result = TCoderResult.malformedForLength(1);
-                        break;
-                    }
-                    if (avail >= 2 && !isContinuation(inArray[inPos + 1])) {
-                        --inPos;
-                        result = TCoderResult.malformedForLength(2);
-                        break;
-                    }
-                    --inPos;
-                    if (!controller.hasMoreInput(4)) {
-                        result = TCoderResult.UNDERFLOW;
-                    }
+                inPos += 3;
+            } else if (b >= 0xF0 && b <= 0xF4) {
+                // With F0-F4 and a valid second byte, the code point is always in U+10000..U+10FFFF.
+                if (avail >= 1 && isMalformed4Prefix(b, inArray[inPos + 1] & 0xFF)) {
+                    result = TCoderResult.malformedForLength(1);
                     break;
                 }
-                int b2 = inArray[inPos] & 0xFF;
-                int b3 = inArray[inPos + 1];
-                int b4 = inArray[inPos + 2];
-                int code = ((b & 0x07) << 18) | ((b2 & 0x3F) << 12) | ((b3 & 0x3F) << 6) | (b4 & 0x3F);
-                if (!isContinuation(b2) || !isContinuation(b3) || !isContinuation(b4)
-                        || !Character.isSupplementaryCodePoint(code)) {
-                    --inPos;
-                    int length;
-                    if (b > 0xF4 || isMalformed4Prefix(b, b2)) {
-                        length = 1;
-                    } else if (!isContinuation(b3)) {
-                        length = 2;
-                    } else {
-                        length = 3;
-                    }
-                    result = TCoderResult.malformedForLength(length);
+                if (avail >= 2 && !isContinuation(inArray[inPos + 2])) {
+                    result = TCoderResult.malformedForLength(2);
+                    break;
+                }
+                if (avail < 3) {
+                    result = controller.hasMoreInput() ? null : TCoderResult.UNDERFLOW;
+                    break;
+                }
+                int b4 = inArray[inPos + 3];
+                if (!isContinuation(b4)) {
+                    result = TCoderResult.malformedForLength(3);
                     break;
                 }
                 if (outPos + 2 > outSize) {
-                    --inPos;
                     if (!controller.hasMoreOutput(2)) {
                         result = TCoderResult.OVERFLOW;
                     }
                     break;
                 }
-                inPos += 3;
+                int code = ((b & 0x07) << 18) | ((inArray[inPos + 1] & 0x3F) << 12)
+                        | ((inArray[inPos + 2] & 0x3F) << 6) | (b4 & 0x3F);
                 outArray[outPos++] = Character.highSurrogate(code);
                 outArray[outPos++] = Character.lowSurrogate(code);
+                inPos += 4;
             } else {
-                // 80-C1 (a continuation byte, or the lead of an overlong 2-byte form) and F8-FF.
-                --inPos;
+                // 80-C1 (a continuation byte, or the lead of an overlong 2-byte form) and F5-FF (no code point
+                // above U+10FFFF has a valid form).
                 result = TCoderResult.malformedForLength(1);
                 break;
             }

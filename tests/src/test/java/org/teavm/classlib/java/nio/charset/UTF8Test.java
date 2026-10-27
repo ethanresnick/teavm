@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.StandardCharsets;
@@ -272,5 +273,54 @@ public class UTF8Test {
         encoder.encode(input, output, false);
         assertEquals(1, input.position());
         assertEquals(1, output.position());
+    }
+
+    // The bytes at the edges of each range in Table 3-7 of the Unicode Standard ("Well-Formed UTF-8 Byte Sequences").
+    private static final int[] BYTES = { 0x00, 0x41, 0x7F, 0x80, 0x8F, 0x90, 0x9F, 0xA0, 0xBF, 0xC0, 0xC1, 0xC2,
+            0xDF, 0xE0, 0xE1, 0xEC, 0xED, 0xEE, 0xEF, 0xF0, 0xF1, 0xF3, 0xF4, 0xF5, 0xF7, 0xF8, 0xFF };
+    private static final int[] LEAD_BYTES = { 0xE0, 0xED, 0xEF, 0xF0, 0xF1, 0xF4, 0xF5, 0xF8 };
+    private static final int[] FEW_BYTES = { 0x41, 0x80, 0x90, 0xBF, 0xC2, 0xE0, 0xE1, 0xED, 0xF0, 0xF4, 0xF5 };
+
+    @Test
+    public void decodeEveryShortSequenceAsJdk() {
+        CharsetDecoder decoder = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_8);
+        CharsetTestCommon.forEachSequence(BYTES, 3, sequence -> {
+            byte[] input = CharsetTestCommon.toBytes(sequence);
+            CharsetTestCommon.checkDecode(decoder, input, CharsetTestCommon.referenceDecodeUtf8(input));
+            for (int lead : LEAD_BYTES) {
+                byte[] withLead = new byte[input.length + 1];
+                withLead[0] = (byte) lead;
+                System.arraycopy(input, 0, withLead, 1, input.length);
+                CharsetTestCommon.checkDecode(decoder, withLead, CharsetTestCommon.referenceDecodeUtf8(withLead));
+            }
+        });
+    }
+
+    @Test
+    public void decodeAcrossEndOfInternalBuffer() {
+        CharsetDecoder decoder = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_8);
+        CharsetTestCommon.forEachSequence(FEW_BYTES, 4, sequence -> {
+            byte[] input = CharsetTestCommon.toBytes(sequence);
+            CharsetTestCommon.checkDecodeAfterPrefix(decoder, input, CharsetTestCommon.referenceDecodeUtf8(input), 1);
+        });
+    }
+
+    @Test
+    public void encodeEveryShortSequenceAsJdk() {
+        CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_8);
+        CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 5, sequence -> {
+            String input = CharsetTestCommon.toChars(sequence);
+            CharsetTestCommon.checkEncode(encoder, input, CharsetTestCommon.referenceEncode(input, 0x110000, true));
+        });
+    }
+
+    @Test
+    public void encodeAcrossEndOfInternalBuffer() {
+        CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_8);
+        CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 3, sequence -> {
+            String input = CharsetTestCommon.toChars(sequence);
+            CharsetTestCommon.checkEncodeAfterPrefix(encoder, input,
+                    CharsetTestCommon.referenceEncode(input, 0x110000, true), 1);
+        });
     }
 }
