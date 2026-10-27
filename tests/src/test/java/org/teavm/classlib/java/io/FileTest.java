@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
@@ -1899,5 +1900,12 @@ public class FileTest {
     @PlatformMarker
     private static boolean isTeaVM() {
         return false;
+    }
+
+    @Test
+    public void toPath() {
+        var file = new File("dir", "name.txt");
+        assertEquals(Path.of("dir", "name.txt"), file.toPath());
+        assertEquals(file, file.toPath().toFile());
     }
 }
