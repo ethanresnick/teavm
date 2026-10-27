@@ -254,6 +254,7 @@ public abstract class TAbstractList<E> extends TAbstractCollection<E> implements
         }
         @Override public void add(E e) {
             TAbstractList.this.add(i++, e);
+            ++sz;
             lastModCount = modCount;
             j = -1;
         }
