@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.FileSystems;
@@ -480,6 +481,37 @@ public class FileTest {
 
         // Test for creating a file that already exists.
         assertFalse(f2.createNewFile(), "File Already Exists, createNewFile Should Return False.");
+    }
+
+    // File.createTempFile fixes only the prefix and the suffix of the name. One name must not tell the next, as an
+    // incrementing counter would, or anyone who sees one temporary file could prepare the next one. The numbers
+    // between prefix and suffix are not an arithmetic sequence.
+    @Test
+    public void createTempFileNamesDoNotFollowSequence() throws IOException {
+        var dir = new File("test-temp-sequence");
+        dir.mkdirs();
+        var files = new File[8];
+        try {
+            var numbers = new BigInteger[files.length];
+            for (var i = 0; i < files.length; ++i) {
+                files[i] = File.createTempFile("seq", ".tmp", dir);
+                var name = files[i].getName();
+                numbers[i] = new BigInteger(name.substring(3, name.length() - 4));
+            }
+            var difference = numbers[1].subtract(numbers[0]);
+            var same = true;
+            for (var i = 2; i < numbers.length; ++i) {
+                same &= numbers[i].subtract(numbers[i - 1]).equals(difference);
+            }
+            assertFalse(same, "names in sequence: " + Arrays.toString(numbers));
+        } finally {
+            for (var file : files) {
+                if (file != null) {
+                    file.delete();
+                }
+            }
+            dir.delete();
+        }
     }
 
     @Test

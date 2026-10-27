@@ -167,6 +167,11 @@ public class CFileSystem implements VirtualFileSystem {
     @Unmanaged
     static native boolean exists(char[] name, int nameSize);
 
+    @Import(name = "teavm_file_isSymbolicLink")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean isSymbolicLink(char[] name, int nameSize);
+
     @Import(name = "teavm_file_canRead")
     @RuntimeInclude("file.h")
     @Unmanaged
@@ -200,12 +205,12 @@ public class CFileSystem implements VirtualFileSystem {
     @Import(name = "teavm_file_createDirectory")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native boolean createDirectory(char[] name, int nameSize);
+    static native boolean createDirectory(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_createFile")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native int createFile(char[] name, int nameSize);
+    static native int createFile(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_delete")
     @RuntimeInclude("file.h")

@@ -39,6 +39,7 @@ import org.teavm.model.Program;
 import org.teavm.model.TryCatchBlockReader;
 import org.teavm.model.ValueType;
 import org.teavm.model.VariableReader;
+import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.model.instructions.ArrayElementType;
 import org.teavm.model.text.ListingBuilder;
 
@@ -110,8 +111,10 @@ class DependencyGraphBuilder {
         reader.setCaller(caller.getMethod());
         for (int i = 0; i < program.basicBlockCount(); ++i) {
             BasicBlockReader block = program.basicBlockAt(i);
-            currentExceptionConsumer = createExceptionConsumer(dep, block);
+            var exceptionConsumer = createExceptionConsumer(dep, block);
+            currentExceptionConsumer = exceptionConsumer;
             block.readAllInstructions(reader);
+            ImplicitExceptions.read(block, type -> exceptionConsumer.consume(dependencyAnalyzer.getClassType(type)));
 
             for (PhiReader phi : block.readPhis()) {
                 DependencyNode receiverNode = nodes[phi.getReceiver().getIndex()];
@@ -259,9 +262,6 @@ class DependencyGraphBuilder {
         @Override
         public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
             super.cast(receiver, value, targetType, weak);
-            if (!weak) {
-                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType("java.lang.ClassCastException"));
-            }
             DependencyNode valueNode = nodes[value.getIndex()];
             DependencyNode receiverNode = nodes[receiver.getIndex()];
             ClassReaderSource classSource = dependencyAnalyzer.getClassSource();
@@ -554,12 +554,6 @@ class DependencyGraphBuilder {
                 methodDep.getVariable(0).propagate(dependencyAnalyzer.getClassType("java.lang.Class"));
                 methodDep.getVariable(0).getClassValueNode().propagate(type);
             });
-        }
-
-        @Override
-        public void nullCheck(VariableReader receiver, VariableReader value) {
-            super.nullCheck(receiver, value);
-            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType("java.lang.NullPointerException"));
         }
 
         @Override

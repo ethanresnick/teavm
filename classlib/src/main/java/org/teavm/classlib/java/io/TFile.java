@@ -40,8 +40,6 @@ public class TFile implements Serializable, Comparable<TFile> {
     public static final char pathSeparatorChar = fs().isWindows() ? ';' : ':';
     public static final String pathSeparator = String.valueOf(pathSeparatorChar);
 
-    private static int counter;
-
     public TFile(TFile dir, String name) {
         Objects.requireNonNull(name);
         path = dir == null ? fixSlashes(name) : calculatePath(dir.getPath(), name);
@@ -583,18 +581,12 @@ public class TFile implements Serializable, Comparable<TFile> {
         return result;
     }
 
+    // Each name takes a new random number, so one name does not tell the next. createTempFile retries a name that
+    // is taken.
     private static TFile genTempFile(String prefix, String suffix, TFile directory) {
-        int identify;
-        if (counter == 0) {
-            int newInt = new TRandom().nextInt();
-            counter = ((newInt / 65535) & 0xFFFF) + 0x2710;
-        }
-        identify = counter++;
-
         StringBuilder newName = new StringBuilder();
         newName.append(prefix);
-        newName.append(counter);
-        newName.append(identify);
+        newName.append(Long.toUnsignedString(new TRandom().nextLong()));
         newName.append(suffix);
         return new TFile(directory, newName.toString());
     }

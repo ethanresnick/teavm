@@ -28,7 +28,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -42,6 +41,7 @@ import org.teavm.classlib.java.lang.TSystem;
 import org.teavm.classlib.java.nio.file.attribute.TBasicFileAttributes;
 import org.teavm.classlib.java.nio.file.attribute.TFileAttribute;
 import org.teavm.classlib.java.nio.file.attribute.TFileTime;
+import org.teavm.classlib.java.nio.file.impl.TDefaultFileSystemProvider;
 
 public final class TFiles {
     private TFiles() {
@@ -65,9 +65,14 @@ public final class TFiles {
     }
 
     public static TPath createFile(TPath file, TFileAttribute<?>... attrs) throws IOException {
-        file.getFileSystem().provider().newOutputStream(file, TStandardOpenOption.CREATE_NEW,
-                TStandardOpenOption.WRITE).close();
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        provider(file).createFile(file, false);
         return file;
+    }
+
+    // The default file system's provider is the only one.
+    private static TDefaultFileSystemProvider provider(TPath path) {
+        return (TDefaultFileSystemProvider) path.getFileSystem().provider();
     }
 
     public static TPath createDirectory(TPath dir, TFileAttribute<?>... attrs) throws IOException {
@@ -76,6 +81,7 @@ public final class TFiles {
     }
 
     public static TPath createDirectories(TPath dir, TFileAttribute<?>... attrs) throws IOException {
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
         if (dir.getNameCount() <= 1) {
             // As in the JDK, a directory that already exists is not an error, even through a symbolic link.
             try {
@@ -114,13 +120,8 @@ public final class TFiles {
             throws IOException {
         // As in the JDK, there is no minimum prefix length (that rule is File.createTempFile's), and a null prefix
         // is empty.
-        var sb = new StringBuilder();
-        if (prefix != null) {
-            sb.append(prefix);
-        }
-        generateRandomName(sb);
-        sb.append(suffix != null ? suffix : ".tmp");
-        return createFile(dir.resolve(sb.toString()), attrs);
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        return createTemp(dir, prefix, suffix != null ? suffix : ".tmp", false);
     }
 
     public static TPath createTempFile(String prefix, String suffix, TFileAttribute<?>... attrs)
@@ -130,12 +131,33 @@ public final class TFiles {
 
     public static TPath createTempDirectory(TPath dir, String prefix, TFileAttribute<?>... attrs)
             throws IOException {
-        var sb = new StringBuilder();
-        if (prefix != null) {
-            sb.append(prefix);
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        return createTemp(dir, prefix, "", true);
+    }
+
+    // As the JDK does on POSIX, a file system with permissions makes temporary entries owner-only: mode 0600 for a
+    // file and 0700 for a directory (the Javadoc leaves the default attributes to the file system). A name that is
+    // taken is not an error: another one is drawn.
+    private static TPath createTemp(TPath dir, String prefix, String suffix, boolean directory) throws IOException {
+        while (true) {
+            var sb = new StringBuilder();
+            if (prefix != null) {
+                sb.append(prefix);
+            }
+            generateRandomName(sb);
+            sb.append(suffix);
+            var path = dir.resolve(sb.toString());
+            try {
+                if (directory) {
+                    provider(path).createDirectory(path, true);
+                } else {
+                    provider(path).createFile(path, true);
+                }
+                return path;
+            } catch (FileAlreadyExistsException e) {
+                // try another name
+            }
         }
-        generateRandomName(sb);
-        return createDirectory(dir.resolve(sb.toString()), attrs);
     }
 
     public static TPath createTempDirectory(String prefix, TFileAttribute<?>... attrs) throws IOException {
@@ -274,7 +296,8 @@ public final class TFiles {
 
     public static boolean isSymbolicLink(TPath path) {
         try {
-            var attr = readAttributes(path, TBasicFileAttributes.class);
+            // As in the JDK, read the link itself, not its target.
+            var attr = readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
             return attr.isSymbolicLink();
         } catch (IOException e) {
             return false;
@@ -303,6 +326,12 @@ public final class TFiles {
         return readAttributes(path, TBasicFileAttributes.class, options).lastModifiedTime();
     }
 
+    public static TPath setLastModifiedTime(TPath path, TFileTime time) throws IOException {
+        Objects.requireNonNull(time);
+        ((TDefaultFileSystemProvider) path.getFileSystem().provider()).setLastModifiedTime(path, time);
+        return path;
+    }
+
     public static long size(TPath path) throws IOException {
         return readAttributes(path, TBasicFileAttributes.class).size();
     }
@@ -313,11 +342,8 @@ public final class TFiles {
 
     public static boolean notExists(TPath path, TLinkOption... options) {
         try {
-            if (Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)) {
-                path.getFileSystem().provider().checkAccess(path);
-            } else {
-                readAttributes(path, TBasicFileAttributes.class);
-            }
+            // With NOFOLLOW_LINKS, ask about the link itself (lstat), as the JDK does. checkAccess follows the link.
+            readAttributes(path, TBasicFileAttributes.class, options);
         } catch (NoSuchFileException e) {
             return true;
         } catch (IOException e) {
@@ -355,20 +381,37 @@ public final class TFiles {
 
     public static TPath walkFileTree(TPath start, Set<TFileVisitOption> options, int maxDepth,
             TFileVisitor<? super TPath> visitor) throws IOException {
-        walkFileTreeRec(start, maxDepth, visitor);
+        // "By default, symbolic links are not automatically followed by this method. If the options parameter
+        // contains the FOLLOW_LINKS option then symbolic links are followed." A link to a directory is then visited
+        // as a file. With FOLLOW_LINKS, this walk does not detect cycles (FileSystemLoopException), because
+        // VirtualFile has no file keys.
+        TLinkOption[] linkOptions = options.contains(TFileVisitOption.FOLLOW_LINKS)
+                ? new TLinkOption[0]
+                : new TLinkOption[] { TLinkOption.NOFOLLOW_LINKS };
+        walkFileTreeRec(start, maxDepth, visitor, linkOptions);
         return start;
     }
 
     private static TFileVisitResult walkFileTreeRec(TPath path, int remainingDepth,
-            TFileVisitor<? super TPath> visitor) throws IOException {
+            TFileVisitor<? super TPath> visitor, TLinkOption[] linkOptions) throws IOException {
         TBasicFileAttributes attrs;
         IOException exc;
         try {
-            attrs = readAttributes(path, TBasicFileAttributes.class);
+            attrs = readAttributes(path, TBasicFileAttributes.class, linkOptions);
             exc = null;
         } catch (IOException e) {
             exc = e;
             attrs = null;
+            if (linkOptions.length == 0) {
+                // "When following links, and the attributes of the target cannot be read, then this method attempts
+                // to get the BasicFileAttributes of the link."
+                try {
+                    attrs = readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
+                    exc = null;
+                } catch (IOException e2) {
+                    // report the first error
+                }
+            }
         }
         if (exc != null) {
             return visitor.visitFileFailed(path, exc);
@@ -390,7 +433,7 @@ public final class TFiles {
         }
         try (var stream = newDirectoryStream(path)) {
             loop: for (var child : stream) {
-                switch (walkFileTreeRec(child, remainingDepth - 1, visitor)) {
+                switch (walkFileTreeRec(child, remainingDepth - 1, visitor, linkOptions)) {
                     case CONTINUE:
                     case SKIP_SUBTREE:
                         break;

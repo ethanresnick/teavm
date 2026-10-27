@@ -95,12 +95,15 @@ public abstract class TFileSystemProvider {
     public abstract <A extends TBasicFileAttributes> A readAttributes(TPath path, Class<A> type,
             TLinkOption... options) throws IOException;
 
+    // "The default implementation of this method invokes the checkAccess(Path, AccessMode...) method when symbolic
+    // links are followed. If the option NOFOLLOW_LINKS is present then symbolic links are not followed and the
+    // method readAttributes(Path, Class, LinkOption...) is called to determine whether a file exists."
     public boolean exists(TPath path, TLinkOption... options) {
         try {
             if (Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)) {
-                checkAccess(path);
+                readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
             } else {
-                readAttributes(path, TBasicFileAttributes.class);
+                checkAccess(path);
             }
         } catch (IOException e) {
             return false;
