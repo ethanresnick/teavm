@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
@@ -84,7 +85,10 @@ public class TMethod extends TExecutable implements TMember {
             }
         }
         validateArgs(args);
-        if ((methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+        // Only the C backend initializes the class here. On Wasm GC the reflective caller initializes
+        // it, at a suspend point when the initializer can suspend; this call could not suspend (ClassInfo.initialize
+        // is an intrinsic that AsyncMethodFinder never marks async). On JS a static method initializes its class.
+        if (PlatformDetector.isC() && (methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
             declaringClass.initialize();
         }
 
