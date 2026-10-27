@@ -134,7 +134,10 @@ public class TTreeMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
 
     private void ensureRevertedComparator() {
         if (revertedComparator == null) {
-            revertedComparator = (o1, o2) -> -originalComparator.compare(o1, o2);
+            // comparator, unlike originalComparator, is never null. Swapping the arguments, rather than negating
+            // the result, also reverses a comparator that returns Integer.MIN_VALUE.
+            var forward = comparator;
+            revertedComparator = (o1, o2) -> forward.compare(o2, o1);
         }
     }
 
