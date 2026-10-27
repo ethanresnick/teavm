@@ -22,9 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -101,6 +104,24 @@ public class MessageDigestTest {
             { "1234567890".repeat(8), "57edf4a22be3c955ac49da2e2107b67a" }
     };
 
+    // Messages of every length from 0 to MAX_LENGTH cover every padding case of both block sizes (64 and 128).
+    private static final int MAX_LENGTH = 300;
+
+    // For each algorithm in VECTORS: the digest, computed by the JDK, of the concatenated digests of
+    // XorShift(12345) messages of length 0 to MAX_LENGTH. See allLengthsMatchJdk.
+    private static final String[] ALL_LENGTHS = {
+            "2e038d2a179adafe15a3c39b6ec5f776",
+            "f4b485c840ce32ebb37b7f241b884f268e538d3b",
+            "80fb8a6686e55acda0c2b2ea74fb70ed31d86d51551402600f113b42",
+            "49f8181e945e3c24caf271b50f7ff371a3d2285463469960f587fd4a6710b1c7",
+            "3f93a127ac13466155113551d23a19b8645f29b052adf0ea47ba7719850d1ca3"
+                    + "83f4b7af1b642ed70ad214d479b46e69",
+            "7f7f7064e0f9a4bd56e81642e5d98b3f4636bb0ed3eaf82900e28d77fa9af4f9"
+                    + "07061528fd0b883cad34fb31937b1e223ab03e2e6778adbbe97ddb9ed53e5683",
+            "0570befd48d7e7e87c8cbb392bcd881fcaccb1631231652f22a77a0b",
+            "54bf85e6bec6b49933332d76737fcfc57fe4b4f4290d666a32d77da52df2f464"
+    };
+
     @Test
     public void standardVectors() throws NoSuchAlgorithmException {
         var million = new byte[1000000];
@@ -124,55 +145,218 @@ public class MessageDigestTest {
         }
     }
 
+    // Differential test against the JDK: digests a pseudo-random message of every length from 0 to MAX_LENGTH and
+    // folds the digests into one digest of the same algorithm. The expected values come from the JDK; this test
+    // also runs on the JVM, which checks them.
     @Test
-    public void incrementalUpdatesMatchOneShot() throws NoSuchAlgorithmException {
-        // Split points around the 64-byte and 128-byte block boundaries.
-        var data = new byte[300];
-        for (var i = 0; i < data.length; ++i) {
-            data[i] = (byte) (i * 31 + 7);
-        }
-        for (var vector : VECTORS) {
-            var md = MessageDigest.getInstance(vector[0]);
-            var expected = md.digest(data);
-            for (var split : new int[] { 0, 1, 55, 56, 63, 64, 65, 111, 112, 127, 128, 129, 300 }) {
-                md.update(data, 0, split);
-                md.update(data, split, data.length - split);
-                assertArrayEquals(expected, md.digest(), vector[0] + " split " + split);
+    public void allLengthsMatchJdk() throws NoSuchAlgorithmException {
+        for (var i = 0; i < VECTORS.length; ++i) {
+            var md = MessageDigest.getInstance(VECTORS[i][0]);
+            var fold = MessageDigest.getInstance(VECTORS[i][0]);
+            var random = new XorShift(12345);
+            for (var length = 0; length <= MAX_LENGTH; ++length) {
+                fold.update(md.digest(random.bytes(length)));
             }
-            for (var b : data) {
-                md.update(b);
-            }
-            assertArrayEquals(expected, md.digest(), vector[0] + " byte by byte");
-            var buffer = ByteBuffer.allocate(data.length + 10);
-            buffer.position(5);
-            buffer.put(data);
-            buffer.flip();
-            buffer.position(5);
-            md.update(buffer);
-            assertEquals(buffer.limit(), buffer.position());
-            assertArrayEquals(expected, md.digest(), vector[0] + " ByteBuffer");
+            assertEquals(ALL_LENGTHS[i], hex(fold.digest()), VECTORS[i][0]);
         }
     }
 
+    // Every way of feeding a message gives the one-shot digest: random split points, each piece fed through
+    // update(byte), update(byte[], int, int) at a random offset in a larger array, or a heap, direct, read-only or
+    // sliced ByteBuffer; the result read through digest() or digest(byte[], int, int) at a random offset.
+    // Javadoc of update(ByteBuffer): "The digest is updated using the input.remaining() bytes starting at
+    // input.position(). Upon return, the buffer's position will be equal to its limit; its limit will not have
+    // changed."
     @Test
-    public void resetDiscardsInput() throws NoSuchAlgorithmException {
+    public void randomSplitsMatchOneShot() throws Exception {
+        var random = new XorShift(777);
+        for (var vector : VECTORS) {
+            var md = MessageDigest.getInstance(vector[0]);
+            for (var length = 0; length <= MAX_LENGTH; ++length) {
+                var data = random.bytes(length);
+                var expected = md.digest(data);
+                for (var round = 0; round < 3; ++round) {
+                    feedInRandomPieces(md, data, random);
+                    assertArrayEquals(expected, randomDigest(md, random), vector[0] + " length " + length);
+                }
+            }
+        }
+    }
+
+    // Javadoc of clone: "Returns a clone if the implementation is cloneable." A clone taken in the middle of a
+    // message continues independently of the original.
+    @Test
+    public void cloneMidMessage() throws Exception {
+        var random = new XorShift(99);
+        for (var vector : VECTORS) {
+            var md = MessageDigest.getInstance(vector[0]);
+            for (var length = 0; length <= MAX_LENGTH; length += 7) {
+                var data = random.bytes(length);
+                var expected = md.digest(data);
+                var split = random.nextInt(length + 1);
+                md.update(data, 0, split);
+                var copy = (MessageDigest) md.clone();
+                assertEquals(md.getAlgorithm(), copy.getAlgorithm());
+                assertEquals(md.getDigestLength(), copy.getDigestLength());
+                // Diverge the original; the copy must not see it.
+                md.update(random.bytes(1 + random.nextInt(200)));
+                copy.update(data, split, length - split);
+                assertArrayEquals(expected, copy.digest(), vector[0] + " clone at " + split);
+                md.reset();
+                assertArrayEquals(expected, md.digest(data), vector[0] + " original after reset");
+            }
+        }
+    }
+
+    // Javadoc of reset: "Resets the digest for further use." Of digest(): "The digest is reset after this call is
+    // made." Input from before a reset or a digest, at any buffer fill level, never affects later digests.
+    @Test
+    public void resetDiscardsInput() throws Exception {
+        var random = new XorShift(4242);
+        for (var vector : VECTORS) {
+            var md = MessageDigest.getInstance(vector[0]);
+            var message = random.bytes(100);
+            var expected = MessageDigest.getInstance(vector[0]).digest(message);
+            for (var junk = 0; junk <= 260; ++junk) {
+                md.update(random.bytes(junk));
+                if (junk % 2 == 0) {
+                    md.reset();
+                } else {
+                    md.digest();
+                }
+                assertArrayEquals(expected, md.digest(message), vector[0] + " after " + junk + " bytes");
+            }
+            md.update(random.bytes(70));
+            md.reset();
+            assertEquals(vector[1], hex(md.digest()), vector[0]);
+        }
+    }
+
+    // Javadoc of update(byte[], int, int): "offset - the offset to start from in the array of bytes. len - the
+    // number of bytes to use, starting at offset." Exhaustively over small arrays: a valid range digests exactly
+    // that slice; an invalid one with len != 0 throws (the type is unspecified) and leaves the state unchanged.
+    @Test
+    public void updateRangeChecks() throws NoSuchAlgorithmException {
         var md = MessageDigest.getInstance("SHA-256");
-        md.update(ascii("ignored"));
-        md.reset();
-        assertEquals(VECTORS[3][2], hex(md.digest(ascii("abc"))));
-        // digest() also resets.
-        assertEquals(VECTORS[3][1], hex(md.digest()));
+        var reference = MessageDigest.getInstance("SHA-256");
+        int[] values = { Integer.MIN_VALUE, -5, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, Integer.MAX_VALUE };
+        for (var n = 0; n <= 5; ++n) {
+            var array = new byte[n];
+            for (var i = 0; i < n; ++i) {
+                array[i] = (byte) (i + 1);
+            }
+            for (var offset : values) {
+                for (var len : values) {
+                    var valid = offset >= 0 && len >= 0 && offset <= n - len;
+                    md.update(ascii("prefix"));
+                    reference.update(ascii("prefix"));
+                    var what = "n=" + n + " offset=" + offset + " len=" + len;
+                    if (valid) {
+                        md.update(array, offset, len);
+                        reference.update(Arrays.copyOfRange(array, offset, offset + len));
+                    } else if (len != 0) {
+                        int o = offset;
+                        int l = len;
+                        assertThrows(RuntimeException.class, () -> md.update(array, o, l), what);
+                    } else {
+                        try {
+                            md.update(array, offset, len);
+                        } catch (RuntimeException e) {
+                            // Either outcome is fine for an empty range at a bad offset.
+                        }
+                    }
+                    assertArrayEquals(reference.digest(), md.digest(), what);
+                }
+            }
+        }
+        assertThrows(RuntimeException.class, () -> md.update(null, 0, 1));
+        assertThrows(NullPointerException.class, () -> md.update((byte[]) null));
+        assertThrows(NullPointerException.class, () -> md.update((ByteBuffer) null));
+    }
+
+    // Javadoc of digest(byte[], int, int): "buf - output buffer for the computed digest; offset - offset into the
+    // output buffer to begin storing the digest; len - number of bytes within buf allotted for the digest. Returns:
+    // the number of bytes placed into buf. Throws: DigestException - if an error occurs." A failed call writes
+    // nothing and keeps the state; a successful one writes the digest and nothing else.
+    @Test
+    public void digestIntoBufferChecks() throws Exception {
+        for (var vector : VECTORS) {
+            var md = MessageDigest.getInstance(vector[0]);
+            var size = md.getDigestLength();
+            var expected = md.digest(ascii("abc"));
+            int[] values = { Integer.MIN_VALUE, -1, 0, 1, size - 1, size, size + 1, size + 2, Integer.MAX_VALUE };
+            for (var n : new int[] { 0, size - 1, size, size + 1, size + 3 }) {
+                for (var offset : values) {
+                    for (var len : values) {
+                        var buf = new byte[n];
+                        Arrays.fill(buf, (byte) 0x5A);
+                        md.update(ascii("abc"));
+                        var valid = offset >= 0 && len >= size && offset <= n - len;
+                        var what = vector[0] + " n=" + n + " offset=" + offset + " len=" + len;
+                        if (valid) {
+                            assertEquals(size, md.digest(buf, offset, len), what);
+                            assertArrayEquals(expected, Arrays.copyOfRange(buf, offset, offset + size), what);
+                            for (var i = 0; i < n; ++i) {
+                                if (i < offset || i >= offset + size) {
+                                    assertEquals((byte) 0x5A, buf[i], what);
+                                }
+                            }
+                        } else {
+                            int o = offset;
+                            int l = len;
+                            assertThrows(Exception.class, () -> md.digest(buf, o, l), what);
+                            for (var b : buf) {
+                                assertEquals((byte) 0x5A, b, what);
+                            }
+                            assertArrayEquals(expected, md.digest(), what + ": state after the failure");
+                        }
+                    }
+                }
+            }
+            md.update(ascii("abc"));
+            assertThrows(DigestException.class, () -> md.digest(new byte[size + 4], 0, size - 1));
+            assertArrayEquals(expected, md.digest());
+        }
     }
 
     @Test
     public void algorithmNames() throws NoSuchAlgorithmException {
-        assertEquals("SHA-256", MessageDigest.getInstance("SHA-256").getAlgorithm());
-        assertEquals(VECTORS[1][2], hex(MessageDigest.getInstance("SHA").digest(ascii("abc"))));
-        assertEquals(VECTORS[1][2], hex(MessageDigest.getInstance("SHA1").digest(ascii("abc"))));
-        assertEquals(VECTORS[3][2], hex(MessageDigest.getInstance("SHA256").digest(ascii("abc"))));
-        assertEquals(VECTORS[3][2], hex(MessageDigest.getInstance("sha-256").digest(ascii("abc"))));
-        assertThrows(NoSuchAlgorithmException.class, () -> MessageDigest.getInstance("SHA-999"));
+        // Javadoc of getInstance: "algorithm - the name of the algorithm requested"; Standard Algorithm Names are
+        // case-insensitive. getAlgorithm: "Returns a string that identifies the algorithm".
+        String[][] aliases = {
+                { "MD5", "md5", "Md5" },
+                { "SHA-1", "SHA", "sha", "SHA1", "sha-1" },
+                { "SHA-224", "SHA224", "sha-224" },
+                { "SHA-256", "SHA256", "sha-256", "Sha-256" },
+                { "SHA-384", "SHA384", "sha-384" },
+                { "SHA-512", "SHA512", "sha-512" },
+                { "SHA-512/224", "SHA512/224", "sha-512/224" },
+                { "SHA-512/256", "SHA512/256", "sha-512/256" }
+        };
+        for (var i = 0; i < aliases.length; ++i) {
+            assertEquals(VECTORS[i][0], aliases[i][0]);
+            for (var name : aliases[i]) {
+                var md = MessageDigest.getInstance(name);
+                assertEquals(name, md.getAlgorithm());
+                assertEquals(VECTORS[i][2], hex(md.digest(ascii("abc"))), name);
+                assertEquals(VECTORS[i][2].length() / 2, md.getDigestLength(), name);
+            }
+        }
+        for (var name : new String[] { "SHA-999", "", "SHA_256", "SHA-256 ", "MD-5", "SHA-512/384" }) {
+            assertThrows(NoSuchAlgorithmException.class, () -> MessageDigest.getInstance(name), name);
+        }
         assertThrows(NullPointerException.class, () -> MessageDigest.getInstance(null));
+    }
+
+    // Algorithms that the JDK's default provider has and TeaVM does not. The MessageDigest Javadoc only requires
+    // "SHA-1" and "SHA-256" of every Java platform implementation.
+    @Test
+    @Disabled("TeaVM has no MD2, no SHA-3 and no OID aliases")
+    public void unsupportedAlgorithms() throws NoSuchAlgorithmException {
+        assertEquals("8350e5a3e24c153df2275c9f80692773", hex(MessageDigest.getInstance("MD2").digest()));
+        assertEquals("a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a",
+                hex(MessageDigest.getInstance("SHA3-256").digest()));
+        assertEquals(VECTORS[3][1], hex(MessageDigest.getInstance("2.16.840.1.101.3.4.2.1").digest()));
     }
 
     @Test
@@ -180,8 +364,120 @@ public class MessageDigestTest {
         assertTrue(MessageDigest.isEqual(new byte[] { 1, 2 }, new byte[] { 1, 2 }));
         assertFalse(MessageDigest.isEqual(new byte[] { 1, 2 }, new byte[] { 1, 3 }));
         assertFalse(MessageDigest.isEqual(new byte[] { 1, 2 }, new byte[] { 1, 2, 3 }));
+        assertFalse(MessageDigest.isEqual(new byte[] { 1, 2, 1 }, new byte[] { 1, 2 }));
+        assertFalse(MessageDigest.isEqual(new byte[] { 0 }, new byte[0]));
+        assertFalse(MessageDigest.isEqual(new byte[0], new byte[] { 0 }));
+        assertTrue(MessageDigest.isEqual(new byte[0], new byte[0]));
         assertTrue(MessageDigest.isEqual(null, null));
         assertFalse(MessageDigest.isEqual(new byte[0], null));
+        assertFalse(MessageDigest.isEqual(null, new byte[0]));
+    }
+
+    // Javadoc of isEqual: "Two digests are equal if they have the same length and all bytes at corresponding
+    // positions are equal." Exhaustive over all arrays of length 0 to 3 over four byte values.
+    @Test
+    public void isEqualMatchesArraysEquals() {
+        byte[] alphabet = { 0, 1, -1, -128 };
+        var arrays = new ArrayList<byte[]>();
+        for (var length = 0; length <= 3; ++length) {
+            var count = 1;
+            for (var i = 0; i < length; ++i) {
+                count *= alphabet.length;
+            }
+            for (var code = 0; code < count; ++code) {
+                var array = new byte[length];
+                var c = code;
+                for (var i = 0; i < length; ++i) {
+                    array[i] = alphabet[c % alphabet.length];
+                    c /= alphabet.length;
+                }
+                arrays.add(array);
+            }
+        }
+        for (var a : arrays) {
+            for (var b : arrays) {
+                assertEquals(Arrays.equals(a, b), MessageDigest.isEqual(a, b),
+                        Arrays.toString(a) + " " + Arrays.toString(b));
+            }
+            assertTrue(MessageDigest.isEqual(a, a.clone()));
+            assertFalse(MessageDigest.isEqual(a, null));
+            assertFalse(MessageDigest.isEqual(null, a));
+        }
+    }
+
+    private static void feedInRandomPieces(MessageDigest md, byte[] data, XorShift random) {
+        var pos = 0;
+        while (pos < data.length) {
+            var n = random.nextInt(Math.min(data.length - pos, 140) + 1);
+            switch (random.nextInt(7)) {
+                case 0:
+                    for (var i = 0; i < n; ++i) {
+                        md.update(data[pos + i]);
+                    }
+                    break;
+                case 1: {
+                    var before = random.nextInt(5);
+                    var array = random.bytes(before + n + random.nextInt(5));
+                    System.arraycopy(data, pos, array, before, n);
+                    md.update(array, before, n);
+                    break;
+                }
+                case 2: {
+                    var before = random.nextInt(5);
+                    var array = random.bytes(before + n + 3);
+                    System.arraycopy(data, pos, array, before, n);
+                    var buffer = ByteBuffer.wrap(array, before, n);
+                    md.update(buffer);
+                    assertEquals(before + n, buffer.position());
+                    assertEquals(before + n, buffer.limit());
+                    break;
+                }
+                case 3: {
+                    var buffer = ByteBuffer.allocateDirect(n + 2);
+                    buffer.put((byte) 1).put(data, pos, n).put((byte) 2);
+                    buffer.position(1);
+                    buffer.limit(n + 1);
+                    md.update(buffer);
+                    assertEquals(n + 1, buffer.position());
+                    assertEquals(n + 1, buffer.limit());
+                    break;
+                }
+                case 4: {
+                    var buffer = ByteBuffer.wrap(data, pos, n).asReadOnlyBuffer();
+                    md.update(buffer);
+                    assertFalse(buffer.hasRemaining());
+                    break;
+                }
+                case 5: {
+                    var buffer = ByteBuffer.wrap(data, pos, n).duplicate();
+                    md.update(buffer);
+                    assertEquals(pos + n, buffer.position());
+                    break;
+                }
+                default: {
+                    var array = random.bytes(n + 6);
+                    System.arraycopy(data, pos, array, 3, n);
+                    var buffer = ByteBuffer.wrap(array, 2, n + 2).slice();
+                    buffer.position(1);
+                    buffer.limit(n + 1);
+                    md.update(buffer);
+                    assertEquals(n + 1, buffer.position());
+                    break;
+                }
+            }
+            pos += n;
+        }
+    }
+
+    private static byte[] randomDigest(MessageDigest md, XorShift random) throws DigestException {
+        if (random.nextInt(2) == 0) {
+            return md.digest();
+        }
+        var size = md.getDigestLength();
+        var offset = random.nextInt(4);
+        var buf = new byte[offset + size + random.nextInt(4)];
+        assertEquals(size, md.digest(buf, offset, buf.length - offset));
+        return Arrays.copyOfRange(buf, offset, offset + size);
     }
 
     private static byte[] ascii(String s) {
@@ -194,5 +490,33 @@ public class MessageDigestTest {
             sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
         }
         return sb.toString();
+    }
+
+    // A deterministic generator, so that every backend digests the same messages.
+    private static final class XorShift {
+        private int state;
+
+        XorShift(int seed) {
+            state = seed;
+        }
+
+        int next() {
+            state ^= state << 13;
+            state ^= state >>> 17;
+            state ^= state << 5;
+            return state;
+        }
+
+        int nextInt(int bound) {
+            return (next() >>> 1) % bound;
+        }
+
+        byte[] bytes(int length) {
+            var result = new byte[length];
+            for (var i = 0; i < length; ++i) {
+                result[i] = (byte) next();
+            }
+            return result;
+        }
     }
 }

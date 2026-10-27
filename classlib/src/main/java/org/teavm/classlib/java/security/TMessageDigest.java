@@ -22,8 +22,6 @@ import java.security.NoSuchAlgorithmException;
 public abstract class TMessageDigest implements Cloneable {
     private final String algorithm;
     private DigestEngine engine;
-    // True after an update and until the next digest or reset; only toString reads it.
-    private boolean inProgress;
 
     TMessageDigest(String algorithm, DigestEngine engine) {
         this.algorithm = algorithm;
@@ -34,44 +32,11 @@ public abstract class TMessageDigest implements Cloneable {
         if (algorithm == null) {
             throw new NullPointerException();
         }
-        String canonical = canonicalName(algorithm);
-        DigestEngine engine = canonical != null ? DigestEngines.create(canonical) : null;
+        DigestEngine engine = DigestEngines.create(algorithm.toUpperCase());
         if (engine == null) {
             throw new NoSuchAlgorithmException();
         }
         return new Impl(algorithm, engine);
-    }
-
-    // Maps the standard names and their common aliases, ignoring case.
-    private static String canonicalName(String algorithm) {
-        switch (algorithm.toUpperCase()) {
-            case "MD5":
-                return "MD5";
-            case "SHA":
-            case "SHA1":
-            case "SHA-1":
-                return "SHA-1";
-            case "SHA224":
-            case "SHA-224":
-                return "SHA-224";
-            case "SHA256":
-            case "SHA-256":
-                return "SHA-256";
-            case "SHA384":
-            case "SHA-384":
-                return "SHA-384";
-            case "SHA512":
-            case "SHA-512":
-                return "SHA-512";
-            case "SHA512/224":
-            case "SHA-512/224":
-                return "SHA-512/224";
-            case "SHA512/256":
-            case "SHA-512/256":
-                return "SHA-512/256";
-            default:
-                return null;
-        }
     }
 
     public final String getAlgorithm() {
@@ -84,7 +49,6 @@ public abstract class TMessageDigest implements Cloneable {
 
     public void update(byte input) {
         engine.update(input);
-        inProgress = true;
     }
 
     public void update(byte[] input) {
@@ -92,7 +56,6 @@ public abstract class TMessageDigest implements Cloneable {
             throw new NullPointerException();
         }
         engine.update(input, 0, input.length);
-        inProgress = true;
     }
 
     public void update(byte[] input, int offset, int len) {
@@ -106,7 +69,6 @@ public abstract class TMessageDigest implements Cloneable {
             throw new ArrayIndexOutOfBoundsException();
         }
         engine.update(input, offset, len);
-        inProgress = true;
     }
 
     public final void update(ByteBuffer input) {
@@ -117,25 +79,19 @@ public abstract class TMessageDigest implements Cloneable {
         if (len == 0) {
             return;
         }
-        if (input.hasArray()) {
-            int position = input.position();
-            engine.update(input.array(), input.arrayOffset() + position, len);
-            input.position(position + len);
-        } else {
-            byte[] chunk = new byte[Math.min(len, 4096)];
-            while (input.hasRemaining()) {
-                int n = Math.min(chunk.length, input.remaining());
-                input.get(chunk, 0, n);
-                engine.update(chunk, 0, n);
-            }
+        // Bulk get rather than array() and arrayOffset(): on JS and C, arrayOffset() of a duplicate() or
+        // asReadOnlyBuffer() view counts the position twice. The copy costs little next to hashing.
+        byte[] chunk = new byte[Math.min(len, 4096)];
+        while (input.hasRemaining()) {
+            int n = Math.min(chunk.length, input.remaining());
+            input.get(chunk, 0, n);
+            engine.update(chunk, 0, n);
         }
-        inProgress = true;
     }
 
     public byte[] digest() {
         byte[] result = new byte[engine.length()];
         engine.digest(result, 0);
-        inProgress = false;
         return result;
     }
 
@@ -153,13 +109,11 @@ public abstract class TMessageDigest implements Cloneable {
             throw new DigestException();
         }
         engine.digest(buf, offset);
-        inProgress = false;
         return length;
     }
 
     public void reset() {
         engine.reset();
-        inProgress = false;
     }
 
     // Takes time that depends only on digesta.length.
@@ -184,11 +138,6 @@ public abstract class TMessageDigest implements Cloneable {
         TMessageDigest copy = (TMessageDigest) super.clone();
         copy.engine = engine.copy();
         return copy;
-    }
-
-    @Override
-    public String toString() {
-        return algorithm + " Message Digest from TeaVM, " + (inProgress ? "<in progress>" : "<initialized>") + "\n";
     }
 
     private static final class Impl extends TMessageDigest {

@@ -15,30 +15,35 @@
  */
 package org.teavm.classlib.java.security;
 
-import java.util.Arrays;
-
 final class DigestEngines {
     private DigestEngines() {
     }
 
-    // Returns a new engine for a canonical name ("MD5", "SHA-1", "SHA-224", "SHA-256",
-    // "SHA-384", "SHA-512", "SHA-512/224", "SHA-512/256"), or null if no engine exists.
-    static DigestEngine create(String canonicalName) {
-        switch (canonicalName) {
+    // Returns a new engine for an upper-cased standard algorithm name or alias, or null if there is none.
+    static DigestEngine create(String name) {
+        switch (name) {
             case "MD5":
                 return new Md5();
+            case "SHA":
+            case "SHA1":
             case "SHA-1":
                 return new Sha1();
+            case "SHA224":
             case "SHA-224":
-                return new Sha256(true);
+                return new Sha256(Sha256.IV_224, 28);
+            case "SHA256":
             case "SHA-256":
-                return new Sha256(false);
+                return new Sha256(Sha256.IV_256, 32);
+            case "SHA384":
             case "SHA-384":
                 return new Sha512(Sha512.IV_384, 48);
+            case "SHA512":
             case "SHA-512":
                 return new Sha512(Sha512.IV_512, 64);
+            case "SHA512/224":
             case "SHA-512/224":
                 return new Sha512(Sha512.IV_512_224, 28);
+            case "SHA512/256":
             case "SHA-512/256":
                 return new Sha512(Sha512.IV_512_256, 32);
             default:
@@ -46,63 +51,81 @@ final class DigestEngines {
         }
     }
 
-    /** Shared 64-byte-block buffering and Merkle-Damgard padding. */
+    /**
+     * Block buffering and Merkle-Damgard padding, shared by all algorithms. The message length in bits ends the
+     * last block: 8 bytes long for 64-byte blocks, 16 bytes long for 128-byte blocks.
+     */
     private abstract static class BlockDigest implements DigestEngine {
-        private final byte[] block = new byte[64];
+        private final byte[] block;
         private int blockLen;
         private long totalBytes;
         private final boolean bigEndianLength;
 
-        BlockDigest(boolean bigEndianLength) {
+        // Subclasses call reset() in their own constructors: their state arrays do not exist yet here.
+        BlockDigest(int blockSize, boolean bigEndianLength) {
+            block = new byte[blockSize];
             this.bigEndianLength = bigEndianLength;
-            // Subclasses call initState() in their own constructors: their state arrays do not exist yet here.
         }
 
         abstract void processBlock(byte[] b, int off);
 
         abstract void initState();
 
-        abstract byte[] output();
+        // Writes length() bytes of the final state at offset.
+        abstract void output(byte[] out, int offset);
+
+        @Override
+        public void update(byte input) {
+            totalBytes++;
+            block[blockLen++] = input;
+            if (blockLen == block.length) {
+                processBlock(block, 0);
+                blockLen = 0;
+            }
+        }
 
         @Override
         public void update(byte[] input, int offset, int len) {
             totalBytes += len;
-            while (len > 0) {
-                int n = Math.min(64 - blockLen, len);
+            int blockSize = block.length;
+            if (blockLen > 0) {
+                int n = Math.min(blockSize - blockLen, len);
                 System.arraycopy(input, offset, block, blockLen, n);
                 blockLen += n;
                 offset += n;
                 len -= n;
-                if (blockLen == 64) {
-                    processBlock(block, 0);
-                    blockLen = 0;
+                if (blockLen < blockSize) {
+                    return;
                 }
+                processBlock(block, 0);
+                blockLen = 0;
             }
-        }
-
-        private byte[] finish() {
-            long bits = totalBytes * 8;
-            byte[] pad = new byte[((blockLen < 56) ? 56 : 120) - blockLen + 8];
-            pad[0] = (byte) 0x80;
-            for (int i = 0; i < 8; i++) {
-                int shift = bigEndianLength ? 56 - 8 * i : 8 * i;
-                pad[pad.length - 8 + i] = (byte) (bits >>> shift);
+            while (len >= blockSize) {
+                processBlock(input, offset);
+                offset += blockSize;
+                len -= blockSize;
             }
-            long savedTotal = totalBytes;
-            update(pad, 0, pad.length);
-            totalBytes = savedTotal;
-            return output();
-        }
-
-        @Override
-        public void update(byte input) {
-            update(new byte[] { input }, 0, 1);
+            System.arraycopy(input, offset, block, 0, len);
+            blockLen = len;
         }
 
         @Override
         public void digest(byte[] output, int offset) {
-            byte[] out = finish();
-            System.arraycopy(out, 0, output, offset, out.length);
+            int blockSize = block.length;
+            int lengthBytes = blockSize / 8;
+            long bits = totalBytes * 8;
+            byte[] pad = new byte[(blockLen < blockSize - lengthBytes ? blockSize : 2 * blockSize) - blockLen];
+            pad[0] = (byte) 0x80;
+            if (lengthBytes == 16) {
+                // totalBytes is below 2^63, so the high 64 bits of the 128-bit length are totalBytes >>> 61.
+                pad[pad.length - 9] = (byte) (totalBytes >>> 61);
+            }
+            for (int i = 0; i < 8; i++) {
+                int shift = bigEndianLength ? 56 - 8 * i : 8 * i;
+                pad[pad.length - 8 + i] = (byte) (bits >>> shift);
+            }
+            update(pad, 0, pad.length);
+            output(output, offset);
             reset();
         }
 
@@ -125,20 +148,23 @@ final class DigestEngines {
         private static final int[] S = { 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5,
             9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10,
             15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21 };
-        private static final int[] K = new int[64];
-
-        static {
-            for (int i = 0; i < 64; i++) {
-                K[i] = (int) (long) Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296.0);
-            }
-        }
+        // RFC 1321, section 3.4: T[i] = floor(2^32 * abs(sin(i + 1))).
+        private static final int[] K = { 0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a,
+            0xa8304613, 0xfd469501, 0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193,
+            0xa679438e, 0x49b40821, 0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453,
+            0xd8a1e681, 0xe7d3fbc8, 0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8,
+            0x676f02d9, 0x8d2a4c8a, 0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9,
+            0xf6bb4b60, 0xbebfbc70, 0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5,
+            0x1fa27cf8, 0xc4ac5665, 0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92,
+            0xffeff47d, 0x85845dd1, 0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235,
+            0x2ad7d2bb, 0xeb86d391 };
 
         private final int[] h = new int[4];
         private final int[] m = new int[16];
 
         Md5() {
-            super(false);
-            initState();
+            super(64, false);
+            reset();
         }
 
         @Override
@@ -188,12 +214,10 @@ final class DigestEngines {
         }
 
         @Override
-        byte[] output() {
-            byte[] out = new byte[16];
+        void output(byte[] out, int offset) {
             for (int i = 0; i < 16; i++) {
-                out[i] = (byte) (h[i / 4] >>> (8 * (i % 4)));
+                out[offset + i] = (byte) (h[i / 4] >>> (8 * (i % 4)));
             }
-            return out;
         }
 
         @Override
@@ -215,8 +239,8 @@ final class DigestEngines {
         private final int[] w = new int[80];
 
         Sha1() {
-            super(true);
-            initState();
+            super(64, true);
+            reset();
         }
 
         @Override
@@ -273,8 +297,8 @@ final class DigestEngines {
         }
 
         @Override
-        byte[] output() {
-            return bigEndian(h);
+        void output(byte[] out, int offset) {
+            bigEndian(h, 5, out, offset);
         }
 
         @Override
@@ -292,6 +316,10 @@ final class DigestEngines {
     }
 
     private static final class Sha256 extends BlockDigest {
+        static final int[] IV_224 = { 0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511,
+            0x64f98fa7, 0xbefa4fa4 };
+        static final int[] IV_256 = { 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c,
+            0x1f83d9ab, 0x5be0cd19 };
         private static final int[] K = { 0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
             0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
             0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa,
@@ -303,35 +331,19 @@ final class DigestEngines {
             0xbef9a3f7, 0xc67178f2 };
         private final int[] h = new int[8];
         private final int[] w = new int[64];
-        private final boolean sha224;
+        private final int[] iv;
+        private final int length;
 
-        Sha256(boolean sha224) {
-            super(true);
-            this.sha224 = sha224;
-            initState();
+        Sha256(int[] iv, int length) {
+            super(64, true);
+            this.iv = iv;
+            this.length = length;
+            reset();
         }
 
         @Override
         void initState() {
-            if (sha224) {
-                h[0] = 0xc1059ed8;
-                h[1] = 0x367cd507;
-                h[2] = 0x3070dd17;
-                h[3] = 0xf70e5939;
-                h[4] = 0xffc00b31;
-                h[5] = 0x68581511;
-                h[6] = 0x64f98fa7;
-                h[7] = 0xbefa4fa4;
-                return;
-            }
-            h[0] = 0x6a09e667;
-            h[1] = 0xbb67ae85;
-            h[2] = 0x3c6ef372;
-            h[3] = 0xa54ff53a;
-            h[4] = 0x510e527f;
-            h[5] = 0x9b05688c;
-            h[6] = 0x1f83d9ab;
-            h[7] = 0x5be0cd19;
+            System.arraycopy(iv, 0, h, 0, 8);
         }
 
         @Override
@@ -380,14 +392,13 @@ final class DigestEngines {
         }
 
         @Override
-        byte[] output() {
-            byte[] out = bigEndian(h);
-            return sha224 ? Arrays.copyOf(out, 28) : out;
+        void output(byte[] out, int offset) {
+            bigEndian(h, length / 4, out, offset);
         }
 
         @Override
         public DigestEngine copy() {
-            Sha256 copy = new Sha256(sha224);
+            Sha256 copy = new Sha256(iv, length);
             copyStateTo(copy);
             System.arraycopy(h, 0, copy.h, 0, h.length);
             return copy;
@@ -395,12 +406,12 @@ final class DigestEngines {
 
         @Override
         public int length() {
-            return sha224 ? 28 : 32;
+            return length;
         }
     }
 
     /** SHA-512 and its truncated variants (FIPS 180-4): 128-byte blocks, 64-bit words, 128-bit length. */
-    private static final class Sha512 implements DigestEngine {
+    private static final class Sha512 extends BlockDigest {
         static final long[] IV_512 = { 0x6a09e667f3bcc908L, 0xbb67ae8584caa73bL, 0x3c6ef372fe94f82bL,
             0xa54ff53a5f1d36f1L, 0x510e527fade682d1L, 0x9b05688c2b3e6c1fL, 0x1f83d9abfb41bd6bL,
             0x5be0cd19137e2179L };
@@ -439,86 +450,42 @@ final class DigestEngines {
         private final int length;
         private final long[] h = new long[8];
         private final long[] w = new long[80];
-        private final byte[] block = new byte[128];
-        private int blockLen;
-        private long totalBytes;
 
         Sha512(long[] iv, int length) {
+            super(128, true);
             this.iv = iv;
             this.length = length;
             reset();
         }
 
         @Override
-        public void update(byte[] input, int offset, int len) {
-            totalBytes += len;
-            while (len > 0) {
-                int n = Math.min(128 - blockLen, len);
-                System.arraycopy(input, offset, block, blockLen, n);
-                blockLen += n;
-                offset += n;
-                len -= n;
-                if (blockLen == 128) {
-                    processBlock();
-                    blockLen = 0;
-                }
-            }
+        void initState() {
+            System.arraycopy(iv, 0, h, 0, 8);
         }
 
-        private byte[] finish() {
-            long bits = totalBytes * 8;
-            // The length field is 128 bits. Messages here are shorter than 2^61 bytes, so the high 64 bits
-            // stay zero and the high bits of totalBytes go into the low byte of that half.
-            byte[] pad = new byte[((blockLen < 112) ? 112 : 240) - blockLen + 16];
-            pad[0] = (byte) 0x80;
-            pad[pad.length - 9] = (byte) (totalBytes >>> 61);
-            for (int i = 0; i < 8; i++) {
-                pad[pad.length - 8 + i] = (byte) (bits >>> (56 - 8 * i));
-            }
-            update(pad, 0, pad.length);
-            byte[] out = new byte[length];
+        @Override
+        void output(byte[] out, int offset) {
             for (int i = 0; i < length; i++) {
-                out[i] = (byte) (h[i / 8] >>> (56 - 8 * (i % 8)));
+                out[offset + i] = (byte) (h[i / 8] >>> (56 - 8 * (i % 8)));
             }
-            return out;
-        }
-
-        @Override
-        public void update(byte input) {
-            update(new byte[] { input }, 0, 1);
-        }
-
-        @Override
-        public void digest(byte[] output, int offset) {
-            byte[] out = finish();
-            System.arraycopy(out, 0, output, offset, out.length);
-            reset();
         }
 
         @Override
         public DigestEngine copy() {
             Sha512 copy = new Sha512(iv, length);
-            System.arraycopy(block, 0, copy.block, 0, block.length);
-            copy.blockLen = blockLen;
-            copy.totalBytes = totalBytes;
+            copyStateTo(copy);
             System.arraycopy(h, 0, copy.h, 0, h.length);
             return copy;
         }
 
         @Override
-        public void reset() {
-            blockLen = 0;
-            totalBytes = 0;
-            System.arraycopy(iv, 0, h, 0, 8);
-        }
-
-        private void processBlock() {
+        void processBlock(byte[] in, int off) {
             for (int i = 0; i < 16; i++) {
-                long v = 0;
-                for (int j = 0; j < 8; j++) {
-                    v = (v << 8) | (block[8 * i + j] & 0xff);
-                }
-                w[i] = v;
+                int j = off + 8 * i;
+                int hi = (in[j] & 0xff) << 24 | (in[j + 1] & 0xff) << 16 | (in[j + 2] & 0xff) << 8 | (in[j + 3] & 0xff);
+                int lo = (in[j + 4] & 0xff) << 24 | (in[j + 5] & 0xff) << 16 | (in[j + 6] & 0xff) << 8
+                        | (in[j + 7] & 0xff);
+                w[i] = (long) hi << 32 | (lo & 0xFFFFFFFFL);
             }
             for (int i = 16; i < 80; i++) {
                 long s0 = Long.rotateRight(w[i - 15], 1) ^ Long.rotateRight(w[i - 15], 8) ^ (w[i - 15] >>> 7);
@@ -565,14 +532,13 @@ final class DigestEngines {
         }
     }
 
-    private static byte[] bigEndian(int[] words) {
-        byte[] out = new byte[words.length * 4];
-        for (int i = 0; i < words.length; i++) {
-            out[4 * i] = (byte) (words[i] >>> 24);
-            out[4 * i + 1] = (byte) (words[i] >>> 16);
-            out[4 * i + 2] = (byte) (words[i] >>> 8);
-            out[4 * i + 3] = (byte) words[i];
+    private static void bigEndian(int[] words, int count, byte[] out, int offset) {
+        for (int i = 0; i < count; i++) {
+            int word = words[i];
+            out[offset++] = (byte) (word >>> 24);
+            out[offset++] = (byte) (word >>> 16);
+            out[offset++] = (byte) (word >>> 8);
+            out[offset++] = (byte) word;
         }
-        return out;
     }
 }
