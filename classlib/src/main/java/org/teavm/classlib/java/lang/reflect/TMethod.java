@@ -166,9 +166,9 @@ public class TMethod extends TExecutable implements TMember {
             }
         }
         validateArgs(args);
-        // Only the C backend initializes the class here. On Wasm GC the reflective caller initializes
-        // it, at a suspend point when the initializer can suspend; this call could not suspend (ClassInfo.initialize
-        // is an intrinsic that AsyncMethodFinder never marks async). On JS a static method initializes its class.
+        // Only the C backend initializes the class here. On JS and Wasm GC a static method initializes its class
+        // itself, at a suspend point when the initializer can suspend; this call could not suspend
+        // (ClassInfo.initialize is an intrinsic that AsyncMethodFinder never marks async).
         if (PlatformDetector.isC() && (methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
             declaringClass.initialize();
         }
