@@ -371,7 +371,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
             array[array.length - 1] = array[0];
             shiftElements(0, tail);
             if (--tail < 0) {
-                tail = array.length;
+                tail = array.length - 1;
             }
         }
         array[tail] = null;
