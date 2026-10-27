@@ -17,12 +17,22 @@ package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.NavigableSet;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -132,5 +142,40 @@ public class CollectionsTest {
     public void emptySet() {
         assertTrue(Collections.emptySet().containsAll(new HashSet<>()),
                 "Collections.emptySet should produce 'true' for empty set argument");
+    }
+
+    @Test
+    public void unmodifiableSortedAndNavigableViews() {
+        var treeSet = new TreeSet<>(List.of(5, 1, 3));
+        SortedSet<Integer> sortedSet = Collections.unmodifiableSortedSet(treeSet);
+        assertEquals((Object) 1, sortedSet.first());
+        assertEquals(Set.of(1), sortedSet.headSet(3));
+        assertThrows(UnsupportedOperationException.class, () -> sortedSet.add(2));
+        assertThrows(UnsupportedOperationException.class, () -> sortedSet.tailSet(3).remove(5));
+        NavigableSet<Integer> navigableSet = Collections.unmodifiableNavigableSet(treeSet);
+        assertEquals((Object) 3, navigableSet.ceiling(2));
+        assertEquals((Object) 5, navigableSet.descendingSet().first());
+        assertThrows(UnsupportedOperationException.class, navigableSet::pollFirst);
+
+        var treeMap = new TreeMap<>(Map.of("b", 2, "a", 1, "c", 3));
+        SortedMap<String, Integer> sortedMap = Collections.unmodifiableSortedMap(treeMap);
+        assertEquals("a", sortedMap.firstKey());
+        assertThrows(UnsupportedOperationException.class, () -> sortedMap.put("d", 4));
+        NavigableMap<String, Integer> navigableMap = Collections.unmodifiableNavigableMap(treeMap);
+        assertEquals((Object) 2, navigableMap.floorEntry("bb").getValue());
+        assertEquals("c", navigableMap.descendingMap().firstKey());
+        assertThrows(UnsupportedOperationException.class, () -> navigableMap.firstEntry().setValue(9));
+        assertThrows(UnsupportedOperationException.class, () -> navigableMap.headMap("c").clear());
+    }
+
+    @Test
+    public void emptySortedAndNavigableCollections() {
+        assertTrue(Collections.emptySortedSet().isEmpty());
+        assertTrue(Collections.emptyNavigableSet().isEmpty());
+        assertTrue(Collections.emptySortedMap().isEmpty());
+        NavigableMap<String, Integer> empty = Collections.emptyNavigableMap();
+        assertTrue(empty.isEmpty());
+        assertNull(empty.firstEntry());
+        assertThrows(UnsupportedOperationException.class, () -> empty.put("a", 1));
     }
 }
