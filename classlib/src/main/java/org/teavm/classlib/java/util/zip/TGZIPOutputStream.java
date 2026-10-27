@@ -38,8 +38,13 @@ public class TGZIPOutputStream extends TDeflaterOutputStream {
 
     @Override
     public void flush() throws IOException {
-        int count = def.deflate(buf, 0, buf.length, TDeflater.Z_SYNC_FLUSH);
-        out.write(buf, 0, count);
+        // A sync flush is complete only once deflate leaves room in the buffer. One call wrote at most buf.length
+        // bytes and left the rest of the flush in the deflater.
+        int count;
+        do {
+            count = def.deflate(buf, 0, buf.length, TDeflater.Z_SYNC_FLUSH);
+            out.write(buf, 0, count);
+        } while (count == buf.length);
         out.flush();
     }
 

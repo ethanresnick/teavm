@@ -46,7 +46,9 @@ public class TDeflater implements TAutoCloseable {
     private int inRead;
     private int inLength;
     private boolean nowrap;
-    // As in the JDK, setLevel and setStrategy take effect at the next deflate call.
+    // A setLevel or setStrategy change not applied yet. The Javadoc of setLevel: "the next invocation of deflate will
+    // compress the input available so far with the old level (and may be flushed); the new level will take effect
+    // only after that invocation". Before the stream reads any input, setLevel and setStrategy apply a change at once.
     private boolean paramsChanged;
     // The level that the stream compresses with now (compressLevel may be a change not applied yet).
     private int appliedLevel;
@@ -105,27 +107,13 @@ public class TDeflater implements TAutoCloseable {
             throw new ArrayIndexOutOfBoundsException();
         }
 
+        int count = takeHeld(buf, off, nbytes);
+        if (held != null) {
+            return count;
+        }
+        off += count;
+        nbytes -= count;
         long sin = impl.total_in;
-        if (paramsChanged) {
-            paramsChanged = false;
-            if (impl.total_in != 0 && function(appliedLevel) != function(compressLevel)) {
-                flushAndSetParams();
-            } else {
-                setParams();
-            }
-        }
-        int count = 0;
-        if (heldPos < heldEnd) {
-            count = Math.min(nbytes, heldEnd - heldPos);
-            System.arraycopy(held, heldPos, buf, off, count);
-            heldPos += count;
-            if (heldPos < heldEnd) {
-                inRead += impl.total_in - sin;
-                return count;
-            }
-            off += count;
-            nbytes -= count;
-        }
         long sout = impl.total_out;
         impl.setOutput(buf, off, nbytes);
         int err = impl.deflate(flushParam);
@@ -144,7 +132,38 @@ public class TDeflater implements TAutoCloseable {
         }
 
         inRead += impl.total_in - sin;
-        return count + (int) (impl.total_out - sout);
+        int written = (int) (impl.total_out - sout);
+        count += written;
+        // The input available at this call was compressed with the old parameters, so a pending change applies now.
+        // Not after finish(): zlib rejects the flush of a finishing stream, and the change no longer matters.
+        if (paramsChanged && impl.avail_in == 0 && flushParm != Z_FINISH) {
+            applyParams();
+            count += takeHeld(buf, off + written, nbytes - written);
+        }
+        return count;
+    }
+
+    // Copies buffered output of a parameter-change flush to the caller's buffer.
+    private int takeHeld(byte[] buf, int off, int nbytes) {
+        if (held == null) {
+            return 0;
+        }
+        int count = Math.min(nbytes, heldRemaining());
+        System.arraycopy(held, heldPos, buf, off, count);
+        heldPos += count;
+        if (heldPos == heldEnd) {
+            dropHeld();
+        }
+        return count;
+    }
+
+    private void applyParams() {
+        paramsChanged = false;
+        if (impl.total_in != 0 && function(appliedLevel) != function(compressLevel)) {
+            flushAndSetParams();
+        } else {
+            setParams();
+        }
     }
 
     // Zlib's deflateParams. When the compression function changes on a stream that has read input,
@@ -153,22 +172,14 @@ public class TDeflater implements TAutoCloseable {
     // So the flush must complete before params() runs. It goes to an internal buffer, which grows until the flush
     // fits: a flush left half done in a small caller buffer cannot be resumed, because each new Z_PARTIAL_FLUSH
     // after a full output buffer emits another empty block, and with a 1-byte buffer the stream never ended.
-    // The flush and params() see no new input, so the buffer holds only data that the stream has already read
-    // (at most one block), and params() cannot compress new input with the old function.
+    // This runs only when no input is available (avail_in == 0), so the buffer holds only data that the stream has
+    // already read (at most one block), and params() cannot compress new input with the old function.
     private void flushAndSetParams() {
-        int availIn = impl.avail_in;
-        impl.avail_in = 0;
-        int length = heldEnd - heldPos;
-        byte[] out = new byte[length + 4096];
-        if (length > 0) {
-            System.arraycopy(held, heldPos, out, 0, length);
-        }
+        int length = 0;
+        byte[] out = new byte[4096];
         while (true) {
             impl.setOutput(out, length, out.length - length);
-            int err = impl.deflate(JZlib.Z_PARTIAL_FLUSH);
-            if (err != JZlib.Z_OK && err != JZlib.Z_BUF_ERROR) {
-                throw new RuntimeException("Error: " + err);
-            }
+            check(impl.deflate(JZlib.Z_PARTIAL_FLUSH));
             length = out.length - impl.avail_out;
             if (impl.avail_out > 0) {
                 break;
@@ -177,22 +188,32 @@ public class TDeflater implements TAutoCloseable {
         }
         // params() repeats the flush, which now finds nothing to do; any output still goes to out.
         setParams();
-        impl.avail_in = availIn;
-        held = out;
-        heldPos = 0;
         heldEnd = out.length - impl.avail_out;
+        if (heldEnd > 0) {
+            held = out;
+            heldPos = 0;
+        }
     }
 
     private void setParams() {
-        int err = impl.params(compressLevel, strategy);
-        if (err != JZlib.Z_OK && err != JZlib.Z_BUF_ERROR) {
-            throw new RuntimeException("Error: " + err);
-        }
+        check(impl.params(compressLevel, strategy));
         appliedLevel = compressLevel;
     }
 
-    // Zlib 1.1's compression function for a level (its config_table): 0 stores, 1-3 use the fast
-    // function, 4-9 the lazy one. DEFAULT_COMPRESSION is level 6.
+    private static void check(int err) {
+        if (err != JZlib.Z_OK && err != JZlib.Z_BUF_ERROR) {
+            throw new RuntimeException("Error: " + err);
+        }
+    }
+
+    // Output that the caller's buffers have not taken yet.
+    private int heldRemaining() {
+        return heldEnd - heldPos;
+    }
+
+    // The compression function for a level in jzlib 1.1.3 (Deflate.config_table, as in zlib 1.1): 0 stores, 1-3 use
+    // the fast function, 4-9 the lazy one. DEFAULT_COMPRESSION is level 6. Deflate.deflateParams flushes only when
+    // this function changes (not for a strategy change), so a jzlib upgrade must recheck this.
     private static int function(int level) {
         if (level == DEFAULT_COMPRESSION) {
             level = 6;
@@ -240,7 +261,7 @@ public class TDeflater implements TAutoCloseable {
             throw new IllegalStateException();
         }
 
-        return (int) (impl.getTotalOut() - (heldEnd - heldPos));
+        return (int) (impl.getTotalOut() - heldRemaining());
     }
 
     public boolean needsInput() {
@@ -255,9 +276,8 @@ public class TDeflater implements TAutoCloseable {
         flushParm = Z_NO_FLUSH;
         finished = false;
         impl.init(compressLevel, 15, nowrap);
-        impl.params(compressLevel, strategy);
+        setParams();
         paramsChanged = false;
-        appliedLevel = compressLevel;
         dropHeld();
     }
 
@@ -303,7 +323,7 @@ public class TDeflater implements TAutoCloseable {
         }
         if (compressLevel != level) {
             compressLevel = level;
-            paramsChanged = true;
+            paramsChanged();
         }
     }
 
@@ -313,6 +333,15 @@ public class TDeflater implements TAutoCloseable {
         }
         if (this.strategy != strategy) {
             this.strategy = strategy;
+            paramsChanged();
+        }
+    }
+
+    // Before the stream reads input, jzlib's params() applies a change without a flush.
+    private void paramsChanged() {
+        if (impl != null && impl.total_in == 0) {
+            setParams();
+        } else {
             paramsChanged = true;
         }
     }
@@ -330,7 +359,7 @@ public class TDeflater implements TAutoCloseable {
         if (impl == null) {
             throw new NullPointerException();
         }
-        return impl.getTotalOut() - (heldEnd - heldPos);
+        return impl.getTotalOut() - heldRemaining();
     }
 
     @Override
