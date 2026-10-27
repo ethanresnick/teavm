@@ -41,7 +41,9 @@ let $rt_checkArrayLength = length => {
 }
 let $rt_checkArrayDimensions = dimensions => {
     for (let i = 0; i < dimensions.length; i = (i + 1) | 0) {
-        $rt_checkArrayLength(dimensions[i]);
+        if (dimensions[i] < 0) {
+            $rt_throwNASE();
+        }
     }
 }
 
