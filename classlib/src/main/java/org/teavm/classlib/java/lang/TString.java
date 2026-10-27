@@ -97,17 +97,18 @@ public final class TString extends TObject implements TSerializable, TComparable
         initWithBytes(bytes, offset, length, TUTF8Charset.INSTANCE);
     }
 
-    // The deprecated hibyte constructor.
     public TString(byte[] ascii, int hibyte, int offset, int count) {
-        if (offset < 0 || count < 0 || offset > ascii.length - count) {
-            throw new TStringIndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, count, ascii.length);
         char[] chars = new char[count];
         int high = (hibyte & 0xff) << 8;
         for (int i = 0; i < count; i++) {
             chars[i] = (char) (high | (ascii[offset + i] & 0xff));
         }
         takeCharArray(chars);
+    }
+
+    public TString(byte[] ascii, int hibyte) {
+        this(ascii, hibyte, 0, ascii.length);
     }
 
     public TString(byte[] bytes) {
