@@ -200,12 +200,12 @@ public class CFileSystem implements VirtualFileSystem {
     @Import(name = "teavm_file_createDirectory")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native boolean createDirectory(char[] name, int nameSize);
+    static native boolean createDirectory(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_createFile")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native int createFile(char[] name, int nameSize);
+    static native int createFile(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_delete")
     @RuntimeInclude("file.h")

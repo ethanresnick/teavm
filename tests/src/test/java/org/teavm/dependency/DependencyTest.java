@@ -98,6 +98,11 @@ public class DependencyTest {
     }
 
     @Test
+    public void implicitExceptions() {
+        doTest();
+    }
+
+    @Test
     public void arrays() {
         doTest();
     }
