@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -175,21 +176,39 @@ public class ThreadTest {
 
     // Thread.State: NEW "A thread that has not yet started", RUNNABLE "A thread executing in the Java virtual
     // machine", TERMINATED "A thread that has exited". isAlive(): "A thread is alive if it has been started and has
-    // not yet died."
+    // not yet died." getState(): "This method is designed for use in monitoring of the system state, not for
+    // synchronization control." So the started thread must not be able to end, or to wait, before its state is read:
+    // on the JVM it may run, and finish, before start() returns.
     @Test
     public void threadStates() throws InterruptedException {
         var insideState = new Thread.State[1];
         var insideAlive = new boolean[1];
+        var running = new AtomicBoolean();
+        var release = new AtomicBoolean();
         var thread = new Thread(() -> {
             insideState[0] = Thread.currentThread().getState();
             insideAlive[0] = Thread.currentThread().isAlive();
+            running.set(true);
+            // Spin instead of blocking: a thread blocked on a latch or monitor is WAITING or BLOCKED on the JVM.
+            // onSpinWait() lets the main thread run on TeaVM.
+            while (!release.get()) {
+                Thread.onSpinWait();
+            }
         });
         assertEquals(Thread.State.NEW, thread.getState());
         assertFalse(thread.isAlive());
         thread.start();
-        // Started, but it has not run yet: it runs only when this thread suspends.
+        // Started, but on TeaVM it has not run yet: it runs only when this thread suspends. On the JVM it may have
+        // run already, but it cannot end before release is set.
         assertTrue(thread.isAlive());
         assertEquals(Thread.State.RUNNABLE, thread.getState());
+        while (!running.get()) {
+            Thread.onSpinWait();
+        }
+        // Now it has run on every platform, and it is still running.
+        assertTrue(thread.isAlive());
+        assertEquals(Thread.State.RUNNABLE, thread.getState());
+        release.set(true);
         thread.join();
         assertEquals(Thread.State.RUNNABLE, insideState[0]);
         assertTrue(insideAlive[0]);

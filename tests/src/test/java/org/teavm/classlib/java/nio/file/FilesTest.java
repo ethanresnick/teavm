@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
@@ -42,6 +43,8 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileAttribute;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -611,6 +614,226 @@ public class FilesTest {
         }
     }
 
+    // StandardOpenOption.CREATE_NEW: "Create a new file, failing if the file already exists. The check for the
+    // existence of the file and the creation of the file if it does not exist is atomic". Files.createFile: "The
+    // check for the existence of the file and the creation of the new file if it does not exist are a single
+    // operation"; it throws "FileAlreadyExistsException - If a file of that name already exists (optional specific
+    // exception)". Files.copy without REPLACE_EXISTING throws FileAlreadyExistsException "if the target file
+    // exists". Every way to create a new file fails on an existing file or directory and leaves it unchanged.
+    @Test
+    public void createNewFailsOnExistingEntryAndLeavesItUnchanged() throws IOException {
+        var file = Path.of("test-create-new-file");
+        var dir = Path.of("test-create-new-dir");
+        var source = Path.of("test-create-new-source");
+        try {
+            Files.write(source, new byte[] { 7 });
+            Files.createDirectory(dir);
+            Files.createFile(dir.resolve("child"));
+            for (var target : new Path[] { file, dir }) {
+                for (var creation : createNewCalls(source)) {
+                    var message = creation.name + " on " + target;
+                    Files.write(file, new byte[] { 1, 2, 3 });
+                    assertThrows(FileAlreadyExistsException.class, () -> creation.run(target), message);
+                    assertArrayEquals(new byte[] { 1, 2, 3 }, Files.readAllBytes(file), message);
+                    assertTrue(Files.isDirectory(dir), message);
+                    assertTrue(Files.isRegularFile(dir.resolve("child")), message);
+                }
+            }
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir.resolve("child"));
+            Files.deleteIfExists(dir);
+            Files.deleteIfExists(source);
+        }
+    }
+
+    interface Creation {
+        void create(Path path) throws IOException;
+    }
+
+    static final class NamedCreation {
+        final String name;
+        final Creation creation;
+
+        NamedCreation(String name, Creation creation) {
+            this.name = name;
+            this.creation = creation;
+        }
+
+        void run(Path path) throws IOException {
+            creation.create(path);
+        }
+    }
+
+    // Every call that must create a new file, failing with FileAlreadyExistsException if anything is at the path.
+    static NamedCreation[] createNewCalls(Path source) {
+        return new NamedCreation[] {
+            new NamedCreation("newOutputStream(CREATE_NEW)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, WRITE)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, WRITE, TRUNCATE_EXISTING)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE,
+                            StandardOpenOption.TRUNCATE_EXISTING).close()),
+            // "If the CREATE_NEW option is present then CREATE is ignored"
+            new NamedCreation("newOutputStream(CREATE_NEW, CREATE)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.CREATE).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, APPEND)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.APPEND).close()),
+            new NamedCreation("write(bytes, CREATE_NEW)",
+                    p -> Files.write(p, new byte[] { 9 }, StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("write(lines, CREATE_NEW)",
+                    p -> Files.write(p, Arrays.asList("x"), StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("writeString(CREATE_NEW)",
+                    p -> Files.writeString(p, "x", StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("newBufferedWriter(CREATE_NEW)",
+                    p -> Files.newBufferedWriter(p, StandardOpenOption.CREATE_NEW).close()),
+            new NamedCreation("createFile", p -> Files.createFile(p)),
+            new NamedCreation("copy(Path, Path)", p -> Files.copy(source, p)),
+            new NamedCreation("copy(InputStream, Path)",
+                    p -> Files.copy(new ByteArrayInputStream(new byte[] { 9 }), p)),
+        };
+    }
+
+    // Files.createFile, createDirectory, createDirectories, createTempFile and createTempDirectory throw
+    // "UnsupportedOperationException - if the array contains an attribute that cannot be set atomically when
+    // creating the file". An attribute is never silently dropped, and nothing is created.
+    @Test
+    public void creationRejectsUnsupportedAttribute() throws IOException {
+        var attribute = new FileAttribute<String>() {
+            @Override
+            public String name() {
+                return "teavm-test:unsupported";
+            }
+
+            @Override
+            public String value() {
+                return "value";
+            }
+        };
+        var dir = Files.createDirectories(Path.of("test-attribute-dir"));
+        try {
+            assertThrows(UnsupportedOperationException.class, () -> Files.createFile(dir.resolve("f"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectory(dir.resolve("d"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectories(dir.resolve("e"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectories(dir.resolve("g").resolve("h"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createTempFile(dir, "abc", null, attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createTempDirectory(dir, "abc", attribute));
+            try (var entries = Files.list(dir)) {
+                assertEquals(0, entries.count());
+            }
+        } finally {
+            Files.delete(dir);
+        }
+    }
+
+    // Files.createTempFile(dir, prefix, suffix, attrs): "prefix - the prefix string to be used in generating the
+    // file's name; may be null"; "suffix - the suffix string to be used in generating the file's name; may be null,
+    // in which case ".tmp" is used". Unlike File.createTempFile, no minimum prefix length is specified. It "Creates
+    // a new empty file in the specified directory".
+    @Test
+    public void createTempFileTakesAnyPrefix() throws IOException {
+        var dir = Files.createDirectories(Path.of("test-temp-file-dir"));
+        var created = new ArrayList<Path>();
+        try {
+            String[] prefixes = { null, "", "a", "ab", "abc", "prefix-" };
+            String[] suffixes = { null, "", ".x", ".suffix" };
+            var names = new HashSet<String>();
+            for (var prefix : prefixes) {
+                for (var suffix : suffixes) {
+                    var file = Files.createTempFile(dir, prefix, suffix);
+                    created.add(file);
+                    var name = file.getFileName().toString();
+                    var expectedPrefix = prefix != null ? prefix : "";
+                    var expectedSuffix = suffix != null ? suffix : ".tmp";
+                    var message = "prefix " + prefix + ", suffix " + suffix + ": " + name;
+                    assertTrue(name.startsWith(expectedPrefix), message);
+                    assertTrue(name.endsWith(expectedSuffix), message);
+                    assertTrue(name.length() > expectedPrefix.length() + expectedSuffix.length(), message);
+                    assertEquals(dir, file.getParent(), message);
+                    assertTrue(Files.isRegularFile(file), message);
+                    assertEquals(0, Files.size(file), message);
+                    assertTrue(names.add(name), "Name repeated: " + message);
+                }
+            }
+        } finally {
+            for (var file : created) {
+                Files.deleteIfExists(file);
+            }
+            Files.delete(dir);
+        }
+    }
+
+    // Files.createTempFile(prefix, suffix, attrs) "Creates an empty file in the default temporary-file directory";
+    // its prefix "may be null" too.
+    @Test
+    public void createTempFileInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
+        var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        var shortPrefix = Files.createTempFile("a", null);
+        var noPrefix = Files.createTempFile(null, ".x");
+        try {
+            assertTrue(shortPrefix.getFileName().toString().startsWith("a"));
+            assertTrue(shortPrefix.getFileName().toString().endsWith(".tmp"));
+            assertTrue(noPrefix.getFileName().toString().endsWith(".x"));
+            assertTrue(Files.isRegularFile(shortPrefix));
+            assertTrue(Files.isRegularFile(noPrefix));
+            assertTrue(Files.isSameFile(tmpDir, shortPrefix.getParent()));
+            assertTrue(Files.isSameFile(tmpDir, noPrefix.getParent()));
+        } finally {
+            Files.deleteIfExists(shortPrefix);
+            Files.deleteIfExists(noPrefix);
+        }
+    }
+
+    // Files.createTempDirectory(prefix, attrs) "Creates a new directory in the default temporary-file directory";
+    // "prefix - the prefix string to be used in generating the directory's name; may be null".
+    @Test
+    public void createTempDirectoryInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
+        var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
+        var shortPrefix = Files.createTempDirectory("a");
+        var noPrefix = Files.createTempDirectory((String) null);
+        try {
+            assertTrue(shortPrefix.getFileName().toString().startsWith("a"));
+            assertTrue(Files.isDirectory(shortPrefix));
+            assertTrue(Files.isDirectory(noPrefix));
+            assertTrue(Files.isSameFile(tmpDir, shortPrefix.getParent()));
+            assertTrue(Files.isSameFile(tmpDir, noPrefix.getParent()));
+        } finally {
+            Files.deleteIfExists(shortPrefix);
+            Files.deleteIfExists(noPrefix);
+        }
+    }
+
+    // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
+    @Test
+    public void accessChecksFollowFilePermissions() throws IOException {
+        var file = new File("test-file-permissions");
+        var path = Path.of("test-file-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(Files.isReadable(path));
+            assertTrue(Files.isWritable(path));
+            assertFalse(Files.isExecutable(path));
+
+            assertTrue(file.setExecutable(true));
+            assertTrue(Files.isExecutable(path));
+            assertTrue(file.setReadable(false));
+            assertFalse(Files.isReadable(path));
+            assertTrue(file.setWritable(false));
+            assertFalse(Files.isWritable(path));
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+        assertFalse(Files.isExecutable(path));
+    }
+
     // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike
     // the createDirectory method, an exception is not thrown if the directory could not be created because it
     // already exists." It returns "the directory".
@@ -827,6 +1050,17 @@ public class FilesTest {
                 output.write(1);
             }
             assertFalse(Files.exists(path));
+        } finally {
+            Files.deleteIfExists(path);
+        }
+    }
+
+    @Test
+    public void readString() throws IOException {
+        var path = Path.of("test-file-string");
+        try {
+            Files.write(path, "héllo".getBytes(StandardCharsets.UTF_8));
+            assertEquals("héllo", Files.readString(path));
         } finally {
             Files.deleteIfExists(path);
         }

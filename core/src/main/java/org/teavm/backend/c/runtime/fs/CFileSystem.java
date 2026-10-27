@@ -58,6 +58,11 @@ public class CFileSystem implements VirtualFileSystem {
     }
 
     CVirtualFile getByPath(String path) {
+        if (path.isEmpty()) {
+            // An empty path names the working directory, as it does for java.nio.file.Path. The C functions
+            // would fail on it.
+            path = ".";
+        }
         Entry entry = cache.get(path);
         if (entry == null || entry.get() == null) {
             entry = new Entry(new CVirtualFile(this, path), referenceQueue);
@@ -177,6 +182,16 @@ public class CFileSystem implements VirtualFileSystem {
     @Unmanaged
     static native boolean canWrite(char[] name, int nameSize);
 
+    @Import(name = "teavm_file_canExecute")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean canExecute(char[] name, int nameSize);
+
+    @Import(name = "teavm_file_setAccess")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean setAccess(char[] name, int nameSize, int modeBits, boolean enable);
+
     @Import(name = "teavm_file_setReadonly")
     @RuntimeInclude("file.h")
     @Unmanaged
@@ -190,12 +205,12 @@ public class CFileSystem implements VirtualFileSystem {
     @Import(name = "teavm_file_createDirectory")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native boolean createDirectory(char[] name, int nameSize);
+    static native boolean createDirectory(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_createFile")
     @RuntimeInclude("file.h")
     @Unmanaged
-    static native int createFile(char[] name, int nameSize);
+    static native int createFile(char[] name, int nameSize, boolean ownerOnly);
 
     @Import(name = "teavm_file_delete")
     @RuntimeInclude("file.h")

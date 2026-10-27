@@ -19,6 +19,7 @@ package org.teavm.classlib.java.io;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.File;
@@ -28,8 +29,12 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
@@ -476,6 +481,37 @@ public class FileTest {
 
         // Test for creating a file that already exists.
         assertFalse(f2.createNewFile(), "File Already Exists, createNewFile Should Return False.");
+    }
+
+    // File.createTempFile fixes only the prefix and the suffix of the name. One name must not tell the next, as an
+    // incrementing counter would, or anyone who sees one temporary file could prepare the next one. The numbers
+    // between prefix and suffix are not an arithmetic sequence.
+    @Test
+    public void createTempFileNamesDoNotFollowSequence() throws IOException {
+        var dir = new File("test-temp-sequence");
+        dir.mkdirs();
+        var files = new File[8];
+        try {
+            var numbers = new BigInteger[files.length];
+            for (var i = 0; i < files.length; ++i) {
+                files[i] = File.createTempFile("seq", ".tmp", dir);
+                var name = files[i].getName();
+                numbers[i] = new BigInteger(name.substring(3, name.length() - 4));
+            }
+            var difference = numbers[1].subtract(numbers[0]);
+            var same = true;
+            for (var i = 2; i < numbers.length; ++i) {
+                same &= numbers[i].subtract(numbers[i - 1]).equals(difference);
+            }
+            assertFalse(same, "names in sequence: " + Arrays.toString(numbers));
+        } finally {
+            for (var file : files) {
+                if (file != null) {
+                    file.delete();
+                }
+            }
+            dir.delete();
+        }
     }
 
     @Test
@@ -1899,5 +1935,216 @@ public class FileTest {
     @PlatformMarker
     private static boolean isTeaVM() {
         return false;
+    }
+
+    // File.setReadable/setWritable/setExecutable Javadoc: "Returns: true if and only if the operation succeeded."
+    // canRead/canWrite/canExecute: "true if and only if the file specified by this abstract pathname exists and
+    // ..." -- a missing file has no permissions to change or test.
+    @Test
+    public void permissionSettersOnMissingFileReturnFalse() {
+        var file = new File("no-such-file-for-permissions");
+        assertFalse(file.setWritable(false));
+        assertFalse(file.setWritable(true, false));
+        assertFalse(file.setReadable(false));
+        assertFalse(file.setReadable(true, false));
+        assertFalse(file.setExecutable(true));
+        assertFalse(file.setExecutable(true, false));
+        assertFalse(file.canRead());
+        assertFalse(file.canWrite());
+        assertFalse(file.canExecute());
+    }
+
+    @Test
+    public void setWritableChangesAnExistingFile() throws IOException {
+        var file = new File("file-for-set-writable");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setWritable(false));
+            assertFalse(file.canWrite());
+            assertTrue(file.setWritable(true));
+            assertTrue(file.canWrite());
+        } finally {
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    // setReadable(readable, ownerOnly) Javadoc: "Sets the owner's or everybody's read permission"; ownerOnly: "If
+    // true, the read permission applies only to the owner's read permission; otherwise, it applies to everybody."
+    // The same wording holds for setWritable and setExecutable. The owner's bit is the one this process sees, so
+    // both forms must change canRead/canWrite/canExecute, and each setter must leave the other two permissions
+    // alone. Runs every setter, with both values and both ownerOnly forms, from each of the eight states.
+    @Test
+    public void permissionSettersChangeOnlyTheirOwnPermission() throws IOException {
+        var file = new File("file-for-permission-setters");
+        assertTrue(file.createNewFile());
+        try {
+            for (int start = 0; start < 8; ++start) {
+                for (int permission = 0; permission < 3; ++permission) {
+                    for (int op = 0; op < 4; ++op) {
+                        boolean[] expected = { (start & 1) != 0, (start & 2) != 0, (start & 4) != 0 };
+                        for (int i = 0; i < 3; ++i) {
+                            assertTrue(setPermission(file, i, expected[i], true));
+                        }
+                        assertPermissions(file, expected, "start " + start);
+                        boolean value = (op & 1) != 0;
+                        boolean ownerOnly = (op & 2) != 0;
+                        assertTrue(setPermission(file, permission, value, ownerOnly));
+                        expected[permission] = value;
+                        assertPermissions(file, expected, "start " + start + ", permission " + permission
+                                + ", value " + value + ", ownerOnly " + ownerOnly);
+                    }
+                }
+            }
+        } finally {
+            file.setReadable(true, false);
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    private static boolean setPermission(File file, int permission, boolean value, boolean ownerOnly) {
+        switch (permission) {
+            case 0:
+                return file.setReadable(value, ownerOnly);
+            case 1:
+                return file.setWritable(value, ownerOnly);
+            default:
+                return file.setExecutable(value, ownerOnly);
+        }
+    }
+
+    private static void assertPermissions(File file, boolean[] expected, String message) {
+        assertEquals(expected[0], file.canRead(), "canRead, " + message);
+        assertEquals(expected[1], file.canWrite(), "canWrite, " + message);
+        assertEquals(expected[2], file.canExecute(), "canExecute, " + message);
+    }
+
+    // The one-argument forms are "A convenience method to set the owner's ... permission", i.e. the two-argument
+    // form with ownerOnly = true.
+    @Test
+    public void oneArgumentPermissionSettersChangeTheOwnersPermission() throws IOException {
+        var file = new File("file-for-one-argument-permission-setters");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setExecutable(true));
+            assertTrue(file.canExecute());
+            assertTrue(file.setExecutable(false));
+            assertFalse(file.canExecute());
+            assertTrue(file.setReadable(false));
+            assertFalse(file.canRead());
+            assertTrue(file.setReadable(true));
+            assertTrue(file.canRead());
+        } finally {
+            file.setReadable(true);
+            file.delete();
+        }
+    }
+
+    // canRead: "true if and only if the file ... exists and can be read by the application"; the stream
+    // constructors throw FileNotFoundException "if the file ... for some other reason cannot be opened".
+    @Test
+    public void clearedPermissionsBlockStreams() throws IOException {
+        var file = new File("file-for-cleared-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(file.setReadable(false));
+            try {
+                new FileInputStream(file).close();
+                fail("Unreadable file opened for reading");
+            } catch (IOException e) {
+                // Expected
+            }
+            assertTrue(file.setReadable(true));
+            new FileInputStream(file).close();
+
+            assertTrue(file.setWritable(false, false));
+            try {
+                new FileOutputStream(file).close();
+                fail("Unwritable file opened for writing");
+            } catch (IOException e) {
+                // Expected
+            }
+            assertTrue(file.setWritable(true, false));
+            new FileOutputStream(file).close();
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+    }
+
+    // A new regular file is not executable, and a new directory can be searched, which canExecute reports for a
+    // directory on POSIX file systems.
+    @Test
+    public void canExecuteOfNewFileAndDirectory() throws IOException {
+        var file = new File("file-for-can-execute");
+        var dir = new File("dir-for-can-execute");
+        assertTrue(file.createNewFile());
+        assertTrue(dir.mkdir());
+        try {
+            assertFalse(file.canExecute());
+            assertTrue(dir.canExecute());
+        } finally {
+            file.delete();
+            dir.delete();
+        }
+    }
+
+    // File.toPath: "Returns a java.nio.file.Path object constructed from this abstract path. The resulting Path is
+    // associated with the default-filesystem. The first invocation of this method works as if invoking it were
+    // equivalent to evaluating the expression: FileSystems.getDefault().getPath(this.getPath()); Subsequent
+    // invocations of this method return the same Path."
+    @Test
+    public void toPath() {
+        var files = new File[] {
+            new File("dir", "name.txt"),
+            new File("name.txt"),
+            new File("dir/sub/"),
+            new File("/"),
+            new File("/abs/name.txt"),
+            new File(new File("parent"), "child"),
+            new File("a/../b/./c"),
+            new File("dir", "name.txt").getAbsoluteFile(),
+        };
+        for (var file : files) {
+            var path = file.toPath();
+            assertEquals(FileSystems.getDefault().getPath(file.getPath()), path, file.getPath());
+            assertSame(FileSystems.getDefault(), path.getFileSystem(), file.getPath());
+            assertSame(path, file.toPath(), file.getPath());
+            assertEquals(file.isAbsolute(), path.isAbsolute(), file.getPath());
+            assertEquals(file.getPath(), path.toString(), file.getPath());
+            // Path.toFile gives "a File object representing this path"; it need not equal the original File, but
+            // here its abstract path is the same.
+            assertEquals(file, path.toFile(), file.getPath());
+        }
+        assertEquals(Path.of("dir", "name.txt"), new File("dir", "name.txt").toPath());
+    }
+
+    // "If this abstract pathname is the empty abstract pathname then this method returns a Path that may be used to
+    // access the current user directory."
+    @Test
+    public void emptyFileToPath() throws IOException {
+        var path = new File("").toPath();
+        assertEquals(Path.of(""), path);
+        assertTrue(Files.isDirectory(path));
+        var name = "toPath-empty-test-file";
+        var file = new File(name);
+        try {
+            assertTrue(file.createNewFile());
+            assertEquals(Path.of(name), path.resolve(name));
+            assertTrue(Files.isRegularFile(path.resolve(name)));
+            var found = false;
+            try (var entries = Files.newDirectoryStream(path)) {
+                for (var entry : entries) {
+                    if (entry.equals(Path.of(name))) {
+                        found = true;
+                    }
+                }
+            }
+            assertTrue(found);
+        } finally {
+            file.delete();
+        }
     }
 }

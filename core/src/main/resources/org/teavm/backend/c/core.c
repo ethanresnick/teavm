@@ -10,6 +10,7 @@
 #include <time.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 #if TEAVM_INCREMENTAL
     #include "virtcall.h"
@@ -29,8 +30,25 @@ double teavm_rand() {
     return rand() / ((double) RAND_MAX + 1);
 }
 
+// Math.random and the seed of new Random() come from rand(). A seed taken from the start time alone could be
+// guessed, so on Unix it comes from /dev/urandom, with the time as the fallback.
+static unsigned int teavm_randomSeed() {
+    unsigned int seed = (unsigned int) time(NULL);
+    #if TEAVM_UNIX
+        FILE* urandom = fopen("/dev/urandom", "rb");
+        if (urandom != NULL) {
+            unsigned int value;
+            if (fread(&value, sizeof(value), 1, urandom) == 1) {
+                seed = value;
+            }
+            fclose(urandom);
+        }
+    #endif
+    return seed;
+}
+
 void teavm_beforeInit() {
-    srand((unsigned int) time(NULL));
+    srand(teavm_randomSeed());
 
     #if TEAVM_UNIX
         setlocale (LC_ALL, "");

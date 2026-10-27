@@ -23,6 +23,8 @@ import org.teavm.classlib.java.nio.TCharBuffer;
 import org.teavm.classlib.java.nio.TReadOnlyBufferException;
 
 public abstract class TReader implements TCloseable, TReadable {
+    private static final int TRANSFER_BUFFER_SIZE = 2048;
+
     protected TObject lock;
 
     protected TReader() {
@@ -66,6 +68,23 @@ public abstract class TReader implements TCloseable, TReadable {
             }
         }
         return bytesRead;
+    }
+
+    public long transferTo(TWriter out) throws IOException {
+        if (out == null) {
+            throw new NullPointerException();
+        }
+        var buffer = new char[TRANSFER_BUFFER_SIZE];
+        var charsTransferred = 0L;
+        while (true) {
+            var charsRead = read(buffer);
+            if (charsRead < 0) {
+                break;
+            }
+            out.write(buffer, 0, charsRead);
+            charsTransferred += charsRead;
+        }
+        return charsTransferred;
     }
 
     public long skip(long n) throws IOException {

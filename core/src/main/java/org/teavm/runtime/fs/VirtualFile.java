@@ -32,9 +32,31 @@ public interface VirtualFile {
 
     VirtualFileAccessor createAccessor(boolean readable, boolean writable, boolean append);
 
+    /**
+     * Creates the file {@code fileName} in this directory. Returns false, without changing anything, if an entry
+     * with that name exists, including a symbolic link whose target does not exist. The check and the creation are
+     * one atomic step.
+     */
     boolean createFile(String fileName) throws IOException;
 
+    /**
+     * As {@link #createFile(String)}. With {@code ownerOnly}, a file system with POSIX permissions creates the file
+     * with mode 0600 instead of its usual mode. A file system without permissions ignores {@code ownerOnly}.
+     */
+    default boolean createFile(String fileName, boolean ownerOnly) throws IOException {
+        return createFile(fileName);
+    }
+
     boolean createDirectory(String fileName);
+
+    /**
+     * As {@link #createDirectory(String)}. With {@code ownerOnly}, a file system with POSIX permissions creates the
+     * directory with mode 0700 instead of its usual mode. A file system without permissions ignores
+     * {@code ownerOnly}.
+     */
+    default boolean createDirectory(String fileName, boolean ownerOnly) {
+        return createDirectory(fileName);
+    }
 
     boolean delete();
 
@@ -44,11 +66,25 @@ public interface VirtualFile {
 
     boolean canWrite();
 
+    default boolean canExecute() {
+        return false;
+    }
+
     long lastModified();
 
     boolean setLastModified(long lastModified);
 
     boolean setReadOnly(boolean readOnly);
+
+    /**
+     * Sets ({@code enable}) or clears the POSIX permission bits {@code modeBits} (for example 0444 for read by
+     * everyone). java.io.File's setReadable, setWritable, and setExecutable use it. A file system that cannot
+     * distinguish the owner from others applies the bits to everybody. A file system without permission bits
+     * returns false.
+     */
+    default boolean setAccess(int modeBits, boolean enable) {
+        return false;
+    }
 
     int length();
 

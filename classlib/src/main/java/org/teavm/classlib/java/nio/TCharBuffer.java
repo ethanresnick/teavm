@@ -229,17 +229,25 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
 
     @Override
     public final boolean hasArray() {
-        return isArrayPresent();
+        return isArrayPresent() && !isReadOnly();
     }
 
     @Override
     public final char[] array() {
+        checkArrayWritable();
         return getArray();
     }
 
     @Override
     public final int arrayOffset() {
+        checkArrayWritable();
         return getArrayOffset();
+    }
+
+    private void checkArrayWritable() {
+        if (isReadOnly() && isArrayPresent()) {
+            throw new TReadOnlyBufferException();
+        }
     }
 
     abstract boolean isArrayPresent();

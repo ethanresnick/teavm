@@ -230,17 +230,25 @@ public abstract class TByteBuffer extends TBuffer implements TComparable<TByteBu
 
     @Override
     public final boolean hasArray() {
-        return hasArrayImpl();
+        return hasArrayImpl() && !isReadOnly();
     }
 
     @Override
     public final byte[] array() {
+        checkArrayWritable();
         return arrayImpl();
     }
 
     @Override
     public final int arrayOffset() {
+        checkArrayWritable();
         return arrayOffsetImpl();
+    }
+
+    private void checkArrayWritable() {
+        if (isReadOnly() && hasArrayImpl()) {
+            throw new TReadOnlyBufferException();
+        }
     }
 
     abstract boolean hasArrayImpl();

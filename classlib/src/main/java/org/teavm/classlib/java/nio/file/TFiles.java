@@ -41,6 +41,7 @@ import org.teavm.classlib.java.lang.TSystem;
 import org.teavm.classlib.java.nio.file.attribute.TBasicFileAttributes;
 import org.teavm.classlib.java.nio.file.attribute.TFileAttribute;
 import org.teavm.classlib.java.nio.file.attribute.TFileTime;
+import org.teavm.classlib.java.nio.file.impl.TDefaultFileSystemProvider;
 
 public final class TFiles {
     private TFiles() {
@@ -64,9 +65,14 @@ public final class TFiles {
     }
 
     public static TPath createFile(TPath file, TFileAttribute<?>... attrs) throws IOException {
-        file.getFileSystem().provider().newOutputStream(file, TStandardOpenOption.CREATE_NEW,
-                TStandardOpenOption.WRITE).close();
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        provider(file).createFile(file, false);
         return file;
+    }
+
+    // The default file system's provider is the only one.
+    private static TDefaultFileSystemProvider provider(TPath path) {
+        return (TDefaultFileSystemProvider) path.getFileSystem().provider();
     }
 
     public static TPath createDirectory(TPath dir, TFileAttribute<?>... attrs) throws IOException {
@@ -75,6 +81,7 @@ public final class TFiles {
     }
 
     public static TPath createDirectories(TPath dir, TFileAttribute<?>... attrs) throws IOException {
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
         if (dir.getNameCount() <= 1) {
             // As in the JDK, a directory that already exists is not an error, even through a symbolic link.
             try {
@@ -111,34 +118,56 @@ public final class TFiles {
 
     public static TPath createTempFile(TPath dir, String prefix, String suffix, TFileAttribute<?>... attrs)
             throws IOException {
-        if (prefix.length() < 3) {
-            throw new IllegalArgumentException();
-        }
-
-        var sb = new StringBuilder();
-        sb.append(prefix);
-        generateRandomName(sb);
-        sb.append(suffix != null ? suffix : ".tmp");
-        return createFile(dir.resolve(sb.toString()), attrs);
+        // As in the JDK, there is no minimum prefix length (that rule is File.createTempFile's), and a null prefix
+        // is empty.
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        return createTemp(dir, prefix, suffix != null ? suffix : ".tmp", false);
     }
 
     public static TPath createTempFile(String prefix, String suffix, TFileAttribute<?>... attrs)
             throws IOException {
-        return createTempFile(TPath.of(TSystem.getTempDir()), prefix, suffix, attrs);
+        return createTempFile(defaultTempDir(), prefix, suffix, attrs);
     }
 
     public static TPath createTempDirectory(TPath dir, String prefix, TFileAttribute<?>... attrs)
             throws IOException {
-        var sb = new StringBuilder();
-        if (prefix != null) {
-            sb.append(prefix);
+        TDefaultFileSystemProvider.checkNoAttributes(attrs);
+        return createTemp(dir, prefix, "", true);
+    }
+
+    // As the JDK does on POSIX, a file system with permissions makes temporary entries owner-only: mode 0600 for a
+    // file and 0700 for a directory (the Javadoc leaves the default attributes to the file system). A name that is
+    // taken is not an error: another one is drawn.
+    private static TPath createTemp(TPath dir, String prefix, String suffix, boolean directory) throws IOException {
+        while (true) {
+            var sb = new StringBuilder();
+            if (prefix != null) {
+                sb.append(prefix);
+            }
+            generateRandomName(sb);
+            sb.append(suffix);
+            var path = dir.resolve(sb.toString());
+            try {
+                if (directory) {
+                    provider(path).createDirectory(path, true);
+                } else {
+                    provider(path).createFile(path, true);
+                }
+                return path;
+            } catch (FileAlreadyExistsException e) {
+                // try another name
+            }
         }
-        generateRandomName(sb);
-        return createDirectory(dir.resolve(sb.toString()), attrs);
     }
 
     public static TPath createTempDirectory(String prefix, TFileAttribute<?>... attrs) throws IOException {
-        return createTempDirectory(TPath.of(TSystem.getTempDir()), prefix, attrs);
+        return createTempDirectory(defaultTempDir(), prefix, attrs);
+    }
+
+    // The default temporary-file directory need not exist yet, for example in the in-memory file system. As
+    // File.createTempFile does, create it.
+    private static TPath defaultTempDir() throws IOException {
+        return createDirectories(TPath.of(TSystem.getTempDir()));
     }
 
     private static void generateRandomName(StringBuilder sb) {

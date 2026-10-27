@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
@@ -117,6 +118,33 @@ public class DeflateStreamTest {
         gzip.close();
         var input = new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray()));
         assertArrayEquals(data, input.readAllBytes());
+    }
+
+    // With syncFlush = true and more pending output than the 512-byte buffer, one deflate call left the rest of the
+    // flush in the deflater, so the flushed bytes did not decode to all the data written.
+    @Test
+    public void gzipFlushWritesAllPendingOutput() throws IOException, DataFormatException {
+        var data = new byte[20000];
+        var random = new Random(1);
+        random.nextBytes(data);
+        var bytes = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(bytes, true);
+        gzip.write(data);
+        gzip.flush();
+        var flushed = bytes.toByteArray();
+        // Skip the 10-byte header and inflate the raw deflate data written so far.
+        var inflater = new Inflater(true);
+        inflater.setInput(flushed, 10, flushed.length - 10);
+        var result = new byte[data.length];
+        var length = 0;
+        int n;
+        while (length < result.length && (n = inflater.inflate(result, length, result.length - length)) > 0) {
+            length += n;
+        }
+        assertEquals(data.length, length);
+        assertArrayEquals(data, result);
+        gzip.close();
+        assertArrayEquals(data, new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray())).readAllBytes());
     }
 
     @Test
@@ -227,6 +255,202 @@ public class DeflateStreamTest {
         @Override
         public synchronized int read(byte[] b, int off, int len) {
             return super.read(b, off, Math.min(len, 1));
+        }
+    }
+
+    // Byte 9 of the header is the OS field. RFC 1952, 2.3.1: "255 - unknown". The JDK writes 255 since JDK 16.
+    // DeflaterOutputStream.flush Javadoc: without syncFlush, "this method only flushes the output stream without
+    // flushing the compressor", so flush() adds nothing after the header here.
+    @Test
+    public void gzipOutputIsTheJdkOne() throws IOException {
+        var output = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(output);
+        gzip.write("hello".getBytes(StandardCharsets.UTF_8));
+        gzip.flush();
+        assertEquals(10, output.size());
+        gzip.close();
+        assertArrayEquals(new byte[] { 31, -117, 8, 0, 0, 0, 0, 0, 0, -1, -53, 72, -51, -55, -55, 7, 0, -122, -90, 16,
+                54, 5, 0, 0, 0 }, output.toByteArray());
+    }
+
+    @Test
+    public void gzipSyncFlush() throws IOException {
+        var output = new ByteArrayOutputStream();
+        var gzip = new GZIPOutputStream(output, true);
+        gzip.write("hello".getBytes(StandardCharsets.UTF_8));
+        gzip.flush();
+        var bytes = output.toByteArray();
+        assertArrayEquals(new byte[] { 0, 0, -1, -1 }, Arrays.copyOfRange(bytes, bytes.length - 4, bytes.length));
+        gzip.close();
+        try (var input = new GZIPInputStream(new ByteArrayInputStream(output.toByteArray()))) {
+            assertEquals("hello", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+        }
+    }
+
+    // DeflaterOutputStream.flush Javadoc: "If syncFlush is true when this compressed output stream is constructed,
+    // this method first flushes the underlying compressor with the flush mode Deflater.SYNC_FLUSH to force all
+    // pending data to be flushed out to the output stream". So after every flush, the bytes written so far must
+    // inflate to all the data written so far, for every level, strategy and buffer size, including buffers smaller
+    // than a sync marker.
+    @Test
+    public void syncFlushWritesAllPendingOutput() throws IOException, DataFormatException {
+        var random = new Random(2);
+        var noise = new byte[3000];
+        random.nextBytes(noise);
+        var text = (longString + longString + longString).getBytes(StandardCharsets.UTF_8);
+        int[] levels = { Deflater.NO_COMPRESSION, Deflater.BEST_SPEED, Deflater.DEFAULT_COMPRESSION,
+                Deflater.BEST_COMPRESSION };
+        int[] strategies = { Deflater.DEFAULT_STRATEGY, Deflater.FILTERED, Deflater.HUFFMAN_ONLY };
+        for (var data : new byte[][] { noise, text }) {
+            for (int bufSize : new int[] { 1, 2, 6, 7, 512 }) {
+                var label = "data " + data.length + ", buffer " + bufSize;
+                checkSyncFlushes(true, data, bufSize, 0, 0, label + ", gzip");
+                for (int level : levels) {
+                    for (int strategy : strategies) {
+                        checkSyncFlushes(false, data, bufSize, level, strategy,
+                                label + ", level " + level + ", strategy " + strategy);
+                    }
+                }
+            }
+        }
+    }
+
+    // A GZIPOutputStream if gzip is true, otherwise a raw DeflaterOutputStream with the given level and strategy.
+    private static void checkSyncFlushes(boolean gzip, byte[] data, int bufSize, int level, int strategy, String label)
+            throws IOException, DataFormatException {
+        var bytes = new CappedOutputStream(data.length * 4 + 10000);
+        DeflaterOutputStream out;
+        int headerSize;
+        if (gzip) {
+            out = new GZIPOutputStream(bytes, bufSize, true);
+            headerSize = 10;
+        } else {
+            var deflater = new Deflater(level, true);
+            deflater.setStrategy(strategy);
+            out = new DeflaterOutputStream(bytes, deflater, bufSize, true);
+            headerSize = 0;
+        }
+        int written = 0;
+        // Flush after an empty prefix, a single byte, mid-way and at the end, and twice in a row.
+        for (int end : new int[] { 0, 1, 1, data.length / 3, data.length }) {
+            out.write(data, written, end - written);
+            written = end;
+            out.flush();
+            var flushed = bytes.toByteArray();
+            var inflater = new Inflater(true);
+            inflater.setInput(flushed, headerSize, flushed.length - headerSize);
+            var result = new byte[written + 1];
+            int length = 0;
+            int n;
+            while ((n = inflater.inflate(result, length, result.length - length)) > 0) {
+                length += n;
+            }
+            assertEquals(written, length, label + ", flush at " + written);
+            assertArrayEquals(Arrays.copyOf(data, written), Arrays.copyOf(result, length),
+                    label + ", flush at " + written);
+            assertTrue(inflater.needsInput(), label + ", flush at " + written);
+        }
+        out.close();
+        var compressed = bytes.toByteArray();
+        InputStream in = gzip
+                ? new GZIPInputStream(new ByteArrayInputStream(compressed))
+                : new InflaterInputStream(new ByteArrayInputStream(compressed), new Inflater(true));
+        assertArrayEquals(data, in.readAllBytes(), label);
+    }
+
+    // DeflaterOutputStream.flush Javadoc: without syncFlush, "this method only flushes the output stream without
+    // flushing the compressor".
+    @Test
+    public void flushWithoutSyncFlushOnlyFlushesTheStream() throws IOException {
+        var data = longString.getBytes(StandardCharsets.UTF_8);
+        for (int kind = 0; kind < 4; kind++) {
+            var bytes = new FlushCountingOutputStream();
+            DeflaterOutputStream out;
+            switch (kind) {
+                case 0:
+                    out = new DeflaterOutputStream(bytes);
+                    break;
+                case 1:
+                    out = new DeflaterOutputStream(bytes, false);
+                    break;
+                case 2:
+                    out = new DeflaterOutputStream(bytes, new Deflater(), 7, false);
+                    break;
+                default:
+                    out = new GZIPOutputStream(bytes, false);
+                    break;
+            }
+            out.write(data);
+            int size = bytes.size();
+            out.flush();
+            assertEquals(size, bytes.size(), "kind " + kind);
+            assertEquals(1, bytes.flushes, "kind " + kind);
+            out.close();
+            InputStream in = kind == 3
+                    ? new GZIPInputStream(new ByteArrayInputStream(bytes.toByteArray()))
+                    : new InflaterInputStream(new ByteArrayInputStream(bytes.toByteArray()));
+            assertArrayEquals(data, in.readAllBytes(), "kind " + kind);
+        }
+    }
+
+    // After finish() the compressor has finished, so a sync flush has nothing to add, and must not fail.
+    @Test
+    public void syncFlushAfterFinishWritesNothing() throws IOException {
+        var data = longString.getBytes(StandardCharsets.UTF_8);
+        for (boolean gzip : new boolean[] { false, true }) {
+            var bytes = new FlushCountingOutputStream();
+            DeflaterOutputStream out = gzip
+                    ? new GZIPOutputStream(bytes, true)
+                    : new DeflaterOutputStream(bytes, true);
+            out.write(data);
+            out.finish();
+            var finished = bytes.toByteArray();
+            out.flush();
+            out.flush();
+            assertArrayEquals(finished, bytes.toByteArray(), "gzip " + gzip);
+            assertEquals(2, bytes.flushes, "gzip " + gzip);
+            // close() ends the deflater; a flush after it must not touch the deflater either.
+            out.close();
+            out.flush();
+            assertArrayEquals(finished, bytes.toByteArray(), "gzip " + gzip);
+            InputStream in = gzip
+                    ? new GZIPInputStream(new ByteArrayInputStream(finished))
+                    : new InflaterInputStream(new ByteArrayInputStream(finished));
+            assertArrayEquals(data, in.readAllBytes(), "gzip " + gzip);
+        }
+    }
+
+    // Fails instead of hanging when a flush loop keeps writing.
+    private static class CappedOutputStream extends ByteArrayOutputStream {
+        private final int cap;
+
+        CappedOutputStream(int cap) {
+            this.cap = cap;
+        }
+
+        @Override
+        public synchronized void write(byte[] b, int off, int len) {
+            if (size() + len > cap) {
+                throw new AssertionError("more than " + cap + " bytes written");
+            }
+            super.write(b, off, len);
+        }
+
+        @Override
+        public synchronized void write(int b) {
+            if (size() + 1 > cap) {
+                throw new AssertionError("more than " + cap + " bytes written");
+            }
+            super.write(b);
+        }
+    }
+
+    private static class FlushCountingOutputStream extends ByteArrayOutputStream {
+        int flushes;
+
+        @Override
+        public void flush() {
+            flushes++;
         }
     }
 }

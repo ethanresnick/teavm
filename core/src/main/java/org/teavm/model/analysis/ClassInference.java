@@ -60,6 +60,7 @@ import org.teavm.model.instructions.GetElementInstruction;
 import org.teavm.model.instructions.GetFieldInstruction;
 import org.teavm.model.instructions.InvocationType;
 import org.teavm.model.instructions.InvokeInstruction;
+import org.teavm.model.instructions.NullCheckInstruction;
 import org.teavm.model.instructions.PutElementInstruction;
 import org.teavm.model.instructions.PutFieldInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
@@ -206,6 +207,7 @@ public class ClassInference {
             for (Instruction insn : block) {
                 insn.acceptVisitor(visitor);
             }
+            ImplicitExceptions.read(block, type -> propagateException(type, block));
 
             if (block.getExceptionVariable() != null) {
                 getNodeTypes(packNodeAndDegree(block.getExceptionVariable().getIndex(), 0));
@@ -801,6 +803,11 @@ public class ClassInference {
         public void visit(CastInstruction insn) {
             casts.add(new ValueCast(insn.getValue().getIndex(), insn.getReceiver().getIndex(), insn.getTargetType()));
             getNodeTypes(packNodeAndDegree(insn.getReceiver().getIndex(), 0));
+        }
+
+        @Override
+        public void visit(NullCheckInstruction insn) {
+            assignmentGraphBuilder.addEdge(insn.getValue().getIndex(), insn.getReceiver().getIndex());
         }
 
         @Override

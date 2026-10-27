@@ -24,6 +24,8 @@ import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Objects;
 import org.teavm.classlib.java.lang.TSystem;
+import org.teavm.classlib.java.nio.file.TFileSystems;
+import org.teavm.classlib.java.nio.file.TPath;
 import org.teavm.classlib.java.util.TRandom;
 import org.teavm.runtime.fs.VirtualFile;
 import org.teavm.runtime.fs.VirtualFileSystem;
@@ -31,13 +33,12 @@ import org.teavm.runtime.fs.VirtualFileSystemProvider;
 
 public class TFile implements Serializable, Comparable<TFile> {
     private String path;
+    private transient TPath filePath;
 
     public static final char separatorChar = fs().isWindows() ? '\\' : '/';
     public static final String separator = String.valueOf(separatorChar);
     public static final char pathSeparatorChar = fs().isWindows() ? ';' : ':';
     public static final String pathSeparator = String.valueOf(pathSeparatorChar);
-
-    private static int counter;
 
     public TFile(TFile dir, String name) {
         Objects.requireNonNull(name);
@@ -106,6 +107,11 @@ public class TFile implements Serializable, Comparable<TFile> {
         return virtualFile != null && virtualFile.canWrite();
     }
 
+    public boolean canExecute() {
+        VirtualFile virtualFile = findVirtualFile();
+        return virtualFile != null && virtualFile.canExecute();
+    }
+
     @Override
     public int compareTo(TFile o) {
         return path.compareTo(o.path);
@@ -147,6 +153,15 @@ public class TFile implements Serializable, Comparable<TFile> {
         result.append(path);
 
         return result.toString();
+    }
+
+    public TPath toPath() {
+        var result = filePath;
+        if (result == null) {
+            result = TFileSystems.getDefault().getPath(getPath());
+            filePath = result;
+        }
+        return result;
     }
 
     public TFile getAbsoluteFile() {
@@ -385,9 +400,37 @@ public class TFile implements Serializable, Comparable<TFile> {
         return file.setReadOnly(true);
     }
 
-    public boolean setWritable(boolean writable) {
+    // As in the JDK, the one-argument forms change only the owner's bit, and each returns false when the operation
+    // fails. A file system without permission bits (setAccess returns false) still supports the write bit through
+    // setReadOnly.
+    public boolean setWritable(boolean writable, boolean ownerOnly) {
         VirtualFile file = findVirtualFile();
-        return file.setReadOnly(!writable);
+        if (file == null) {
+            return false;
+        }
+        return file.setAccess(ownerOnly ? 0200 : 0222, writable) || file.setReadOnly(!writable);
+    }
+
+    public boolean setWritable(boolean writable) {
+        return setWritable(writable, true);
+    }
+
+    public boolean setReadable(boolean readable, boolean ownerOnly) {
+        VirtualFile file = findVirtualFile();
+        return file != null && file.setAccess(ownerOnly ? 0400 : 0444, readable);
+    }
+
+    public boolean setReadable(boolean readable) {
+        return setReadable(readable, true);
+    }
+
+    public boolean setExecutable(boolean executable, boolean ownerOnly) {
+        VirtualFile file = findVirtualFile();
+        return file != null && file.setAccess(ownerOnly ? 0100 : 0111, executable);
+    }
+
+    public boolean setExecutable(boolean executable) {
+        return setExecutable(executable, true);
     }
 
     public long length() {
@@ -538,18 +581,12 @@ public class TFile implements Serializable, Comparable<TFile> {
         return result;
     }
 
+    // Each name takes a new random number, so one name does not tell the next. createTempFile retries a name that
+    // is taken.
     private static TFile genTempFile(String prefix, String suffix, TFile directory) {
-        int identify;
-        if (counter == 0) {
-            int newInt = new TRandom().nextInt();
-            counter = ((newInt / 65535) & 0xFFFF) + 0x2710;
-        }
-        identify = counter++;
-
         StringBuilder newName = new StringBuilder();
         newName.append(prefix);
-        newName.append(counter);
-        newName.append(identify);
+        newName.append(Long.toUnsignedString(new TRandom().nextLong()));
         newName.append(suffix);
         return new TFile(directory, newName.toString());
     }

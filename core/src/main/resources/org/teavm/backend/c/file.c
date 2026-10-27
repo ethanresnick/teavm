@@ -149,6 +149,32 @@ int32_t teavm_file_setReadonly(char16_t* name, int32_t nameSize, int32_t readonl
     return result == 0;
 }
 
+int32_t teavm_file_canExecute(char16_t* name, int32_t nameSize) {
+    char* mbName = teavm_char16ToMb(name, nameSize);
+    int result = access(mbName, X_OK);
+    free(mbName);
+    return result == 0;
+}
+
+int32_t teavm_file_setAccess(char16_t* name, int32_t nameSize, int32_t modeBits, int32_t enable) {
+    struct stat s;
+    char* mbName = teavm_char16ToMb(name, nameSize);
+    if (stat(mbName, &s) != 0) {
+        free(mbName);
+        return 0;
+    }
+
+    mode_t mode = s.st_mode & 07777;
+    if (enable) {
+        mode |= (mode_t) modeBits;
+    } else {
+        mode &= ~(mode_t) modeBits;
+    }
+    int result = chmod(mbName, mode);
+    free(mbName);
+    return result == 0;
+}
+
 TeaVM_StringList* teavm_file_listFiles(char16_t* name, int32_t nameSize) {
     char* mbName = teavm_char16ToMb(name, nameSize);
     DIR* dir = opendir(mbName);
@@ -179,16 +205,21 @@ TeaVM_StringList* teavm_file_listFiles(char16_t* name, int32_t nameSize) {
     return strings;
 }
 
-int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize) {
+// ownerOnly gives mode 0700, as the JDK's Files.createTempDirectory does on POSIX.
+int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     char* mbName = teavm_char16ToMb(name, nameSize);
-    int result = mkdir(mbName, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    mode_t mode = ownerOnly ? S_IRWXU : (S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    int result = mkdir(mbName, mode);
     free(mbName);
     return result == 0;
 }
 
-int32_t teavm_file_createFile(char16_t* name, int32_t nameSize) {
+// O_EXCL makes the check and the creation one step, and fails for any existing entry, including a symbolic link
+// (it does not follow one). ownerOnly gives mode 0600, as the JDK's Files.createTempFile does on POSIX.
+int32_t teavm_file_createFile(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     char* mbName = teavm_char16ToMb(name, nameSize);
-    int result = open(mbName, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    mode_t mode = ownerOnly ? (S_IRUSR | S_IWUSR) : (S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    int result = open(mbName, O_RDWR | O_CREAT | O_EXCL, mode);
     free(mbName);
     if (result >= 0) {
         close(result);
@@ -449,14 +480,21 @@ int32_t teavm_file_canWrite(char16_t* name, int32_t nameSize) {
     return teavm_file_checkExistingFileAccess(name, nameSize, GENERIC_WRITE);
 }
 
-int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize) {
+// Windows has no execute permission: any existing file can be executed.
+int32_t teavm_file_canExecute(char16_t* name, int32_t nameSize) {
+    return teavm_file_exists(name, nameSize);
+}
+
+// Windows has no POSIX modes, so ownerOnly is ignored here and in teavm_file_createFile: the entry inherits the
+// directory's access control list.
+int32_t teavm_file_createDirectory(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     WCHAR* nativeName = teavm_file_convertPath(name, nameSize);
     int32_t result = CreateDirectoryW(nativeName, NULL);
     free(nativeName);
     return result;
 }
 
-int32_t teavm_file_createFile(char16_t* name, int32_t nameSize) {
+int32_t teavm_file_createFile(char16_t* name, int32_t nameSize, int32_t ownerOnly) {
     WCHAR* nativeName = teavm_file_convertPath(name, nameSize);
     #if TEAVM_WINDOWS_UWP
         HANDLE fileHandle = CreateFile2(nativeName, GENERIC_WRITE,
@@ -515,6 +553,15 @@ int32_t teavm_file_setReadonly(char16_t* name, int32_t nameSize, int32_t readonl
     BOOL status = SetFileAttributesW(nativeName, attributes);
     free(nativeName);
     return status;
+}
+
+// Windows has no read or execute permission bits and does not distinguish the owner from others: the write bits
+// map to the read-only attribute, and clearing the read or execute bits fails.
+int32_t teavm_file_setAccess(char16_t* name, int32_t nameSize, int32_t modeBits, int32_t enable) {
+    if (modeBits & 0222) {
+        return teavm_file_setReadonly(name, nameSize, !enable);
+    }
+    return enable && teavm_file_exists(name, nameSize);
 }
 
 int64_t teavm_file_lastModified(char16_t* name, int32_t nameSize) {

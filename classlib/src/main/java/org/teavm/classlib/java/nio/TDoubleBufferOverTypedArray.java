@@ -98,7 +98,7 @@ class TDoubleBufferOverTypedArray extends TDoubleBufferImpl implements TArrayBuf
     void putImpl(int index, TDoubleBuffer src, int offset, int length) {
         if (src instanceof TDoubleBufferOverTypedArray) {
             var srcImpl = (TDoubleBufferOverTypedArray) src;
-            var slice = new Float64Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 8, length);
+            var slice = new Float64Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 8, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {

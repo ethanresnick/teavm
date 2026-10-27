@@ -176,17 +176,25 @@ public abstract class TDoubleBuffer extends TBuffer implements Comparable<TDoubl
 
     @Override
     public final boolean hasArray() {
-        return isArrayPresent();
+        return isArrayPresent() && !isReadOnly();
     }
 
     @Override
     public final double[] array() {
+        checkArrayWritable();
         return getArray();
     }
 
     @Override
     public final int arrayOffset() {
+        checkArrayWritable();
         return getArrayOffset();
+    }
+
+    private void checkArrayWritable() {
+        if (isReadOnly() && isArrayPresent()) {
+            throw new TReadOnlyBufferException();
+        }
     }
 
     abstract boolean isArrayPresent();

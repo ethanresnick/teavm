@@ -98,7 +98,7 @@ class TShortBufferOverTypedArray extends TShortBufferImpl implements TArrayBuffe
     void putImpl(int index, TShortBuffer src, int offset, int length) {
         if (src instanceof TShortBufferOverTypedArray) {
             var srcImpl = (TShortBufferOverTypedArray) src;
-            var slice = new Int16Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 2, length);
+            var slice = new Int16Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 2, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {
