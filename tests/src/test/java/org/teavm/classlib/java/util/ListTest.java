@@ -18,13 +18,16 @@ package org.teavm.classlib.java.util;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -173,6 +176,104 @@ public class ListTest {
             fail();
         } catch (UnsupportedOperationException e) {
             // ok
+        }
+    }
+
+    // List: "Unmodifiable Lists ... disallow null elements. Attempts to create them with null elements result in
+    // NullPointerException." Checked for every overload of List.of and every position of the null.
+    @Test
+    public void ofRejectsNull() {
+        for (int size = 1; size <= 11; ++size) {
+            for (int nullAt = 0; nullAt < size; ++nullAt) {
+                Object[] elements = new Object[size];
+                for (int i = 0; i < size; ++i) {
+                    elements[i] = i == nullAt ? null : "e" + i;
+                }
+                try {
+                    listOf(elements);
+                    fail("List.of with " + size + " elements, null at " + nullAt);
+                } catch (NullPointerException e) {
+                    // ok
+                }
+                try {
+                    List.copyOf(Arrays.asList(elements));
+                    fail("List.copyOf with " + size + " elements, null at " + nullAt);
+                } catch (NullPointerException e) {
+                    // ok
+                }
+            }
+        }
+        assertThrows(NullPointerException.class, () -> List.of((Object[]) null));
+        assertThrows(NullPointerException.class, () -> List.copyOf(null));
+        // Collections.singletonList and Collections.emptyList are separate lists and still accept null.
+        assertEquals(null, Collections.singletonList(null).get(0));
+        assertTrue(Collections.singletonList(null).contains(null));
+        assertFalse(Collections.emptyList().contains(null));
+    }
+
+    // Collection.contains, List.indexOf and List.lastIndexOf: "Throws: NullPointerException - if the specified
+    // element is null and this list does not permit null elements (optional)". As in OpenJDK, the lists of
+    // List.of and List.copyOf throw.
+    @Test
+    public void queriesRejectNull() {
+        for (int size = 0; size <= 11; ++size) {
+            Object[] elements = new Object[size];
+            for (int i = 0; i < size; ++i) {
+                elements[i] = "e" + i;
+            }
+            checkQueriesRejectNull(listOf(elements), size);
+            checkQueriesRejectNull(List.copyOf(Arrays.asList(elements)), size);
+        }
+    }
+
+    // Stream.toList: "The returned List may contain null elements", so its queries accept null.
+    @Test
+    public void streamToListAcceptsNull() {
+        List<String> list = Stream.of("a", null).toList();
+        assertTrue(list.contains(null));
+        assertEquals(1, list.indexOf(null));
+        assertEquals(1, list.lastIndexOf(null));
+        assertFalse(Stream.of("a").toList().contains(null));
+    }
+
+    private static void checkQueriesRejectNull(List<Object> list, int size) {
+        assertThrows(NullPointerException.class, () -> list.contains(null), "contains, size " + size);
+        assertThrows(NullPointerException.class, () -> list.indexOf(null), "indexOf, size " + size);
+        assertThrows(NullPointerException.class, () -> list.lastIndexOf(null), "lastIndexOf, size " + size);
+        if (size > 0) {
+            assertTrue(list.contains("e" + (size - 1)));
+            assertEquals(size - 1, list.indexOf("e" + (size - 1)));
+            assertEquals(0, list.lastIndexOf("e0"));
+        }
+        assertFalse(list.contains("x"));
+    }
+
+    private static List<Object> listOf(Object[] e) {
+        switch (e.length) {
+            case 0:
+                return List.of();
+            case 1:
+                return List.of(e[0]);
+            case 2:
+                return List.of(e[0], e[1]);
+            case 3:
+                return List.of(e[0], e[1], e[2]);
+            case 4:
+                return List.of(e[0], e[1], e[2], e[3]);
+            case 5:
+                return List.of(e[0], e[1], e[2], e[3], e[4]);
+            case 6:
+                return List.of(e[0], e[1], e[2], e[3], e[4], e[5]);
+            case 7:
+                return List.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6]);
+            case 8:
+                return List.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+            case 9:
+                return List.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]);
+            case 10:
+                return List.of(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8], e[9]);
+            default:
+                return List.of(e);
         }
     }
 }
