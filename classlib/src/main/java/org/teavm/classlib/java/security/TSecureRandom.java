@@ -51,7 +51,9 @@ public class TSecureRandom extends TRandom {
         return result;
     }
 
-    // All instances read crypto.getRandomValues, a CSPRNG, which is the strongest source available.
+    // All three algorithm names read the same source, crypto.getRandomValues, a CSPRNG, so the name only
+    // affects getAlgorithm(). NativePRNGBlocking is what the JDK's default securerandom.strongAlgorithms
+    // selects on Linux and macOS; NativePRNGNonBlocking is not listed there.
     // On C there is no entropy source, so getInstance throws NoSuchAlgorithmException.
     public static TSecureRandom getInstanceStrong() throws TNoSuchAlgorithmException {
         return getInstance("NativePRNGBlocking");
