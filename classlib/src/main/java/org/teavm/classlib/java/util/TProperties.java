@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import org.teavm.classlib.java.io.TBufferedInputStream;
 import org.teavm.classlib.java.io.TBufferedReader;
 import org.teavm.classlib.java.io.TInputStream;
@@ -466,7 +467,7 @@ public class TProperties extends THashtable<Object, Object> {
     }
 
     public synchronized void store(OutputStream out, String comments) throws IOException {
-        OutputStreamWriter writer = new OutputStreamWriter(out, "ISO8859_1");
+        OutputStreamWriter writer = new OutputStreamWriter(out, StandardCharsets.ISO_8859_1);
         if (comments != null) {
             writeComments(writer, comments);
         }
@@ -516,7 +517,7 @@ public class TProperties extends THashtable<Object, Object> {
     public TSet<String> stringPropertyNames() {
         TSet<String> selected = new THashSet<>();
         selectPropertyNames(selected);
-        return selected;
+        return TCollections.unmodifiableSet(selected);
     }
 
     private void selectPropertyNames(TSet<String> selected) {
