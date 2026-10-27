@@ -1,0 +1,12 @@
+var @this as this
+
+$start
+    goto $define
+$allocate
+    @constSized := newArray I[@four]
+    @varSized := newArray I[@n]
+    return
+$define
+    @four := 4
+    @n := invokeStatic `Foo.n()I`
+    goto $allocate

@@ -49,18 +49,35 @@ import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.model.instructions.UnwrapArrayInstruction;
 
 public class UnusedVariableElimination implements MethodOptimization {
-    private final boolean keepCasts;
-
-    public UnusedVariableElimination() {
-        this(false);
+    /**
+     * Which instructions to keep when nothing uses their result, because they can throw by themselves. Each mode
+     * keeps everything the previous one keeps.
+     */
+    public enum ImplicitExceptions {
+        /** Remove all of them, as nothing has to throw where the JVM throws. */
+        REMOVE,
+        /**
+         * Keep the ones that throw without a separate check instruction: a cast (ClassCastException), an array
+         * allocation of a size that may be negative (NegativeArraySizeException), reading an array length or an
+         * array element (NullPointerException; the bound check is separate). Strict mode needs this, as it keeps
+         * null checks and bound checks.
+         */
+        KEEP_UNCHECKED,
+        /**
+         * Also keep reading an instance field and cloning an array, which throw NullPointerException until a target
+         * inserts null checks for them.
+         */
+        KEEP_ALL
     }
 
-    /**
-     * @param keepCasts keep a cast whose result is unused, so that it still throws ClassCastException. Strict mode
-     *                  needs this, as it keeps null checks and bound checks.
-     */
-    public UnusedVariableElimination(boolean keepCasts) {
-        this.keepCasts = keepCasts;
+    private final ImplicitExceptions implicitExceptions;
+
+    public UnusedVariableElimination() {
+        this(ImplicitExceptions.REMOVE);
+    }
+
+    public UnusedVariableElimination(ImplicitExceptions implicitExceptions) {
+        this.implicitExceptions = implicitExceptions;
     }
 
     @Override
@@ -70,7 +87,7 @@ public class UnusedVariableElimination implements MethodOptimization {
 
     public boolean optimize(MethodReader method, Program program) {
         Graph graph = VariableUsageGraphBuilder.build(program);
-        boolean[] escaping = VariableEscapeAnalyzer.findEscapingVariables(program, keepCasts);
+        boolean[] escaping = VariableEscapeAnalyzer.findEscapingVariables(program, implicitExceptions);
         boolean[] used = new boolean[escaping.length];
 
         for (int i = 0; i <= method.parameterCount(); ++i) {

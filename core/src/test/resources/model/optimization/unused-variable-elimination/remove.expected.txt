@@ -1,0 +1,7 @@
+var @this as this
+
+$start
+    invokeStatic `Foo.obj()Ljava/lang/Object;`
+    invokeStatic `Foo.arr()[I`
+    invokeStatic `Foo.n()I`
+    return

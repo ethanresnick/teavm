@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Supplier;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
@@ -1367,10 +1366,9 @@ public class VMTest {
         assertEquals("ok:3;caught:1;ok:3;caught:1;", log.toString());
     }
 
-    // Known gap: at the FULL optimization level, TeaVM removes an array allocation whose result nothing uses,
-    // and the length check with it, so nothing is thrown where the JVM throws.
+    // In strict mode, an allocation whose result nothing uses still checks its length.
     @Test
-    @Disabled("TeaVM removes an unused array allocation together with its negative-length check")
+    @SuppressWarnings("unused")
     public void negativeLengthOfUnusedArrayThrows() {
         int length = minusOne();
         try {
@@ -1379,6 +1377,69 @@ public class VMTest {
             return;
         }
         fail("NegativeArraySizeException expected");
+    }
+
+    // In strict mode, an instruction whose result nothing uses still throws its implicit exception.
+    @Test
+    @SuppressWarnings("unused")
+    public void unusedResultStillThrows() {
+        int[] nullArray = nullArray();
+        ClassWithField nullObject = nullObject();
+        int[] array = new int[2];
+        assertThrows(NegativeArraySizeException.class, () -> {
+            var unused = new byte[2][minusOne()];
+        });
+        assertThrows(NegativeArraySizeException.class, () -> {
+            var unused = new byte[minusOne()][2];
+        });
+        assertThrows(NullPointerException.class, () -> {
+            int unused = nullArray.length;
+        });
+        assertThrows(NullPointerException.class, () -> {
+            int unused = nullObject.value;
+        });
+        assertThrows(ArrayIndexOutOfBoundsException.class, () -> {
+            int unused = array[minusOne()];
+        });
+        assertThrows(ArrayIndexOutOfBoundsException.class, () -> {
+            int unused = array[2];
+        });
+        assertThrows(NullPointerException.class, () -> {
+            int unused = nullArray[0];
+        });
+        assertThrows(NullPointerException.class, () -> {
+            int[] unused = nullArray.clone();
+        });
+        assertThrows(NullPointerException.class, () -> {
+            Object unused = nullArray.clone();
+        });
+    }
+
+    // The same instructions don't throw when their operands are valid.
+    @Test
+    @SuppressWarnings("unused")
+    public void unusedResultWithValidOperandsDoesNotThrow() {
+        int[] array = new int[2];
+        var unusedArray = new byte[zeroLength()][2];
+        var unusedLength = array.length;
+        var unusedElement = array[1];
+        int[] unusedClone = array.clone();
+        Object unusedObjectClone = array.clone();
+        int unusedCloneLength = array.clone().length;
+        var unusedField = new ClassWithField().value;
+        var unusedConstantSized = new int[4];
+    }
+
+    private static int[] nullArray() {
+        return null;
+    }
+
+    private static ClassWithField nullObject() {
+        return null;
+    }
+
+    static class ClassWithField {
+        int value;
     }
 
     private static int minusOne() {
