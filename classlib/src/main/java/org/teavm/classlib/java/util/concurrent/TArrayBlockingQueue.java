@@ -307,21 +307,8 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         }
         Objects.requireNonNull(c);
         maxElements = Math.min(maxElements, size());
-        if (maxElements < tail) {
-            for (int i = 0; i < maxElements; ++i) {
-                drainSingleTo(c);
-            }
-            notifyChange();
-        } else {
-            int remaining = maxElements - (array.length - head);
-            while (head < array.length) {
-                drainSingleTo(c);
-            }
-            head = 0;
-            while (remaining-- > 0) {
-                drainSingleTo(c);
-            }
-            notifyChange();
+        for (int i = 0; i < maxElements; ++i) {
+            c.add(removeImpl());
         }
         return maxElements;
     }
@@ -331,14 +318,19 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         return new TIterator<E>() {
             int index = head;
             int removeIndex = -1;
+            int remaining = size();
 
             @Override
             public boolean hasNext() {
-                return array[index] != null;
+                return remaining > 0 && array[index] != null;
             }
 
             @Override
             public E next() {
+                if (remaining == 0) {
+                    throw new NoSuchElementException();
+                }
+                --remaining;
                 removeIndex = index;
                 @SuppressWarnings("unchecked")
                 E result = (E) array[index++];
@@ -357,6 +349,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
                     throw new IllegalStateException();
                 }
                 removeAt(removeIndex);
+                index = removeIndex;
                 removeIndex = -1;
             }
         };
@@ -376,13 +369,6 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         }
         array[tail] = null;
         notifyChange();
-    }
-
-    private void drainSingleTo(TCollection<? super E> c) {
-        @SuppressWarnings("unchecked")
-        E e = (E) array[head];
-        array[head++] = null;
-        c.add(e);
     }
 
     private void shiftElements(int from, int to) {
