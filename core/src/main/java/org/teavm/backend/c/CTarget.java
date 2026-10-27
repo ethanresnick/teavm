@@ -404,6 +404,9 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     public void analyzeBeforeOptimizations(ListableClassReaderSource classSource) {
         AsyncMethodFinder asyncFinder = new AsyncMethodFinder(controller.getDependencyInfo().getCallGraph(),
                 controller.getDependencyInfo());
+        // Unmanaged code has no shadow stack, so it cannot suspend. Without this, a suspendable Throwable
+        // constructor made Allocator and GC async through ExceptionHandling, and Fiber.push recursed through them.
+        asyncFinder.setCanSuspend(characteristics::isManaged);
         asyncFinder.find(classSource);
         asyncMethods = new HashSet<>(asyncFinder.getAsyncMethods());
         asyncMethods.addAll(asyncFinder.getAsyncFamilyMethods());
@@ -426,8 +429,10 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         if (isDynamicInitializer(method)) {
             new ClassInitFailureTransformer().apply(program);
         }
-        new CoroutineTransformation(controller.getUnprocessedClassSource(), asyncMethods, hasThreads)
-                .apply(program, method.getReference());
+        if (characteristics.isManaged(method.getReference())) {
+            new CoroutineTransformation(controller.getUnprocessedClassSource(), asyncMethods, hasThreads)
+                    .apply(program, method.getReference());
+        }
         var shadowStackTransformer = !incremental
                 ? this.shadowStackTransformer
                 : new ShadowStackTransformer(characteristics);

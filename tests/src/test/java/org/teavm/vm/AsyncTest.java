@@ -357,10 +357,6 @@ public class AsyncTest {
     }
 
     @Test
-    // On C, the suspendable Throwable constructor makes Allocator.allocateArray suspendable. When the fiber
-    // suspends, Fiber.push allocates, allocateArray sees the suspending fiber and calls Fiber.push to save its
-    // own state, and the program overflows the stack.
-    @SkipPlatform(TestPlatform.C)
     public void suspendWithSuspendableArrayCopy() throws InterruptedException {
         // This override makes every Throwable constructor suspendable. Arrays.copyOf can throw,
         // so it becomes suspendable too.
@@ -373,8 +369,6 @@ public class AsyncTest {
     }
 
     @Test
-    // Skipped on C for the same reason as suspendWithSuspendableArrayCopy
-    @SkipPlatform(TestPlatform.C)
     public void suspendWithSuspendableArrayCopyGrowsStackRepeatedly() throws InterruptedException {
         // Enough frames that the fiber's object stack grows several times while it unwinds and rewinds
         new SuspendableStackTraceException();

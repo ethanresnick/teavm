@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.teavm.callgraph.CallGraph;
 import org.teavm.callgraph.CallGraphNode;
 import org.teavm.callgraph.CallSite;
@@ -48,10 +49,19 @@ public class AsyncMethodFinder {
     private CallGraph callGraph;
     private ListableClassReaderSource classSource;
     private boolean hasAsyncMethods;
+    private Predicate<MethodReference> canSuspend = method -> true;
 
     public AsyncMethodFinder(CallGraph callGraph, DependencyInfo dependency) {
         this.callGraph = callGraph;
         this.dependency = dependency;
+    }
+
+    /**
+     * Excludes the methods that must not suspend. Such a method does not become async, so its callers do not
+     * become async through it.
+     */
+    public void setCanSuspend(Predicate<MethodReference> canSuspend) {
+        this.canSuspend = canSuspend;
     }
 
     public Set<MethodReference> getAsyncMethods() {
@@ -175,7 +185,7 @@ public class AsyncMethodFinder {
     }
 
     private void add(MethodReference methodRef, CallStack stack) {
-        if (methodRef.getClassName().equals(Fiber.class.getName())) {
+        if (methodRef.getClassName().equals(Fiber.class.getName()) || !canSuspend.test(methodRef)) {
             return;
         }
 
