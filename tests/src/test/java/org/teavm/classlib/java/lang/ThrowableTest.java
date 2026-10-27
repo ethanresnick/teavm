@@ -107,15 +107,27 @@ public class ThrowableTest {
     public void stackTraceHasFrameOfMethodThatEndsInInlinedCode() {
         StackTraceElement[][] stack = new StackTraceElement[1][];
         captureStackThenRunInlinedCode(stack);
+        assertHasFrame(stack[0], "captureStackThenRunInlinedCode");
+    }
+
+    @Test
+    @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
+    public void stackTraceHasFrameOfMethodThatEndsInNestedInlinedCode() {
+        StackTraceElement[][] stack = new StackTraceElement[1][];
+        captureStackThenRunNestedInlinedCode(stack);
+        assertHasFrame(stack[0], "captureStackThenRunNestedInlinedCode");
+    }
+
+    private static void assertHasFrame(StackTraceElement[] stack, String methodName) {
         boolean found = false;
-        for (StackTraceElement element : stack[0]) {
-            if (element.getMethodName().equals("captureStackThenRunInlinedCode")
+        for (StackTraceElement element : stack) {
+            if (element.getMethodName().equals(methodName)
                     && element.getClassName().equals(ThrowableTest.class.getName())) {
                 found = true;
                 break;
             }
         }
-        assertTrue(found, "No frame of captureStackThenRunInlinedCode in " + stack[0].length + " frames");
+        assertTrue(found, "No frame of " + methodName + " in " + stack.length + " frames");
     }
 
     // The last statement calls a small method that the optimizer inlines, so the last location of this
@@ -125,10 +137,22 @@ public class ThrowableTest {
         incrementCounter();
     }
 
+    // Same, but the inlined method itself ends in another inlined method, so two inlined frames are
+    // still open when the function ends.
+    private static void captureStackThenRunNestedInlinedCode(StackTraceElement[][] stack) {
+        stack[0] = new Throwable().getStackTrace();
+        incrementCounterTwice();
+    }
+
     private static int counter;
 
     private static void incrementCounter() {
         counter++;
+    }
+
+    private static void incrementCounterTwice() {
+        counter++;
+        incrementCounter();
     }
 
     private Throwable[] createThrowables() {
