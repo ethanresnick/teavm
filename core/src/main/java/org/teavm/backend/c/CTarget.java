@@ -365,8 +365,10 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
             }
         }
 
-        dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "isResuming", boolean.class)).use();
-        dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "isSuspending", boolean.class)).use();
+        dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "isPresentAndResuming", Fiber.class,
+                boolean.class)).propagate(1, Fiber.class).use();
+        dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "isPresentAndSuspending", Fiber.class,
+                boolean.class)).propagate(1, Fiber.class).use();
         dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "current", Fiber.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(Fiber.class, "startMain", String[].class, void.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(EventQueue.class, "process", void.class)).use();
