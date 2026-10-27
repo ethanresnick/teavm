@@ -22,7 +22,6 @@ import org.teavm.classlib.java.io.TSerializable;
 import org.teavm.classlib.java.util.TArrays;
 
 class TAbstractStringBuilder implements TSerializable, TCharSequence {
-    private static final TCharSequence NULL_SEQUENCE = (TCharSequence) (Object) "null";
     static class Constants {
         static final DoubleAnalyzer.Result doubleAnalysisResult = new DoubleAnalyzer.Result();
         static final FloatAnalyzer.Result floatAnalysisResult = new FloatAnalyzer.Result();
@@ -588,9 +587,10 @@ class TAbstractStringBuilder implements TSerializable, TCharSequence {
     }
 
     protected TAbstractStringBuilder insert(int index, TCharSequence s, int start, int end) {
-        // As in the JDK, a null sequence is the four characters "null".
+        // As in the JDK, a null sequence is the four characters "null". This goes through the String
+        // overload: a String constant cast to TCharSequence would fail when the classlib runs on the JVM.
         if (s == null) {
-            s = NULL_SEQUENCE;
+            return insert(index, "null".substring(start, end));
         }
         if (start > end || end > s.length() || start < 0) {
             throw new TIndexOutOfBoundsException();
@@ -604,7 +604,7 @@ class TAbstractStringBuilder implements TSerializable, TCharSequence {
 
     protected TAbstractStringBuilder append(TCharSequence s) {
         if (s == null) {
-            s = NULL_SEQUENCE;
+            return append("null");
         }
         return append(s, 0, s.length());
     }
@@ -615,7 +615,7 @@ class TAbstractStringBuilder implements TSerializable, TCharSequence {
 
     protected TAbstractStringBuilder insert(int index, TCharSequence s) {
         if (s == null) {
-            s = NULL_SEQUENCE;
+            return insert(index, "null");
         }
         return insert(index, s, 0, s.length());
     }

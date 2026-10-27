@@ -1045,13 +1045,13 @@ public final class TString extends TObject implements TSerializable, TComparable
         }
         int resultLength = 0;
         for (var element : elements) {
-            resultLength += element.length();
+            resultLength += nullToString(element).length();
         }
         resultLength += (elements.length - 1) * delimiter.length();
 
         var chars = new char[resultLength];
         int index = 0;
-        var firstElement = elements[0];
+        var firstElement = nullToString(elements[0]);
         for (int i = 0; i < firstElement.length(); ++i) {
             chars[index++] = firstElement.charAt(i);
         }
@@ -1059,13 +1059,18 @@ public final class TString extends TObject implements TSerializable, TComparable
             for (int j = 0; j < delimiter.length(); ++j) {
                 chars[index++] = delimiter.charAt(j);
             }
-            var element = elements[i];
+            var element = nullToString(elements[i]);
             for (int j = 0; j < element.length(); ++j) {
                 chars[index++] = element.charAt(j);
             }
         }
 
         return TString.fromArray(chars);
+    }
+
+    // As in the JDK, join adds "null" for a null element.
+    private static CharSequence nullToString(CharSequence element) {
+        return element != null ? element : "null";
     }
 
     public static String join(CharSequence delimiter, Iterable<? extends CharSequence> elements) {

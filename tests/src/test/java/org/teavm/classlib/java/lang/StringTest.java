@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.UnsupportedEncodingException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -383,6 +384,21 @@ public class StringTest {
         String str = String.join("/");
         assertEquals(0, str.length());
         assertEquals("", str);
+    }
+
+    // String.join(CharSequence delimiter, CharSequence... elements) and
+    // join(CharSequence delimiter, Iterable<? extends CharSequence> elements): "Note that if an element is null,
+    // then "null" is added."
+    @Test
+    public void joinNullElements() {
+        CharSequence nullSequence = null;
+        assertEquals("null", String.join("/", nullSequence));
+        assertEquals("a/null/b", String.join("/", "a", null, "b"));
+        assertEquals("null/a/null", String.join("/", null, "a", null));
+        assertEquals("null--null", String.join("--", nullSequence, nullSequence));
+        assertEquals("a/null/b", String.join("/", Arrays.asList("a", null, "b")));
+        assertEquals("null/a/null", String.join("/", Arrays.asList(null, "a", null)));
+        assertEquals("null", String.join("/", Arrays.asList(nullSequence)));
     }
     
     @Test
