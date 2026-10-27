@@ -98,27 +98,27 @@ public interface TList<E> extends TSequencedCollection<E> {
                 : new TReversedList<>(this);
     }
 
+    @SuppressWarnings("unchecked")
     static <E> TList<E> of() {
-        return TCollections.emptyList();
+        return (TList<E>) TTemplateCollections.NonNullArrayList.EMPTY;
     }
 
-    // As in the JDK, List.of(null) throws NullPointerException. The check is here, not in the list class, because
-    // Collections.singletonList shares that class and accepts null.
     static <E> TList<E> of(E e) {
-        return TCollections.singletonList(Objects.requireNonNull(e));
+        Objects.requireNonNull(e);
+        return new TTemplateCollections.NonNullArrayList<>(e);
     }
 
     static <E> TList<E> of(E e1, E e2) {
         Objects.requireNonNull(e1);
         Objects.requireNonNull(e2);
-        return new TTemplateCollections.TwoElementsList<>(e1, e2);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3) {
         Objects.requireNonNull(e1);
         Objects.requireNonNull(e2);
         Objects.requireNonNull(e3);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4) {
@@ -126,7 +126,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e2);
         Objects.requireNonNull(e3);
         Objects.requireNonNull(e4);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5) {
@@ -135,7 +135,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e3);
         Objects.requireNonNull(e4);
         Objects.requireNonNull(e5);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5, E e6) {
@@ -145,7 +145,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e4);
         Objects.requireNonNull(e5);
         Objects.requireNonNull(e6);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5, e6);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5, e6);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7) {
@@ -156,7 +156,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e5);
         Objects.requireNonNull(e6);
         Objects.requireNonNull(e7);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5, e6, e7);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5, e6, e7);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8) {
@@ -168,7 +168,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e6);
         Objects.requireNonNull(e7);
         Objects.requireNonNull(e8);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9) {
@@ -181,7 +181,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e7);
         Objects.requireNonNull(e8);
         Objects.requireNonNull(e9);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8, e9);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8, e9);
     }
 
     static <E> TList<E> of(E e1, E e2, E e3, E e4, E e5, E e6, E e7, E e8, E e9, E e10) {
@@ -195,7 +195,7 @@ public interface TList<E> extends TSequencedCollection<E> {
         Objects.requireNonNull(e8);
         Objects.requireNonNull(e9);
         Objects.requireNonNull(e10);
-        return new TTemplateCollections.ImmutableArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10);
+        return new TTemplateCollections.NonNullArrayList<>(e1, e2, e3, e4, e5, e6, e7, e8, e9, e10);
     }
 
     @SafeVarargs
@@ -203,10 +203,10 @@ public interface TList<E> extends TSequencedCollection<E> {
         for (E element : elements) {
             Objects.requireNonNull(element);
         }
-        return new TTemplateCollections.ImmutableArrayList<>(elements.clone());
+        return new TTemplateCollections.NonNullArrayList<>(elements.clone());
     }
 
     static <E> TList<E> copyOf(TCollection<? extends E> collection) {
-        return new TTemplateCollections.ImmutableArrayList<>(collection);
+        return new TTemplateCollections.NonNullArrayList<>(collection);
     }
 }

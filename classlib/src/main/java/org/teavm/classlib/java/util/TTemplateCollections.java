@@ -73,6 +73,38 @@ public final class TTemplateCollections {
         }
     }
 
+    /**
+     * The list of {@code List.of} and {@code List.copyOf}. As in the JDK, it rejects {@code null} in queries too.
+     * {@link ImmutableArrayList} itself also backs {@code Stream.toList()}, which allows {@code null}.
+     */
+    static final class NonNullArrayList<T> extends ImmutableArrayList<T> {
+        static final NonNullArrayList<Object> EMPTY = new NonNullArrayList<>();
+
+        @SafeVarargs
+        NonNullArrayList(T... list) {
+            super(list);
+        }
+
+        NonNullArrayList(TCollection<? extends T> collection) {
+            super(collection);
+        }
+
+        @Override
+        public boolean contains(Object o) {
+            return indexOf(o) >= 0;
+        }
+
+        @Override
+        public int indexOf(Object o) {
+            return super.indexOf(Objects.requireNonNull(o));
+        }
+
+        @Override
+        public int lastIndexOf(Object o) {
+            return super.lastIndexOf(Objects.requireNonNull(o));
+        }
+    }
+
     static class SingleElementList<T> extends AbstractImmutableList<T> implements RandomAccess {
         private T value;
 
