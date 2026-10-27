@@ -39,6 +39,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -603,6 +604,20 @@ public class FilesTest {
             new File("test-file-1").delete();
             new File("test-file-2").delete();
             new File("test-file-3").delete();
+        }
+    }
+
+    @Test
+    public void setLastModifiedTime() throws IOException {
+        var path = Path.of("test-file-mtime");
+        var time = FileTime.fromMillis(1_600_000_000_000L);
+        try {
+            Files.write(path, new byte[] { 1 });
+            assertEquals(path, Files.setLastModifiedTime(path, time));
+            assertEquals(time, Files.getLastModifiedTime(path));
+            assertThrows(NoSuchFileException.class, () -> Files.setLastModifiedTime(Path.of("no-such-file"), time));
+        } finally {
+            Files.deleteIfExists(path);
         }
     }
 }
