@@ -256,6 +256,12 @@ public class DoubleTest {
         assertEquals("1.0E23", Double.toString(1E23));
         assertEquals("1.0000000000000001E23", Double.toString(Math.nextUp(1E23)));
         assertEquals("3.849937261242046E16", Double.toString(3.849937261242046E16));
+        // Above 10^19 the edge is a whole number of hundreds, so it is found with a division by a power of 5
+        assertEquals("7.21254295073152E19", Double.toString(7.21254295073152E19));
+        assertEquals("7.212542950731521E19", Double.toString(Math.nextUp(7.21254295073152E19)));
+        assertEquals("7.2125429507315196E19", Double.toString(Math.nextDown(7.21254295073152E19)));
+        assertEquals("1.818393201385472E22", Double.toString(1.818393201385472E22));
+        assertEquals("1.8183932013854721E22", Double.toString(Math.nextUp(1.818393201385472E22)));
     }
 
     // Double.toString: "Define d_m as the decimal in T that is closest to m. Or if there are two such decimals in
