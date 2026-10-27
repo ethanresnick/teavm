@@ -26,8 +26,7 @@ public final class TAccessController {
         return action.run();
     }
 
-    // As in the JDK, a checked exception from the action comes wrapped in PrivilegedActionException.
-    // TPrivilegedExceptionAction.run declares no exception, but the action is Java code that may throw one.
+    // As in the JDK, an unchecked exception propagates and a checked one is wrapped in PrivilegedActionException.
     public static <T> T doPrivileged(TPrivilegedExceptionAction<T> action) throws TPrivilegedActionException {
         try {
             return action.run();
@@ -38,12 +37,9 @@ public final class TAccessController {
         }
     }
 
-    // There is no security manager. The JDK then denies every permission: checkPermission throws
-    // AccessControlException.
+    // TeaVM has no security manager or policy, so no permission is ever granted. Since JDK 24 the spec
+    // says checkPermission always throws AccessControlException; failing closed is the safe choice.
     public static void checkPermission(TPermission permission) {
-        if (permission == null) {
-            throw new NullPointerException();
-        }
         throw new TAccessControlException(null, permission);
     }
 }
