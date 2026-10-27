@@ -39,6 +39,11 @@ let $rt_checkArrayLength = length => {
     }
     return length;
 }
+let $rt_checkArrayDimensions = dimensions => {
+    for (let i = 0; i < dimensions.length; i = (i + 1) | 0) {
+        $rt_checkArrayLength(dimensions[i]);
+    }
+}
 
 let $rt_nullCheck = val => {
     if (val === null) {

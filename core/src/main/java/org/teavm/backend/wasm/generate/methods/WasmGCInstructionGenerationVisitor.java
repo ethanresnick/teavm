@@ -98,7 +98,6 @@ import org.teavm.backend.wasm.model.instruction.WasmNullCondition;
 import org.teavm.backend.wasm.model.instruction.WasmReturn;
 import org.teavm.backend.wasm.model.instruction.WasmSignedType;
 import org.teavm.backend.wasm.runtime.StringInternPool;
-import org.teavm.backend.wasm.runtime.WasmGCSupport;
 import org.teavm.backend.wasm.types.PreciseTypeInference;
 import org.teavm.model.ElementModifier;
 import org.teavm.model.FieldReference;
@@ -1787,14 +1786,11 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
     }
 
     /**
-     * Throws NegativeArraySizeException when the array length on the stack is negative, as the JVM does,
-     * and leaves the length on the stack. array.new_default takes the length as unsigned, so a negative length
-     * trapped with "requested new array is too large", which no Java code can catch, and the process ended. A
-     * constant length that is not negative needs no check.
+     * Throws NegativeArraySizeException when the array length on the stack is negative, and leaves the length on
+     * the stack. array.new_default reads the length as unsigned, so without the check it traps instead.
      */
     private void checkArrayLength() {
-        var last = builder.list.isEmpty() ? null : builder.list.getLast();
-        if (last instanceof WasmInt32Constant && ((WasmInt32Constant) last).getValue() >= 0) {
+        if (builder.list.getLast() instanceof WasmInt32Constant constant && constant.getValue() >= 0) {
             return;
         }
         var length = valueCache.create(WasmType.INT32, builder);
@@ -1805,9 +1801,7 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
                 .i32Const(0)
                 .intBinary(WasmIntType.INT32, WasmIntBinaryOperation.GE_SIGNED)
                 .branch(block.list);
-        block.call(context.functions().forStaticMethod(new MethodReference(WasmGCSupport.class, "nase",
-                NegativeArraySizeException.class)));
-        block.throw_(context.getExceptionTag());
+        generateThrowNase(block);
         builder.append(length);
         length.release();
     }
@@ -1824,6 +1818,11 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
 
     private void generateThrowCce(WasmInstructionBuilder target) {
         target.call(context.cceMethod());
+        target.throw_(context.getExceptionTag());
+    }
+
+    private void generateThrowNase(WasmInstructionBuilder target) {
+        target.call(context.naseMethod());
         target.throw_(context.getExceptionTag());
     }
 

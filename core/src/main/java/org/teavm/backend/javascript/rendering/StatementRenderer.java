@@ -1306,42 +1306,50 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
             switch (((ValueType.Primitive) type).getKind()) {
                 case BOOLEAN:
                     writer.appendFunction("$rt_createBooleanArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case BYTE:
                     writer.appendFunction("$rt_createByteArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case SHORT:
                     writer.appendFunction("$rt_createShortArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case INTEGER:
                     writer.appendFunction("$rt_createIntArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case LONG:
                     writer.appendFunction("$rt_createLongArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case FLOAT:
                     writer.appendFunction("$rt_createFloatArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case DOUBLE:
                     writer.appendFunction("$rt_createDoubleArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
                 case CHARACTER:
                     writer.appendFunction("$rt_createCharArray").append("(");
-                    renderArrayLength(expr.getLength());
+                    precedence = Precedence.min();
+                    expr.getLength().acceptVisitor(this);
                     writer.append(")");
                     break;
             }
@@ -1349,7 +1357,8 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
             writer.appendFunction("$rt_createArray").append("(");
             RenderingUtil.typeToClsString(writer, expr.getType());
             writer.append(",").ws();
-            renderArrayLength(expr.getLength());
+            precedence = Precedence.min();
+            expr.getLength().acceptVisitor(this);
             writer.append(")");
         }
         if (expr.getLocation() != null) {
@@ -1404,24 +1413,6 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
         if (expr.getLocation() != null) {
             popLocation();
         }
-    }
-
-    /**
-     * Writes an array length, as the JVM checks it: a negative length throws NegativeArraySizeException. The typed
-     * arrays that the runtime creates throw a JS RangeError instead, which no Java code can catch as that exception.
-     * A constant length that is not negative needs no check.
-     */
-    private void renderArrayLength(Expr length) {
-        if (length instanceof ConstantExpr && ((ConstantExpr) length).getValue() instanceof Integer
-                && (Integer) ((ConstantExpr) length).getValue() >= 0) {
-            precedence = Precedence.min();
-            length.acceptVisitor(this);
-            return;
-        }
-        writer.appendFunction("$rt_checkArrayLength").append("(");
-        precedence = Precedence.min();
-        length.acceptVisitor(this);
-        writer.append(")");
     }
 
     private void writeCommaSeparated(List<Expr> expressions) {
@@ -1486,7 +1477,8 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
                 writer.append(",").ws();
             }
             first = false;
-            renderArrayLength(dimension);
+            precedence = Precedence.min();
+            dimension.acceptVisitor(this);
         }
         writer.append("])");
         if (expr.getLocation() != null) {

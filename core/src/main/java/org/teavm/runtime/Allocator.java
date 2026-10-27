@@ -34,10 +34,13 @@ public final class Allocator {
     }
 
     public static Address allocateArray(RuntimeClass tag, int size) {
-        // As in the JVM. Without the check, a negative size gave a too small allocation and a negative length.
         if (size < 0) {
             ExceptionHandling.throwNegativeArraySizeException();
         }
+        return allocateArrayUnchecked(tag, size);
+    }
+
+    private static Address allocateArrayUnchecked(RuntimeClass tag, int size) {
         int itemSize = RuntimeClass.isPrimitive(tag.itemType) ? tag.itemType.size : Address.sizeOf();
         int sizeInBytes = Address.align(Address.fromInt(Structure.sizeOf(RuntimeArray.class)), itemSize).toInt();
         sizeInBytes += itemSize * size;
@@ -53,20 +56,26 @@ public final class Allocator {
     }
 
     public static RuntimeArray allocateMultiArray(RuntimeClass tag, Address dimensions, int dimensionCount) {
-        // The JVM checks every dimension before it allocates. An inner dimension is not allocated when an outer
-        // one is 0, so allocateArray alone would not see it.
+        // Every dimension is checked before anything is allocated, as in the JVM: an inner dimension is never
+        // allocated when an outer one is 0.
         for (int i = 0; i < dimensionCount; ++i) {
             if (dimensions.add(i * 4).getInt() < 0) {
                 ExceptionHandling.throwNegativeArraySizeException();
             }
         }
+        return allocateMultiArrayUnchecked(tag, dimensions, dimensionCount);
+    }
+
+    private static RuntimeArray allocateMultiArrayUnchecked(RuntimeClass tag, Address dimensions,
+            int dimensionCount) {
         int size = dimensions.getInt();
-        RuntimeArray array = allocateArray(tag, dimensions.getInt()).toStructure();
+        RuntimeArray array = allocateArrayUnchecked(tag, size).toStructure();
         if (dimensionCount > 1) {
             Address arrayData = Structure.add(RuntimeArray.class, array, 1).toAddress();
             arrayData = Address.align(arrayData, Address.sizeOf());
             for (int i = 0; i < size; ++i) {
-                RuntimeArray innerArray = allocateMultiArray(tag.itemType, dimensions.add(4), dimensionCount - 1);
+                RuntimeArray innerArray = allocateMultiArrayUnchecked(tag.itemType, dimensions.add(4),
+                        dimensionCount - 1);
                 arrayData.putAddress(innerArray.toAddress());
                 arrayData = arrayData.add(Address.sizeOf());
             }
