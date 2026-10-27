@@ -22,10 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -432,5 +436,203 @@ public class ConcurrentHashMapTest {
         public boolean equals(Object obj) {
             return obj instanceof FixedHashKey && ((FixedHashKey) obj).name.equals(name);
         }
+    }
+
+    // ConcurrentHashMap: "Like Hashtable but unlike HashMap, this class does not allow null to be used as a key
+    // or value."
+    @Test
+    public void nullKeysAndValuesThrowInEveryOperation() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        map.put("a", 1);
+        assertThrows(NullPointerException.class, () -> map.getOrDefault(null, 0));
+        assertThrows(NullPointerException.class, () -> map.containsValue(null));
+        assertThrows(NullPointerException.class, () -> map.replace(null, 1));
+        assertThrows(NullPointerException.class, () -> map.replace("a", null));
+        assertThrows(NullPointerException.class, () -> map.replace("a", null, 2));
+        assertThrows(NullPointerException.class, () -> map.replace("a", 1, null));
+        assertThrows(NullPointerException.class, () -> map.remove(null, 1));
+        assertThrows(NullPointerException.class, () -> map.computeIfAbsent(null, k -> 1));
+        assertThrows(NullPointerException.class, () -> map.computeIfPresent(null, (k, v) -> 1));
+        assertThrows(NullPointerException.class, () -> map.compute(null, (k, v) -> 1));
+        assertThrows(NullPointerException.class, () -> map.replaceAll((k, v) -> null));
+        assertThrows(NullPointerException.class, () -> map.keySet(null));
+        assertThrows(NullPointerException.class, () -> map.keySet().contains(null));
+        var withNullValue = new HashMap<String, Integer>();
+        withNullValue.put("b", null);
+        assertThrows(NullPointerException.class, () -> map.putAll(withNullValue));
+        var entry = map.entrySet().iterator().next();
+        assertThrows(NullPointerException.class, () -> entry.setValue(null));
+        assertFalse(map.entrySet().contains(new AbstractMap.SimpleEntry<>("a", null)));
+        assertFalse(map.entrySet().remove(new AbstractMap.SimpleEntry<>("a", null)));
+        assertEquals(Map.of("a", 1), new HashMap<>(map));
+    }
+
+    // Map.compute: "If the remapping function returns null, the mapping is removed (or remains absent if
+    // initially absent)."
+    @Test
+    public void computeWithNullResultRemovesOrStoresNothing() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        assertNull(map.compute("x", (k, v) -> null));
+        assertFalse(map.containsKey("x"));
+        map.put("y", 1);
+        assertNull(map.compute("y", (k, v) -> null));
+        assertFalse(map.containsKey("y"));
+        assertNull(map.computeIfPresent("absent", (k, v) -> 5));
+        assertFalse(map.containsKey("absent"));
+        map.put("z", 1);
+        assertEquals((Object) 1, map.computeIfAbsent("z", k -> 7));
+        assertEquals((Object) 3, map.computeIfPresent("z", (k, v) -> v + 2));
+        assertEquals((Object) 3, map.get("z"));
+    }
+
+    // java.util.concurrent package summary: weakly consistent iterators "are guaranteed to traverse elements as
+    // they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications
+    // subsequent to construction." ConcurrentHashMap: iterators "do not throw ConcurrentModificationException".
+    @Test
+    public void iteratorTraversesEntriesThatSurviveExactlyOnce() {
+        for (var seed = 0; seed < 50; ++seed) {
+            var random = new Random(seed);
+            var map = new ConcurrentHashMap<Integer, Integer>(random.nextInt(4) * 8);
+            var size = 1 + random.nextInt(60);
+            for (var i = 0; i < size; ++i) {
+                map.put(i, i);
+            }
+            var removedBeforeReached = new HashSet<Integer>();
+            var seen = new HashSet<Integer>();
+            var next = size;
+            for (var it = map.entrySet().iterator(); it.hasNext();) {
+                var entry = it.next();
+                var key = entry.getKey();
+                assertTrue(seen.add(key), "seed " + seed + ": " + key + " returned twice");
+                // An entry removed after the iterator was created may still be returned. One that is still in the
+                // map has its current value.
+                if (map.containsKey(key)) {
+                    assertEquals(map.get(key), entry.getValue());
+                }
+                switch (random.nextInt(5)) {
+                    case 0:
+                        it.remove();
+                        assertFalse(map.containsKey(key));
+                        break;
+                    case 1: {
+                        // Remove an original key that may not have been reached yet
+                        var victim = random.nextInt(size);
+                        if (map.remove(victim) != null && !seen.contains(victim)) {
+                            removedBeforeReached.add(victim);
+                        }
+                        break;
+                    }
+                    case 2:
+                        // Enough additions to resize the table while iterating
+                        for (var j = 0; j < 20; ++j) {
+                            map.put(next++, -1);
+                        }
+                        break;
+                    case 3:
+                        if (map.containsKey(key)) {
+                            entry.setValue(key + 1000);
+                            assertEquals((Object) (key + 1000), map.get(key));
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+            for (var i = 0; i < size; ++i) {
+                assertTrue(seen.contains(i) || removedBeforeReached.contains(i),
+                        "seed " + seed + ": original key " + i + " was not returned");
+            }
+        }
+    }
+
+    @Test
+    public void iteratorRemoveRequiresNext() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        map.put("a", 1);
+        var it = map.values().iterator();
+        assertThrows(IllegalStateException.class, it::remove);
+        assertEquals((Object) 1, it.next());
+        it.remove();
+        assertThrows(IllegalStateException.class, it::remove);
+        assertFalse(it.hasNext());
+        assertThrows(NoSuchElementException.class, it::next);
+        assertTrue(map.isEmpty());
+    }
+
+    @Test
+    public void iteratorSurvivesClear() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        map.put("a", 1);
+        map.put("b", 2);
+        var it = map.entrySet().iterator();
+        map.clear();
+        map.put("a", 3);
+        // The iterator may or may not reflect the clear (the JDK returns an entry it had already reached; TeaVM
+        // skips the cleared entries), but it does not throw or return a key twice
+        var keys = new HashSet<String>();
+        while (it.hasNext()) {
+            assertTrue(keys.add(it.next().getKey()));
+        }
+        assertEquals(Map.of("a", 3), new HashMap<>(map));
+    }
+
+    // forEach and replaceAll traverse like the weakly consistent iterators, so an action that adds entries (and
+    // resizes the table) still visits every original entry exactly once
+    @Test
+    public void bulkTraversalVisitsOriginalEntriesExactlyOnceWhileTableGrows() {
+        var map = new ConcurrentHashMap<Integer, Integer>();
+        for (var i = 0; i < 12; ++i) {
+            map.put(i, i);
+        }
+        var visits = new HashMap<Integer, Integer>();
+        var next = new int[] { 100 };
+        map.forEach((k, v) -> {
+            visits.merge(k, 1, Integer::sum);
+            for (var j = 0; j < 10; ++j) {
+                map.put(next[0]++, -1);
+            }
+        });
+        for (var i = 0; i < 12; ++i) {
+            assertEquals((Object) 1, visits.get(i), "forEach visits of " + i);
+        }
+        for (var count : visits.values()) {
+            assertEquals((Object) 1, count);
+        }
+
+        var replaced = new HashMap<Integer, Integer>();
+        var original = new HashSet<>(map.keySet());
+        map.replaceAll((k, v) -> {
+            replaced.merge(k, 1, Integer::sum);
+            map.put(next[0]++, -1);
+            return v;
+        });
+        for (var k : original) {
+            assertEquals((Object) 1, replaced.get(k), "replaceAll visits of " + k);
+        }
+        for (var count : replaced.values()) {
+            assertEquals((Object) 1, count);
+        }
+    }
+
+    // KeySetView.add: "UnsupportedOperationException - if no default mapped value for additions was provided"
+    @Test
+    public void keySetViewWithoutMappedValueRejectsAdditions() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        var view = map.keySet();
+        assertNull(view.getMappedValue());
+        assertTrue(view.getMap() == map);
+        assertThrows(UnsupportedOperationException.class, () -> view.add("a"));
+        assertThrows(UnsupportedOperationException.class, () -> view.addAll(List.of("a")));
+        var withValue = map.keySet(5);
+        assertTrue(withValue.addAll(List.of("a", "b")));
+        assertFalse(withValue.addAll(List.of("a", "b")));
+        assertThrows(NullPointerException.class, () -> withValue.add(null));
+        assertEquals(Map.of("a", 5, "b", 5), new HashMap<>(map));
+        assertTrue(view.remove("a"));
+        assertFalse(view.remove("a"));
+        assertThrows(NullPointerException.class, () -> view.remove(null));
+        assertEquals(1, view.size());
+        view.clear();
+        assertTrue(map.isEmpty());
     }
 }

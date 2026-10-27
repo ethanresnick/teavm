@@ -72,6 +72,11 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         }
 
         @Override
+        public V setValue(V object) {
+            return super.setValue(Objects.requireNonNull(object));
+        }
+
+        @Override
         @SuppressWarnings("unchecked")
         public Object clone() {
             HashEntry<K, V> entry = (HashEntry<K, V>) super.clone();
@@ -92,20 +97,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
 
         AbstractMapIterator(TConcurrentHashMap<K, V> hm) {
             associatedMap = hm;
-            var table = hm.elementData;
-            int count = 0;
-            for (var entry : table) {
-                for (var e = entry; e != null; e = e.next) {
-                    count++;
-                }
-            }
-            snapshot = hm.newElementArray(count);
-            int i = 0;
-            for (var entry : table) {
-                for (var e = entry; e != null; e = e.next) {
-                    snapshot[i++] = e;
-                }
-            }
+            snapshot = hm.snapshotEntries();
         }
 
         public boolean hasNext() {
@@ -419,13 +411,10 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     @Override
     public void forEach(BiConsumer<? super K, ? super V> action) {
         Objects.requireNonNull(action);
-        var table = elementData;
-        for (var entry : table) {
-            while (entry != null) {
-                if (!entry.removed) {
-                    action.accept(entry.getKey(), entry.getValue());
-                }
-                entry = entry.next;
+        // The action can change the map and resize the table, which relinks the entries, so traverse a snapshot
+        for (var entry : snapshotEntries()) {
+            if (!entry.removed) {
+                action.accept(entry.getKey(), entry.getValue());
             }
         }
     }
@@ -449,17 +438,23 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     @Override
     public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         Objects.requireNonNull(function);
-        var table = elementData;
-        for (var entry : table) {
-            while (entry != null) {
-                if (!entry.removed) {
-                    var newValue = function.apply(entry.getKey(), entry.getValue());
-                    Objects.requireNonNull(newValue);
-                    entry.setValue(newValue);
-                }
-                entry = entry.next;
+        for (var entry : snapshotEntries()) {
+            if (!entry.removed) {
+                entry.setValue(function.apply(entry.getKey(), entry.getValue()));
             }
         }
+    }
+
+    // The current entries. Traversals use it, so that they stay valid while the map changes.
+    private HashEntry<K, V>[] snapshotEntries() {
+        var result = newElementArray(elementCount);
+        var i = 0;
+        for (var entry : elementData) {
+            for (var e = entry; e != null; e = e.next) {
+                result[i++] = e;
+            }
+        }
+        return result;
     }
 
     @Override
