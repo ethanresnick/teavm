@@ -905,7 +905,12 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
             accept(dimension, builder, WasmType.INT32);
             checkArrayLength();
         }
-        builder.call(context.classInfoProvider().getMultiArrayConstructor(expr.getDimensions().size()));
+        var leafItemType = expr.getType();
+        for (var i = 0; i < expr.getDimensions().size(); ++i) {
+            leafItemType = ((ValueType.Array) leafItemType).getItemType();
+        }
+        builder.call(context.classInfoProvider().getMultiArrayConstructor(expr.getDimensions().size(),
+                leafItemType));
         builder.popLocation();
     }
 

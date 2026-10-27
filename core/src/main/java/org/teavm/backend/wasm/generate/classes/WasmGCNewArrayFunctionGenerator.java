@@ -138,10 +138,18 @@ class WasmGCNewArrayFunctionGenerator {
         return function;
     }
 
-    WasmFunction generateNewMultiArrayFunction(int depth) {
+    /**
+     * Generates a function that creates a {@code depth}-dimensional array. The function takes the class
+     * of the outermost array's items and the length of each dimension.
+     *
+     * @param leafItemType the item type of the innermost created arrays: either a primitive type, or
+     *                     {@code java.lang.Object} for any reference item type. The innermost arrays are
+     *                     created by a direct call to the matching array constructor, so that no per-class
+     *                     reflection metadata is needed.
+     */
+    WasmFunction generateNewMultiArrayFunction(int depth, ValueType leafItemType) {
         var arrayType = ValueType.arrayOf(ValueType.object("java.lang.Object"));
         var arrayClass = classInfoProvider.getClassInfo(arrayType);
-        var objectClass = classInfoProvider.getClassInfo("java.lang.Object");
         var classInfoType = classInfoProvider.reflectionTypes().classInfo();
 
         var parameterTypes = new WasmType[depth + 1];
@@ -150,7 +158,8 @@ class WasmGCNewArrayFunctionGenerator {
         var functionType = functionTypes.of(arrayClass.getType(), parameterTypes);
 
         var function = new WasmFunction(functionType);
-        function.setName(names.topLevel(names.suggestForType(arrayType) + "@new:" + depth));
+        function.setName(names.topLevel(names.suggestForType(arrayType) + "@new:" + depth + ":"
+                + names.suggestForType(leafItemType)));
         module.functions.add(function);
 
         queue.add(() -> {
@@ -195,19 +204,13 @@ class WasmGCNewArrayFunctionGenerator {
                     .intUnary(WasmIntType.INT32, WasmIntUnaryOperation.EQZ)
                     .branch(guardBody);
 
-            WasmLocal createNextArrayLocal = null;
-            WasmFunctionType nextFunctionType = null;
-            WasmFunction nextFunction = null;
+            WasmFunction nextFunction;
             if (depth == 2) {
-                nextFunctionType = functionTypes.of(objectClass.getType(),
-                        classInfoType.structure().getReference(), WasmType.INT32);
-                createNextArrayLocal = new WasmLocal(nextFunctionType.getReference(), "createNextArray");
-                function.add(createNextArrayLocal);
-                guardBody.getLocal(nextItemTypeLocal)
-                        .structGet(classInfoType.structure(), classInfoType.newArrayFunctionIndex())
-                        .setLocal(createNextArrayLocal);
+                nextFunction = leafItemType instanceof ValueType.Primitive
+                        ? classInfoProvider.getArrayConstructor(leafItemType)
+                        : getNewObjectArrayFunction();
             } else {
-                nextFunction = classInfoProvider.getMultiArrayConstructor(depth - 1);
+                nextFunction = classInfoProvider.getMultiArrayConstructor(depth - 1, leafItemType);
             }
 
             var loopBody = guardBody.loop();
@@ -216,11 +219,7 @@ class WasmGCNewArrayFunctionGenerator {
             for (var i = 1; i < depth; ++i) {
                 loopBody.getLocal(dimensionLocals[i]);
             }
-            if (depth == 2) {
-                loopBody.getLocal(createNextArrayLocal).callReference(nextFunctionType);
-            } else {
-                loopBody.call(nextFunction);
-            }
+            loopBody.call(nextFunction);
             loopBody.arraySet(dataArray);
             loopBody.getLocal(indexLocal).i32Const(1)
                     .intBinary(WasmIntType.INT32, WasmIntBinaryOperation.ADD)
