@@ -259,7 +259,8 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
     public void delete(TPath path) throws IOException {
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // As in the JDK, delete removes a symbolic link itself, also one whose target does not exist.
+        if (vfile == null || !vfile.exists() && !vfile.isSymbolicLink()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
         if (!vfile.delete()) {
@@ -389,6 +390,18 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         return false;
     }
 
+    // As in the JDK, exists with NOFOLLOW_LINKS asks about the link itself (lstat). The inherited version calls
+    // checkAccess, which follows the link, so a dangling link did not exist.
+    @Override
+    public boolean exists(TPath path, TLinkOption... options) {
+        try {
+            readAttributes(path, TBasicFileAttributes.class, options);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     @Override
     public void checkAccess(TPath path, TAccessMode... modes) throws IOException {
         var defaultPath = (TDefaultPath) path;
@@ -422,14 +435,26 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
         var defaultPath = (TDefaultPath) path;
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
+        // With NOFOLLOW_LINKS, a symbolic link describes itself (lstat): it exists even when its target does not,
+        // and it is neither a directory nor a regular file. Its size is 0. Its times are its target's, because
+        // VirtualFile has no lstat times.
+        var link = false;
+        if (vfile != null) {
+            for (var option : options) {
+                if (option == TLinkOption.NOFOLLOW_LINKS && vfile.isSymbolicLink()) {
+                    link = true;
+                }
+            }
+        }
+        if (vfile == null || !link && !vfile.exists()) {
             throw new NoSuchFileException(defaultPath.pathString);
         }
+        var isLink = link;
         //noinspection unchecked
         return (A) new TBasicFileAttributes() {
             @Override
             public long size() {
-                return vfile.length();
+                return isLink ? 0 : vfile.length();
             }
 
             @Override
@@ -444,12 +469,12 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isSymbolicLink() {
-                return false;
+                return isLink;
             }
 
             @Override
             public boolean isRegularFile() {
-                return vfile.isFile();
+                return !isLink && vfile.isFile();
             }
 
             @Override
@@ -459,7 +484,7 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
             @Override
             public boolean isDirectory() {
-                return vfile.isDirectory();
+                return !isLink && vfile.isDirectory();
             }
 
             @Override

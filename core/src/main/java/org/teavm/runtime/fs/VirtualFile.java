@@ -51,4 +51,13 @@ public interface VirtualFile {
     boolean setReadOnly(boolean readOnly);
 
     int length();
+
+    /**
+     * True when this path itself is a symbolic link, whatever it points to (lstat). The other methods describe the
+     * link's target, as stat does, so a link to a directory is a directory and a dangling link does not exist. A
+     * file system without links returns false.
+     */
+    default boolean isSymbolicLink() {
+        return false;
+    }
 }
