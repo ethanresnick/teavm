@@ -301,6 +301,12 @@ public class TDeflater implements TAutoCloseable {
         flushParm = Z_NO_FLUSH;
         finished = false;
         impl.init(compressLevel, 15, nowrap);
+        // The old input would otherwise go into the new stream.
+        impl.next_in = null;
+        impl.next_in_index = 0;
+        impl.avail_in = 0;
+        inRead = 0;
+        inLength = 0;
         setParams();
         paramsChanged = false;
         dropHeld();
