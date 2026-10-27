@@ -132,6 +132,86 @@ public class ReflectiveClassInitializationTest {
         }
     }
 
+    // JLS 12.4.2 step 2: while another thread runs the initializer, a reflective use waits until it ends
+
+    static void pauseLong() {
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void staticMethodWaitsForAsyncInitializerOfOtherThread() throws Exception {
+        var method = MethodWaitingForOtherThread.class.getMethod("get");
+        var result = new int[1];
+        var thread = new Thread(() -> result[0] = MethodWaitingForOtherThread.value);
+        thread.start();
+        // The other thread is now suspended in the initializer
+        Thread.sleep(10);
+        var value = (int) method.invoke(null);
+        thread.join();
+        assertEquals(42, value);
+        assertEquals(42, result[0]);
+        assertEquals(1, MethodWaitingForOtherThread.initializations);
+    }
+
+    static class MethodWaitingForOtherThread {
+        static int initializations;
+        static int value;
+
+        static {
+            pauseLong();
+            value = 42;
+            initializations++;
+        }
+
+        @Reflectable
+        public static int get() {
+            return value;
+        }
+    }
+
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void otherThreadWaitsForReflectiveAsyncInitializer() throws Exception {
+        var method = MethodInitializingForOtherThread.class.getMethod("get");
+        var result = new Object[1];
+        var thread = new Thread(() -> {
+            try {
+                result[0] = method.invoke(null);
+            } catch (Exception e) {
+                result[0] = e;
+            }
+        });
+        thread.start();
+        // The other thread is now suspended in the initializer, which it started through reflection
+        Thread.sleep(10);
+        var value = MethodInitializingForOtherThread.value;
+        thread.join();
+        assertEquals(42, value);
+        assertEquals(42, result[0]);
+        assertEquals(1, MethodInitializingForOtherThread.initializations);
+    }
+
+    static class MethodInitializingForOtherThread {
+        static int initializations;
+        static int value;
+
+        static {
+            pauseLong();
+            value = 42;
+            initializations++;
+        }
+
+        @Reflectable
+        public static int get() {
+            return value;
+        }
+    }
+
     // Field.get and Field.set
 
     @Test
