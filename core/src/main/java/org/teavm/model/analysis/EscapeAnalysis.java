@@ -19,7 +19,6 @@ import com.carrotsearch.hppc.IntArrayDeque;
 import com.carrotsearch.hppc.IntDeque;
 import com.carrotsearch.hppc.IntHashSet;
 import com.carrotsearch.hppc.IntSet;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -27,7 +26,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
 import org.teavm.common.DisjointSet;
 import org.teavm.common.Graph;
@@ -98,8 +96,7 @@ public class EscapeAnalysis {
         }
         analyzePhis(program, methodReference.getDescriptor());
 
-        propagateFields(program, visitor.fields);
-        fields = packFields(visitor.fields);
+        fields = packFields(program, visitor.fields);
     }
 
     public boolean escapes(int var) {
@@ -191,90 +188,47 @@ public class EscapeAnalysis {
         return liveness.liveOut(block.getIndex());
     }
 
-    private void propagateFields(Program program, List<Set<FieldReference>> fields) {
-        class Task {
-            int index;
-            FieldReference field;
-            Task(int index, FieldReference field) {
-                this.index = index;
-                this.field = field;
-            }
+    private FieldReference[][] packFields(Program program, List<Set<FieldReference>> fields) {
+        // ScalarReplacement replaces a copy or a phi field by field, so all variables that copies and phis connect
+        // need the same fields. Copies already share a definition class, so join the classes that phis connect.
+        int count = program.variableCount();
+        DisjointSet fieldClasses = new DisjointSet();
+        for (int i = 0; i < count; ++i) {
+            fieldClasses.create();
         }
-        Queue<Task> queue = new ArrayDeque<>();
-
-        GraphBuilder graphBuilder = new GraphBuilder(program.variableCount());
         for (BasicBlock block : program.getBasicBlocks()) {
-            for (Instruction insn : block) {
-                if (insn instanceof AssignInstruction) {
-                    AssignInstruction assign = (AssignInstruction) insn;
-                    graphBuilder.addEdge(assign.getReceiver().getIndex(), assign.getAssignee().getIndex());
-                } else if (insn instanceof NullCheckInstruction) {
-                    NullCheckInstruction nullCheck = (NullCheckInstruction) insn;
-                    graphBuilder.addEdge(nullCheck.getReceiver().getIndex(), nullCheck.getValue().getIndex());
-                } else if (insn instanceof UnwrapArrayInstruction) {
-                    UnwrapArrayInstruction unwrapArray = (UnwrapArrayInstruction) insn;
-                    graphBuilder.addEdge(unwrapArray.getReceiver().getIndex(), unwrapArray.getArray().getIndex());
-                }
-            }
             for (Phi phi : block.getPhis()) {
+                int receiverClass = definitionClasses[phi.getReceiver().getIndex()];
                 for (Incoming incoming : phi.getIncomings()) {
-                    // Both ways: ScalarReplacement replaces a phi field by field, so the receiver needs the fields
-                    // of every incoming object, and every incoming object needs the fields of the receiver.
-                    graphBuilder.addEdge(phi.getReceiver().getIndex(), incoming.getValue().getIndex());
-                    graphBuilder.addEdge(incoming.getValue().getIndex(), phi.getReceiver().getIndex());
+                    fieldClasses.union(receiverClass, definitionClasses[incoming.getValue().getIndex()]);
                 }
             }
         }
-        Graph graph = graphBuilder.build();
 
-        for (int i = 0; i < program.variableCount(); ++i) {
-            Set<FieldReference> receiverFields = fields.get(i);
-            if (receiverFields != null) {
-                for (FieldReference field : receiverFields) {
-                    queue.add(new Task(i, field));
-                }
-                receiverFields.clear();
-            }
-        }
-
-        while (!queue.isEmpty()) {
-            Task task = queue.remove();
-
-            Set<FieldReference> taskFields = fields.get(task.index);
-            if (taskFields == null) {
-                taskFields = new LinkedHashSet<>();
-                fields.set(task.index, taskFields);
-            }
-            if (!taskFields.add(task.field)) {
-                continue;
-            }
-
-            for (int successor : graph.outgoingEdges(task.index)) {
-                queue.add(new Task(successor, task.field));
-            }
-        }
-    }
-
-    private FieldReference[][] packFields(List<Set<FieldReference>> fields) {
-        List<Set<FieldReference>> joinedFields = new ArrayList<>(Collections.nCopies(fields.size(), null));
-
-        for (int i = 0; i < fields.size(); ++i) {
+        List<Set<FieldReference>> joinedFields = new ArrayList<>(Collections.nCopies(count, null));
+        for (int i = 0; i < count; ++i) {
             if (fields.get(i) == null) {
                 continue;
             }
-            int j = definitionClasses[i];
-            Set<FieldReference> fieldSet = joinedFields.get(j);
+            int root = fieldClasses.find(definitionClasses[i]);
+            Set<FieldReference> fieldSet = joinedFields.get(root);
             if (fieldSet == null) {
                 fieldSet = new LinkedHashSet<>();
-                joinedFields.set(j, fieldSet);
+                joinedFields.set(root, fieldSet);
             }
             fieldSet.addAll(fields.get(i));
         }
 
-        FieldReference[][] packedFields = new FieldReference[fields.size()][];
-        for (int i = 0; i < packedFields.length; ++i) {
-            if (joinedFields.get(i) != null) {
-                packedFields[i] = joinedFields.get(i).toArray(new FieldReference[0]);
+        FieldReference[][] packedFields = new FieldReference[count][];
+        FieldReference[][] fieldsByRoot = new FieldReference[count][];
+        for (int i = 0; i < count; ++i) {
+            int root = fieldClasses.find(i);
+            Set<FieldReference> fieldSet = joinedFields.get(root);
+            if (fieldSet != null) {
+                if (fieldsByRoot[root] == null) {
+                    fieldsByRoot[root] = fieldSet.toArray(new FieldReference[0]);
+                }
+                packedFields[i] = fieldsByRoot[root];
             }
         }
         return packedFields;
