@@ -89,10 +89,11 @@ public final class FloatAnalyzer {
         // The value is mantissa * 2^(binExp + 1), and decMantissa has units of 10^decExp. A computed bound is a few
         // units below the exact one. When the exact bound is a whole number of units, a decimal can sit exactly
         // on it. The JDK includes both bounds when the mantissa is even, and excludes them when it is odd.
-        // binExp >= decExp is needed for such a bound to exist.
+        // binExp >= decExp is needed for such a bound to exist. The bound mantissa is below 2^26 < 5^12, so for
+        // decExp >= 12 it cannot be a whole number of units.
         var decExp = decExponent - MAX_ABS_DEC_EXP - 8;
         var binExp = exponent - 151;
-        if (binExp >= decExp) {
+        if (binExp >= decExp && decExp < 12) {
             var even = ((mantissa >>> shift) & 1) == 0;
             decMantissaHi = exactBound(decMantissaHi, decExp, (mantissa << 1) + (1 << shift), binExp, even, true);
             decMantissaLow = powerOfTwo
@@ -109,18 +110,24 @@ public final class FloatAnalyzer {
         } else if (posCmp < 0) {
             decMantissa = Integer.divideUnsigned(decMantissa, upperPos) * upperPos + upperPos;
         } else {
-            var lower = Integer.divideUnsigned(decMantissa, upperPos);
-            var lowerMantissa = lower * upperPos;
             var half = upperPos >>> 1;
-            var remainder = decMantissa - lowerMantissa;
-            // decMantissa is within 3 units of the exact value, so only a remainder near half can be exact
-            // (the window has one more unit of slack)
-            if (half > 0 && remainder >= half - 4 && remainder <= half + 4 && isExact(lowerMantissa + half,
-                    decExp, mantissa, binExp + 1)) {
-                // The value is exactly halfway between two decimals. The JDK takes the one with the even digit.
-                decMantissa = (lower & 1) == 0 ? lowerMantissa : lowerMantissa + upperPos;
+            // The value is mantissa * 2^(binExp + 1) and a halfway decimal is a multiple of 10^decExp, so the value
+            // can be exactly halfway only if it is a multiple of 2^decExp
+            if (half > 0 && binExp + 1 + Integer.numberOfTrailingZeros(mantissa) >= decExp) {
+                var lower = Integer.divideUnsigned(decMantissa, upperPos);
+                var lowerMantissa = lower * upperPos;
+                var remainder = decMantissa - lowerMantissa;
+                // decMantissa is within 3 units of the exact value, so only a remainder near half can be exact
+                // (the window has one more unit of slack)
+                if (remainder >= half - 4 && remainder <= half + 4 && isExact(lowerMantissa + half, decExp,
+                        mantissa, binExp + 1)) {
+                    // The value is exactly halfway between two decimals. The JDK takes the one with the even digit.
+                    decMantissa = (lower & 1) == 0 ? lowerMantissa : lowerMantissa + upperPos;
+                } else {
+                    decMantissa = remainder >= upperPos - half ? lowerMantissa + upperPos : lowerMantissa;
+                }
             } else {
-                decMantissa = remainder >= upperPos - half ? lowerMantissa + upperPos : lowerMantissa;
+                decMantissa = Integer.divideUnsigned(decMantissa + half, upperPos) * upperPos;
             }
         }
         if (shift > 0 && decMantissa / 10 <= (posCmp > 0 ? lowerPos : upperPos)) {
