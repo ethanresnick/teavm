@@ -18,41 +18,106 @@ package org.teavm.classlib.java.util;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.io.TSerializable;
 import org.teavm.classlib.java.lang.TComparable;
-import org.teavm.classlib.java.security.TSecureRandom;
 import org.teavm.jso.crypto.Crypto;
+import org.teavm.jso.typedarrays.Int32Array;
 
 public final class TUUID implements TComparable<TUUID>, TSerializable {
-    private final long mostSigBits;
-    private final long leastSigBits;
+    // The 128 bits as four ints, most significant first. Ints rather than two longs, since a long
+    // is a BigInt on the JS backend.
+    private final int bits0;
+    private final int bits1;
+    private final int bits2;
+    private final int bits3;
+    // toString() is often called repeatedly on the same UUID (map keys, IDs written to messages),
+    // so its result is kept.
+    private String string;
 
     public TUUID(long mostSigBits, long leastSigBits) {
-        this.mostSigBits = mostSigBits;
-        this.leastSigBits = leastSigBits;
+        this((int) (mostSigBits >>> 32), (int) mostSigBits, (int) (leastSigBits >>> 32), (int) leastSigBits);
+    }
+
+    private TUUID(int bits0, int bits1, int bits2, int bits3) {
+        this.bits0 = bits0;
+        this.bits1 = bits1;
+        this.bits2 = bits2;
+        this.bits3 = bits3;
     }
 
     public static TUUID randomUUID() {
-        var bytes = new byte[16];
+        int b0;
+        int b1;
+        int b2;
+        int b3;
         if (!PlatformDetector.isC() && Crypto.isSupported()) {
-            new TSecureRandom().nextBytes(bytes);
+            var buffer = RandomBuffer.BUFFER;
+            Crypto.current().getRandomValues(buffer);
+            b0 = buffer.get(0);
+            b1 = buffer.get(1);
+            b2 = buffer.get(2);
+            b3 = buffer.get(3);
         } else {
-            for (var i = 0; i < bytes.length; ++i) {
-                bytes[i] = (byte) (Math.random() * 256);
-            }
+            b0 = weakRandomInt();
+            b1 = weakRandomInt();
+            b2 = weakRandomInt();
+            b3 = weakRandomInt();
         }
-        bytes[6] = (byte) ((bytes[6] & 0x0f) | 0x40);
-        bytes[8] = (byte) ((bytes[8] & 0x3f) | 0x80);
-        long msb = 0;
-        long lsb = 0;
-        for (var i = 0; i < 8; ++i) {
-            msb = (msb << 8) | (bytes[i] & 0xff);
+        // Version 4 in the high nibble of time_hi_and_version, IETF variant (binary 10) on top of
+        // clock_seq_hi_and_reserved.
+        b1 = (b1 & 0xffff0fff) | 0x00004000;
+        b2 = (b2 & 0x3fffffff) | 0x80000000;
+        return new TUUID(b0, b1, b2, b3);
+    }
+
+    private static int weakRandomInt() {
+        return ((int) (Math.random() * 0x10000) << 16) | (int) (Math.random() * 0x10000);
+    }
+
+    static final class RandomBuffer {
+        static final Int32Array BUFFER = new Int32Array(4);
+
+        private RandomBuffer() {
         }
-        for (var i = 8; i < 16; ++i) {
-            lsb = (lsb << 8) | (bytes[i] & 0xff);
-        }
-        return new TUUID(msb, lsb);
     }
 
     public static TUUID fromString(String name) {
+        if (name.length() == 36 && name.charAt(8) == '-' && name.charAt(13) == '-' && name.charAt(18) == '-'
+                && name.charAt(23) == '-') {
+            int h0 = hex4(name, 0);
+            int h1 = hex4(name, 4);
+            int h2 = hex4(name, 9);
+            int h3 = hex4(name, 14);
+            int h4 = hex4(name, 19);
+            int h5 = hex4(name, 24);
+            int h6 = hex4(name, 28);
+            int h7 = hex4(name, 32);
+            if ((h0 | h1 | h2 | h3 | h4 | h5 | h6 | h7) >= 0) {
+                return new TUUID((h0 << 16) | h1, (h2 << 16) | h3, (h4 << 16) | h5, (h6 << 16) | h7);
+            }
+        }
+        return fromStringGeneral(name);
+    }
+
+    // Four ASCII hex digits as a value in [0, 0xffff], or -1 if any of them is not one.
+    private static int hex4(String s, int offset) {
+        int result = 0;
+        for (int i = offset; i < offset + 4; ++i) {
+            char c = s.charAt(i);
+            int digit;
+            if (c >= '0' && c <= '9') {
+                digit = c - '0';
+            } else if (c >= 'a' && c <= 'f') {
+                digit = c - ('a' - 10);
+            } else if (c >= 'A' && c <= 'F') {
+                digit = c - ('A' - 10);
+            } else {
+                return -1;
+            }
+            result = (result << 4) | digit;
+        }
+        return result;
+    }
+
+    private static TUUID fromStringGeneral(String name) {
         // As in the JDK, each group is masked to the width of its field.
         int len = name.length();
         if (len > 36) {
@@ -78,26 +143,34 @@ public final class TUUID implements TComparable<TUUID>, TSerializable {
     }
 
     public long getLeastSignificantBits() {
-        return leastSigBits;
+        return ((long) bits2 << 32) | (bits3 & 0xffffffffL);
     }
 
     public long getMostSignificantBits() {
-        return mostSigBits;
+        return ((long) bits0 << 32) | (bits1 & 0xffffffffL);
     }
 
     public int version() {
-        return (int) ((mostSigBits >> 12) & 0x0f);
+        return (bits1 >> 12) & 0x0f;
     }
 
     public int variant() {
-        return (int) ((leastSigBits >>> (64 - (leastSigBits >>> 62))) & (leastSigBits >> 63));
+        // The top bits of the least significant half: 0xx -> 0, 10x -> 2, 110 -> 6, 111 -> 7.
+        int top = bits2 >>> 29;
+        if (top < 4) {
+            return 0;
+        } else if (top < 6) {
+            return 2;
+        } else {
+            return top;
+        }
     }
 
     @Override
     public boolean equals(Object o) {
         if (o instanceof TUUID) {
             TUUID other = (TUUID) o;
-            return mostSigBits == other.mostSigBits && leastSigBits == other.leastSigBits;
+            return bits0 == other.bits0 && bits1 == other.bits1 && bits2 == other.bits2 && bits3 == other.bits3;
         } else {
             return false;
         }
@@ -105,24 +178,59 @@ public final class TUUID implements TComparable<TUUID>, TSerializable {
 
     @Override
     public int hashCode() {
-        long hilo = mostSigBits ^ leastSigBits;
-        return ((int) (hilo >> 32)) ^ (int) hilo;
+        // The same value as the JDK's fold of (mostSigBits ^ leastSigBits) into an int.
+        return bits0 ^ bits1 ^ bits2 ^ bits3;
     }
 
     @Override
     public String toString() {
-        return digits(mostSigBits >> 32, 8) + "-" + digits(mostSigBits >> 16, 4) + "-" + digits(mostSigBits, 4)
-                + "-" + digits(leastSigBits >> 48, 4) + "-" + digits(leastSigBits, 12);
+        var result = string;
+        if (result == null) {
+            result = format();
+            string = result;
+        }
+        return result;
     }
 
-    private static String digits(long value, int digits) {
-        long hi = 1L << (digits * 4);
-        return Long.toHexString(hi | (value & (hi - 1))).substring(1);
+    private String format() {
+        var chars = new char[36];
+        hex(chars, 0, bits0, 8);
+        chars[8] = '-';
+        hex(chars, 9, bits1 >>> 16, 4);
+        chars[13] = '-';
+        hex(chars, 14, bits1, 4);
+        chars[18] = '-';
+        hex(chars, 19, bits2 >>> 16, 4);
+        chars[23] = '-';
+        hex(chars, 24, bits2, 4);
+        hex(chars, 28, bits3, 8);
+        return new String(chars);
+    }
+
+    // Writes the low (4 * digits) bits of value as lower-case hex digits.
+    private static void hex(char[] chars, int offset, int value, int digits) {
+        for (int i = offset + digits - 1; i >= offset; --i) {
+            int digit = value & 0xf;
+            chars[i] = (char) (digit < 10 ? '0' + digit : ('a' - 10) + digit);
+            value >>>= 4;
+        }
     }
 
     @Override
     public int compareTo(TUUID other) {
-        int result = Long.compare(mostSigBits, other.mostSigBits);
-        return result != 0 ? result : Long.compare(leastSigBits, other.leastSigBits);
+        // A signed comparison of the most significant halves, then of the least significant ones.
+        if (bits0 != other.bits0) {
+            return bits0 < other.bits0 ? -1 : 1;
+        }
+        if (bits1 != other.bits1) {
+            return Integer.compareUnsigned(bits1, other.bits1) < 0 ? -1 : 1;
+        }
+        if (bits2 != other.bits2) {
+            return bits2 < other.bits2 ? -1 : 1;
+        }
+        if (bits3 != other.bits3) {
+            return Integer.compareUnsigned(bits3, other.bits3) < 0 ? -1 : 1;
+        }
+        return 0;
     }
 }
