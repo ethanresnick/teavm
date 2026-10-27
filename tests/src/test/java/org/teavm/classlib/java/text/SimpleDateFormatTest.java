@@ -21,11 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Set;
 import java.util.TimeZone;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
@@ -401,6 +405,83 @@ public class SimpleDateFormatTest {
     public void gmtBeforeLiteralTextParsed() {
         assertEquals(1403602429000L, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z '(x)'", Locale.ENGLISH),
                 "2014-06-24 09:33:49 GMT (x)"));
+    }
+
+    // TeaVM looks a zone up first by its display name and then by its ID (the JDK parses display names
+    // only, so this test doesn't run on the JVM). Each lookup takes the longest name that the text starts
+    // with, ignoring case. This checks that against a brute-force scan, for every display name and every
+    // ID, in two cases, followed by text that may or may not continue a longer name.
+    @Test
+    @SkipJVM
+    public void everyZoneNameParsedUpToLongestMatch() {
+        String[] ids = TimeZone.getAvailableIDs();
+        String[] displayNames = new String[ids.length];
+        long[] times = new long[ids.length];
+        Calendar calendar = new GregorianCalendar(Locale.ENGLISH);
+        for (int i = 0; i < ids.length; ++i) {
+            TimeZone tz = TimeZone.getTimeZone(ids[i]);
+            displayNames[i] = tz.getDisplayName(Locale.ENGLISH);
+            calendar.clear();
+            calendar.setTimeZone(tz);
+            calendar.set(2014, Calendar.JUNE, 24, 9, 33, 49);
+            times[i] = calendar.getTimeInMillis();
+        }
+        String[] suffixes = { "", " rest", "(", ",", "/", "_", "-", "+", "0", "1", "x", "\t" };
+        String prefix = "2014-06-24 09:33:49 ";
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
+        int checked = 0;
+        Set<String> distinctNames = new LinkedHashSet<>(Arrays.asList(displayNames));
+        distinctNames.addAll(Arrays.asList(ids));
+        for (String name : distinctNames) {
+            // GMT+h and GMT-h are read as numeric zones, which need minutes.
+            if (name.regionMatches(true, 0, "GMT+", 0, 4) || name.regionMatches(true, 0, "GMT-", 0, 4)) {
+                continue;
+            }
+            for (String zone : new String[] { name, name.toLowerCase(Locale.ROOT) }) {
+                for (String suffix : suffixes) {
+                    String text = prefix + zone + suffix;
+                    String[] matchedNames = displayNames;
+                    int length = longestMatch(displayNames, text, prefix.length());
+                    if (length < 0) {
+                        matchedNames = ids;
+                        length = longestMatch(ids, text, prefix.length());
+                    }
+                    ParsePosition position = new ParsePosition(0);
+                    Date date = format.parse(text, position);
+                    assertEquals(-1, position.getErrorIndex(), text);
+                    assertEquals(prefix.length() + length, position.getIndex(), text);
+                    boolean found = false;
+                    for (int i = 0; i < ids.length && !found; ++i) {
+                        if (matchedNames[i].length() == length
+                                && text.regionMatches(true, prefix.length(), matchedNames[i], 0, length)) {
+                            found = date.getTime() == times[i];
+                        }
+                    }
+                    assertTrue(found, text);
+                    ++checked;
+                }
+            }
+        }
+        assertTrue(checked > 5000, "checked " + checked);
+    }
+
+    private static int longestMatch(String[] names, String text, int start) {
+        int longest = -1;
+        for (String name : names) {
+            if (name.length() > longest && text.regionMatches(true, start, name, 0, name.length())) {
+                longest = name.length();
+            }
+        }
+        return longest;
+    }
+
+    // Known gap: TeaVM also accepts zone IDs, and GMT0 is one. So "GMT" followed by "0" matches GMT0,
+    // while the JDK takes "GMT" alone and leaves "0" for the next field.
+    @Test
+    @Disabled("TeaVM matches the zone ID GMT0 where the JDK takes GMT and leaves the digit")
+    public void gmtFollowedByDigitLeavesDigit() {
+        assertEquals(1403602429000L, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z'0'", Locale.ENGLISH),
+                "2014-06-24 09:33:49 GMT0"));
     }
 
     private long parseFully(SimpleDateFormat format, String text) {
