@@ -19,62 +19,154 @@
  */
 package org.teavm.classlib.java.util.concurrent.locks;
 
-import java.util.Map;
-import java.util.WeakHashMap;
+import org.teavm.classlib.PlatformDetector;
+import org.teavm.classlib.java.lang.TThread;
+import org.teavm.classlib.java.lang.TThreadInterruptHandler;
+import org.teavm.interop.Async;
+import org.teavm.interop.AsyncCallback;
+import org.teavm.platform.Platform;
+import org.teavm.platform.PlatformRunnable;
+import org.teavm.runtime.EventQueue;
 
 /**
- * Park and unpark for green threads. Each thread has one permit. {@code park} consumes the permit or waits on
- * the thread's state object until {@code unpark}, an interrupt, or the timeout.
+ * Park and unpark for green threads. Each thread has one permit. {@code park} consumes the permit, or suspends the
+ * thread until {@code unpark}, an interrupt or the timeout.
  *
- * <p>{@code unpark} may run from a JS callback, outside any green thread. It only takes the state object's
- * monitor, and no thread ever suspends while it holds that monitor (it suspends only inside {@code wait}, which
- * releases it), so the monitor is never contended there.
+ * <p>Only {@code park} can suspend. {@code unpark} and {@code setCurrentBlocker} take no monitor and never
+ * suspend, so releasing a lock or counting down a latch does not make its callers async, and works in a JS callback
+ * that runs outside any green thread.
  */
 public final class TLockSupport {
     private TLockSupport() {
     }
 
-    private static final class ParkState {
+    /**
+     * A thread's permit and blocker, and, while it is parked, the callback that resumes it. It is also the timer
+     * event and the interrupt handler of the park, so a park allocates nothing once the thread has this object.
+     */
+    private static final class ParkState implements EventQueue.Event, PlatformRunnable, TThreadInterruptHandler {
+        final TThread thread;
         boolean permit;
-        volatile Object blocker;
-    }
+        Object blocker;
+        // Non-null while the thread is parked.
+        AsyncCallback<Void> callback;
+        // A wake that unpark or an interrupt posted, to run from the event loop.
+        AsyncCallback<Void> posted;
+        // -1 while no timer is scheduled. On C, event ids start at 0.
+        int timerId = -1;
 
-    private static final Map<Thread, ParkState> STATES = new WeakHashMap<>();
+        ParkState(TThread thread) {
+            this.thread = thread;
+        }
 
-    private static ParkState state(Thread t) {
-        synchronized (STATES) {
-            ParkState s = STATES.get(t);
-            if (s == null) {
-                s = new ParkState();
-                STATES.put(t, s);
+        // A posted wake, or the timeout. Both run from the event loop, so they can resume the thread directly.
+        @Override
+        public void run() {
+            AsyncCallback<Void> posted = this.posted;
+            if (posted != null) {
+                this.posted = null;
+                posted.complete(null);
+            } else {
+                AsyncCallback<Void> callback = take();
+                if (callback != null) {
+                    callback.complete(null);
+                }
             }
-            return s;
+        }
+
+        // An interrupt. park leaves the interrupt status set.
+        @Override
+        public void interrupted() {
+            post();
+        }
+
+        /**
+         * Wakes the parked thread from a running thread (unpark, interrupt), which must not resume another thread
+         * inside its own stack.
+         */
+        void post() {
+            AsyncCallback<Void> callback = take();
+            if (callback != null) {
+                posted = callback;
+                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+                    EventQueue.offer(this);
+                } else {
+                    Platform.postpone(this);
+                }
+            }
+        }
+
+        /** Ends the park: returns its callback, or null if it already ended. */
+        private AsyncCallback<Void> take() {
+            AsyncCallback<Void> callback = this.callback;
+            if (callback == null) {
+                return null;
+            }
+            this.callback = null;
+            if (timerId >= 0) {
+                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+                    EventQueue.kill(timerId);
+                } else {
+                    Platform.killSchedule(timerId);
+                }
+                timerId = -1;
+            }
+            if (thread.interruptHandler == this) {
+                thread.interruptHandler = null;
+            }
+            // The @Async machinery restores the current thread when the callback completes.
+            return callback;
         }
     }
 
+    // The state lives in a field of the thread, so it goes away with the thread.
+    private static ParkState state(Thread t) {
+        TThread thread = (TThread) (Object) t;
+        ParkState s = (ParkState) thread.parkState;
+        if (s == null) {
+            s = new ParkState(thread);
+            thread.parkState = s;
+        }
+        return s;
+    }
+
     /** Waits for the permit. {@code timeoutMillis} of 0 means no timeout. */
-    private static void park0(long timeoutMillis) {
-        Thread t = Thread.currentThread();
-        ParkState s = state(t);
-        synchronized (s) {
-            if (s.permit) {
-                s.permit = false;
-                return;
-            }
-            if (t.isInterrupted()) {
-                return;
-            }
-            try {
-                if (timeoutMillis > 0) {
-                    s.wait(timeoutMillis);
-                } else {
-                    s.wait();
-                }
-            } catch (InterruptedException e) {
-                // park reports an interrupt by returning with the flag still set.
-                t.interrupt();
-            }
+    private static void park0(ParkState s, long timeoutMillis) {
+        if (s.permit) {
             s.permit = false;
+            return;
+        }
+        // park returns at once for an interrupted thread, and leaves the interrupt status set.
+        if (s.thread.isInterrupted()) {
+            return;
+        }
+        parkImpl(s, timeoutMillis);
+    }
+
+    @Async
+    private static native void parkImpl(ParkState s, long timeoutMillis);
+
+    private static void parkImpl(ParkState s, long timeoutMillis, AsyncCallback<Void> callback) {
+        s.callback = callback;
+        if (timeoutMillis > 0) {
+            // Host timers take an int delay, and the clamp keeps the deadline from overflowing. A longer park wakes
+            // early, which park allows.
+            int delay = timeoutMillis < Integer.MAX_VALUE ? (int) timeoutMillis : Integer.MAX_VALUE;
+            s.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
+                    ? EventQueue.offer(s, System.currentTimeMillis() + delay)
+                    : Platform.schedule(s, delay);
+        }
+        s.thread.interruptHandler = s;
+    }
+
+    /** Parks with {@code blocker} recorded, as the blocker overloads do. */
+    private static void parkWith(Object blocker, long timeoutMillis) {
+        ParkState s = state(Thread.currentThread());
+        s.blocker = blocker;
+        try {
+            park0(s, timeoutMillis);
+        } finally {
+            s.blocker = null;
         }
     }
 
@@ -87,41 +179,28 @@ public final class TLockSupport {
             return;
         }
         ParkState s = state(thread);
-        synchronized (s) {
+        if (s.callback != null) {
+            // The permit goes straight to the parked thread.
+            s.post();
+        } else {
             s.permit = true;
-            s.notifyAll();
         }
     }
 
     public static void park(Object blocker) {
-        setCurrentBlocker(blocker);
-        try {
-            park0(0);
-        } finally {
-            setCurrentBlocker(null);
-        }
+        parkWith(blocker, 0);
     }
 
     public static void parkNanos(Object blocker, long nanos) {
         if (nanos > 0) {
-            setCurrentBlocker(blocker);
-            try {
-                park0(nanosToMillis(nanos));
-            } finally {
-                setCurrentBlocker(null);
-            }
+            parkWith(blocker, nanosToMillis(nanos));
         }
     }
 
     public static void parkUntil(Object blocker, long deadline) {
         long millis = deadline - System.currentTimeMillis();
         if (millis > 0) {
-            setCurrentBlocker(blocker);
-            try {
-                park0(millis);
-            } finally {
-                setCurrentBlocker(null);
-            }
+            parkWith(blocker, millis);
         }
     }
 
@@ -129,23 +208,24 @@ public final class TLockSupport {
         if (t == null) {
             throw new NullPointerException();
         }
-        return state(t).blocker;
+        ParkState s = (ParkState) ((TThread) (Object) t).parkState;
+        return s != null ? s.blocker : null;
     }
 
     public static void park() {
-        park0(0);
+        park0(state(Thread.currentThread()), 0);
     }
 
     public static void parkNanos(long nanos) {
         if (nanos > 0) {
-            park0(nanosToMillis(nanos));
+            park0(state(Thread.currentThread()), nanosToMillis(nanos));
         }
     }
 
     public static void parkUntil(long deadline) {
         long millis = deadline - System.currentTimeMillis();
         if (millis > 0) {
-            park0(millis);
+            park0(state(Thread.currentThread()), millis);
         }
     }
 

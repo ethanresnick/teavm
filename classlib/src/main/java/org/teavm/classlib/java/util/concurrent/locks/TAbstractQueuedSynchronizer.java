@@ -16,9 +16,9 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/locks/AbstractQueuedSynchronizer.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
+ * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
+ * kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -26,23 +26,15 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: ImportOrder|InnerAssignment|MultipleVariableDeclarations|NeedBraces|OperatorWrap|RedundantImport
-// CHECKSTYLE.OFF: RedundantModifier|UnnecessaryParentheses|UnusedImports|WhitespaceAfter
+// CHECKSTYLE.OFF: InnerAssignment|MultipleVariableDeclarations|NeedBraces|OperatorWrap|RedundantModifier
+// CHECKSTYLE.OFF: UnnecessaryParentheses|WhitespaceAfter
 package org.teavm.classlib.java.util.concurrent.locks;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
-import org.teavm.classlib.java.util.concurrent.TCountDownLatch;
-import org.teavm.classlib.java.util.concurrent.TRejectedExecutionException;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ForkJoinPool;
 import org.teavm.classlib.java.util.concurrent.TRejectedExecutionException;
-
 
 /**
  * Provides a framework for implementing blocking locks and related
@@ -655,7 +647,7 @@ public abstract class TAbstractQueuedSynchronizer
                     cleanQueue();           // predecessor cancelled
                     continue;
                 } else if (pred.prev == null) {
-                    org.teavm.classlib.EmulSupport.onSpinWait();    // ensure serialization
+                    Thread.onSpinWait();    // ensure serialization
                     continue;
                 }
             }
@@ -701,7 +693,7 @@ public abstract class TAbstractQueuedSynchronizer
                     t.next = node;
             } else if (first && spins != 0) {
                 --spins;                        // reduce unfairness on rewaits
-                org.teavm.classlib.EmulSupport.onSpinWait();
+                Thread.onSpinWait();
             } else if (node.status == 0) {
                 node.status = WAITING;          // enable signal and recheck
             } else {
@@ -1580,7 +1572,7 @@ public abstract class TAbstractQueuedSynchronizer
                         interrupted = true;
                     }
                 } else
-                    org.teavm.classlib.EmulSupport.onSpinWait();    // awoke while enqueuing
+                    Thread.onSpinWait();    // awoke while enqueuing
             }
             TLockSupport.setCurrentBlocker(null);
             node.clearStatus();
@@ -1625,7 +1617,7 @@ public abstract class TAbstractQueuedSynchronizer
                         interrupted = true;
                     }
                 } else
-                    org.teavm.classlib.EmulSupport.onSpinWait();    // awoke while enqueuing
+                    Thread.onSpinWait();    // awoke while enqueuing
             }
             TLockSupport.setCurrentBlocker(null);
             node.clearStatus();

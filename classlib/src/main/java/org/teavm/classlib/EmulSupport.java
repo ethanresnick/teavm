@@ -15,22 +15,9 @@
  */
 package org.teavm.classlib;
 
-/** Runtime helpers that the ported jsr166 classes call in place of JDK internals. */
+/** Runtime helpers that the ported jsr166 classes call in place of JDK classes that TeaVM lacks. */
 public final class EmulSupport {
     private EmulSupport() {
-    }
-
-    /**
-     * Replaces {@code Thread.onSpinWait()}. Green threads switch only at blocking calls, so a spin loop that
-     * waits for another thread never ends unless it gives that thread a turn. {@code Thread.sleep(0)} queues
-     * this thread behind every runnable one.
-     */
-    public static void onSpinWait() {
-        try {
-            Thread.sleep(0);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     /** Same contract as {@code ForkJoinPool.ManagedBlocker}. */
