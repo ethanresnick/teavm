@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.zip.Adler32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
@@ -115,5 +116,28 @@ public class DeflaterTest {
         }
         assertTrue(deflater.needsInput());
         assertEquals(0, deflater.deflate(out));
+    }
+
+    @Test
+    public void dictionarySetBeforeInputIsUsed() throws DataFormatException {
+        var dictionary = "hello world".getBytes(StandardCharsets.UTF_8);
+        var deflater = new Deflater();
+        deflater.setDictionary(dictionary);
+        deflater.setInput("hello world hello".getBytes(StandardCharsets.UTF_8));
+        deflater.finish();
+        var compressed = new byte[100];
+        var length = deflater.deflate(compressed);
+
+        var inflater = new Inflater();
+        inflater.setInput(compressed, 0, length);
+        var result = new byte[100];
+        assertEquals(0, inflater.inflate(result));
+        assertTrue(inflater.needsDictionary());
+        var adler = new Adler32();
+        adler.update(dictionary);
+        assertEquals(adler.getValue(), inflater.getAdler());
+        inflater.setDictionary(dictionary);
+        var n = inflater.inflate(result);
+        assertEquals("hello world hello", new String(result, 0, n, StandardCharsets.UTF_8));
     }
 }
