@@ -43,9 +43,10 @@ void teavm_initTime() {
 
         return time.tv_sec * INT64_C(1000) + (int64_t) round(time.tv_nsec / 1000000);
     }
+    // System.nanoTime() measures elapsed time, so it must not jump when the wall clock is set.
     int64_t teavm_currentTimeNano() {
         struct timespec time;
-        clock_gettime(CLOCK_REALTIME, &time);
+        clock_gettime(CLOCK_MONOTONIC, &time);
 
         return time.tv_sec * INT64_C(1000000000) + (int64_t) round(time.tv_nsec);
     }
