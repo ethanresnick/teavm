@@ -103,7 +103,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         if (isFull()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isFull()) {
-                if (!waitForChange(timeLimit)) {
+                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
                     return false;
                 }
             }
@@ -133,7 +133,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         if (isEmpty()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isEmpty()) {
-                if (!waitForChange(timeLimit)) {
+                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
                     return null;
                 }
             }
@@ -425,6 +425,12 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
     // waitForChange.
     private static long timeLimit(long millis) {
         return Math.max(1, EventQueue.deadlineAfter(millis));
+    }
+
+    // A host timer takes an int delay, so a wait longer than Integer.MAX_VALUE ms (about 24.8 days) times out
+    // before its limit. offer and poll then wait again for the time that is left.
+    private static boolean timeLimitReached(long timeLimit) {
+        return EventQueue.now() >= timeLimit;
     }
 
     @Async

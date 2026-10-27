@@ -50,6 +50,8 @@ public final class EventQueue {
 
     /** Runs {@code action} after {@code millis} milliseconds of elapsed time. */
     public static int offerAfter(Event action, long millis) {
+        // On Wasm GC this must go through offer(Event, long): WasmGCDependencies links run() for the event types that
+        // reach that method's parameter.
         return offer(action, deadlineAfter(millis));
     }
 
@@ -193,7 +195,9 @@ public final class EventQueue {
         if (diff <= 0) {
             return;
         }
-        waitFor(diff);
+        // The native waits take a bounded timeout: macOS select() fails at once with EINVAL for one over 10^8 s, so
+        // a far deadline at the head of the queue made process() spin. next() waits again after a shorter wait.
+        waitFor(Math.min(diff, Integer.MAX_VALUE));
     }
 
     @Import(name = "teavm_waitFor")

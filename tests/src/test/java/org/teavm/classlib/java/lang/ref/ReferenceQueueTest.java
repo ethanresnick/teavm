@@ -183,6 +183,20 @@ public class ReferenceQueueTest {
         removeWaits(3_000_000_000L);
     }
 
+    // "IllegalArgumentException - If the value of the timeout argument is negative"
+    @Test
+    public void removeWithNegativeTimeoutThrows() throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        for (long timeout : new long[] { -1, Long.MIN_VALUE }) {
+            try {
+                queue.remove(timeout);
+                fail("remove(" + timeout + ") did not throw");
+            } catch (IllegalArgumentException e) {
+                // expected
+            }
+        }
+    }
+
     private static void removeWaits(long timeout) throws InterruptedException {
         var queue = new ReferenceQueue<Object>();
         var result = new Object[] { "not ended" };

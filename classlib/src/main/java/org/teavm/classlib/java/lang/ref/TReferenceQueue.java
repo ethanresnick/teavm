@@ -36,10 +36,18 @@ public class TReferenceQueue<T> {
         return remove(0);
     }
 
-    @Async
-    public native TReference<T> remove(long timeout) throws InterruptedException;
+    public TReference<T> remove(long timeout) throws InterruptedException {
+        // "IllegalArgumentException - If the value of the timeout argument is negative"
+        if (timeout < 0) {
+            throw new IllegalArgumentException();
+        }
+        return removeImpl(timeout);
+    }
 
-    public void remove(long timeout, AsyncCallback<TReference<T>> callback) {
+    @Async
+    private native TReference<T> removeImpl(long timeout) throws InterruptedException;
+
+    private void removeImpl(long timeout, AsyncCallback<TReference<T>> callback) {
         var ref = poll();
         if (ref != null) {
             callback.complete(ref);
