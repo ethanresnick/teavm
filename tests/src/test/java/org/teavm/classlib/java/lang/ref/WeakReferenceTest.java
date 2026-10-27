@@ -144,6 +144,18 @@ public class WeakReferenceTest {
         }
     }
 
+    // Reference.enqueue(): "Clears this reference object and adds it to the queue with which it is registered, if any."
+    @Test
+    // Known gap: on JS and Wasm GC, enqueue() clears the reference and returns true, but does not add it to the queue
+    @SkipPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC })
+    public void enqueueAddsToQueue() {
+        var queue = new ReferenceQueue<>();
+        var ref = new WeakReference<>(new Object(), queue);
+        assertTrue(ref.enqueue());
+        assertSame(ref, queue.poll());
+        assertNull(queue.poll());
+    }
+
     @Test
     public void clearTwice() {
         var obj = new Object();
