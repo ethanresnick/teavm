@@ -145,8 +145,9 @@ public final class TBase64 {
             return Base64Impl.decode(mime ? skipOutsideAlphabet(src) : src, mapping);
         }
 
-        // As in the JDK's MIME decoder: characters outside the alphabet are skipped, padding ends the data, and
-        // only characters outside the alphabet may follow it.
+        // As in the JDK's MIME decoder: characters outside the alphabet are skipped, and the padding that
+        // completes the last unit ends the data ("==" must be adjacent). Only characters outside the alphabet,
+        // '=' among them, may follow it.
         private byte[] skipOutsideAlphabet(byte[] src) {
             var result = new byte[src.length];
             var j = 0;
@@ -157,8 +158,18 @@ public final class TBase64 {
                 }
                 ++i;
             }
-            while (i < src.length && src[i] == '=') {
-                result[j++] = src[i++];
+            if (i == src.length) {
+                return Arrays.copyOf(result, j);
+            }
+            if (j % 4 == 3) {
+                result[j++] = '=';
+                ++i;
+            } else if (j % 4 == 2 && i + 1 < src.length && src[i + 1] == '=') {
+                result[j++] = '=';
+                result[j++] = '=';
+                i += 2;
+            } else {
+                throw new IllegalArgumentException();
             }
             while (i < src.length) {
                 if (mapping[src[i++] & 0xFF] >= 0) {
@@ -195,7 +206,12 @@ public final class TBase64 {
             for (var i = 0; i < bytes.length; ++i) {
                 var c = src.charAt(i);
                 if (c > 0xFF) {
-                    throw new IllegalArgumentException();
+                    // As in the JDK, which decodes src.getBytes(ISO_8859_1): such a character becomes '?', which
+                    // only the MIME decoder accepts (and skips).
+                    if (!mime) {
+                        throw new IllegalArgumentException();
+                    }
+                    c = '?';
                 }
                 bytes[i] = (byte) c;
             }
