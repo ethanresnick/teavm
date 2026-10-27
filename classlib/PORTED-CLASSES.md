@@ -9,7 +9,8 @@ does not meet, and checkstyle passes with no violations.
 The port is mechanical:
 
 - the package moves to `org.teavm.classlib.java.util.concurrent[.locks]`, and each ported type gets the `T` prefix;
-- each `Unsafe` compare-and-set or ordered access becomes a plain-field helper method. TeaVM runs one green thread
+- each `Unsafe` or `VarHandle` compare-and-set or ordered access becomes a plain-field helper method, and the
+  `MethodHandles.lookup()` code that found the `VarHandle`s is removed. TeaVM runs one green thread
   at a time and switches threads only at blocking calls, so a plain read-compare-write is atomic;
 - `@ReservedStackAccess` annotations are removed;
 - `ForkJoinPool.managedBlock` becomes a call to `org.teavm.classlib.EmulSupport`.
@@ -31,6 +32,10 @@ Each file has the Apache-2.0 header of this port, then jsr166's public-domain no
 | `TRejectedExecutionException` | `java.util.concurrent.RejectedExecutionException` | jsr166 |
 | `TCountDownLatch` | `java.util.concurrent.CountDownLatch` | jsr166 |
 | `TTimeoutException` | `java.util.concurrent.TimeoutException` | jsr166 |
+| `TConcurrentLinkedQueue` | `java.util.concurrent.ConcurrentLinkedQueue` | jsr166 |
+| `TConcurrentLinkedDeque` | `java.util.concurrent.ConcurrentLinkedDeque` | jsr166 |
+| `TSynchronousQueue` | `java.util.concurrent.SynchronousQueue` | jsr166 |
+| `THelpers` | `java.util.concurrent.Helpers` (package-private) | jsr166 |
 | `TLockSupport` | `java.util.concurrent.locks.LockSupport` | Not a port: written for TeaVM's green threads. jsr166's version parks through `Unsafe`. Only `park` suspends, so `unpark`, and with it `unlock`, `signal` and `countDown`, never makes its caller async. |
 
 `org.teavm.classlib.EmulSupport` holds the helpers that the ports call in place of JDK internals. It is written for
