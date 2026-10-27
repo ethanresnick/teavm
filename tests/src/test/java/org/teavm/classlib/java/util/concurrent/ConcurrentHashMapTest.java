@@ -614,6 +614,59 @@ public class ConcurrentHashMapTest {
         }
     }
 
+    // An entry that an iterator returned stays a view of its mapping after the table grows
+    @Test
+    public void entryWritesThroughAfterTableGrows() {
+        var map = new ConcurrentHashMap<Integer, Integer>();
+        map.put(1, 10);
+        var it = map.entrySet().iterator();
+        var entry = it.next();
+        for (var i = 2; i < 200; ++i) {
+            map.put(i, i);
+        }
+        // Map.Entry.setValue: "Replaces the value corresponding to this entry with the specified value (optional
+        // operation). (Writes through to the map.)"
+        assertEquals((Object) 10, entry.setValue(11));
+        assertEquals((Object) 11, map.get(1));
+        assertEquals((Object) 11, entry.getValue());
+        assertEquals("1=11", entry.toString());
+        // The rest of the original entries (there are none) and nothing twice
+        var keys = new HashSet<Integer>();
+        while (it.hasNext()) {
+            assertTrue(keys.add(it.next().getKey()));
+        }
+        assertFalse(keys.contains(1));
+
+        // Iterating again, then growing again, keeps the entry a view
+        var second = map.entrySet().iterator();
+        var count = 0;
+        while (second.hasNext()) {
+            second.next();
+            if (++count == 3) {
+                for (var i = 200; i < 1000; ++i) {
+                    map.put(i, i);
+                }
+            }
+        }
+        assertEquals(1000 - 1, map.size());
+        entry.setValue(13);
+        assertEquals((Object) 13, map.get(1));
+    }
+
+    // Map.Entry.equals: two entries are equal if "(e1.getKey()==null ? e2.getKey()==null : e1.getKey().equals(
+    // e2.getKey())) && (e1.getValue()==null ? e2.getValue()==null : e1.getValue().equals(e2.getValue()))"
+    @Test
+    public void entriesAreEqualByKeyAndValue() {
+        var map = new ConcurrentHashMap<String, Integer>();
+        map.put("a", 1);
+        var entry = map.entrySet().iterator().next();
+        assertTrue(entry.equals(new AbstractMap.SimpleEntry<>("a", 1)));
+        assertFalse(entry.equals(new AbstractMap.SimpleEntry<>("a", 2)));
+        assertEquals(new AbstractMap.SimpleEntry<>("a", 1).hashCode(), entry.hashCode());
+        assertEquals(Map.of("a", 1).entrySet(), map.entrySet());
+        assertFalse(Map.of("a", 2).entrySet().equals(map.entrySet()));
+    }
+
     // KeySetView.add: "UnsupportedOperationException - if no default mapped value for additions was provided"
     @Test
     public void keySetViewWithoutMappedValueRejectsAdditions() {

@@ -57,6 +57,9 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
     private static final int DEFAULT_SIZE = 16;
     private final float loadFactor;
     private int threshold;
+    // Whether a traversal started on the current table. Then the next resize copies the entries instead of
+    // relinking them, so that the traversal can keep reading the old table.
+    private transient boolean traversed;
     private transient KeySetView<K, V> cachedKeySet;
     private transient TCollection<V> cachedValues;
 
@@ -64,15 +67,35 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         final int origKeyHash;
         HashEntry<K, V> next;
         boolean removed;
+        // The copy of this entry in the resized table, if a resize copied it
+        HashEntry<K, V> forward;
 
         HashEntry(K theKey, int hash) {
             super(theKey, null);
             this.origKeyHash = hash;
         }
 
+        // The entry of the current table that this entry stands for
+        HashEntry<K, V> live() {
+            var e = this;
+            while (e.forward != null) {
+                e = e.forward;
+            }
+            return e;
+        }
+
+        @Override
+        public V getValue() {
+            return forward == null ? value : live().value;
+        }
+
         @Override
         public V setValue(V object) {
-            return super.setValue(Objects.requireNonNull(object));
+            Objects.requireNonNull(object);
+            var e = forward == null ? this : live();
+            var result = e.value;
+            e.value = object;
+            return result;
         }
 
         @Override
@@ -86,31 +109,70 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         }
     }
 
+    /**
+     * A weakly consistent traversal: it returns every entry that exists when it starts and is not removed before
+     * the traversal reaches it, exactly once, however the map changes meanwhile.
+     *
+     * <p>It walks the chains of the table that was current when it started. Removing an entry keeps the entry's
+     * link to the next one, so the walk can step past removed entries. A resize after the traversal started copies
+     * the entries (see {@link #traversed}) and leaves the old table and its chains as they were, so the walk goes
+     * on reading the old table, and returns the current copy of each entry.
+     */
     private static class AbstractMapIterator<K, V>  {
-        // The entries when the iterator was created. A snapshot keeps iteration valid while the map changes.
-        private final HashEntry<K, V>[] snapshot;
+        private final HashEntry<K, V>[] table;
+        // The next bucket to read
         private int position;
+        // The next entry of the chain to consider
+        private HashEntry<K, V> futureEntry;
         HashEntry<K, V> currentEntry;
 
         final TConcurrentHashMap<K, V> associatedMap;
 
         AbstractMapIterator(TConcurrentHashMap<K, V> hm) {
             associatedMap = hm;
-            snapshot = hm.snapshotEntries();
+            table = hm.elementData;
+            hm.traversed = true;
         }
 
         public boolean hasNext() {
-            while (position < snapshot.length && snapshot[position].removed) {
-                position++;
+            var f = futureEntry;
+            if (f != null && f.forward == null && !f.removed) {
+                return true;
             }
-            return position < snapshot.length;
+            return findNext(f);
+        }
+
+        private boolean findNext(HashEntry<K, V> f) {
+            while (true) {
+                while (f != null) {
+                    if (!f.live().removed) {
+                        futureEntry = f;
+                        return true;
+                    }
+                    f = f.next;
+                }
+                var t = table;
+                var p = position;
+                while (p < t.length && t[p] == null) {
+                    p++;
+                }
+                if (p == t.length) {
+                    position = p;
+                    futureEntry = null;
+                    return false;
+                }
+                position = p + 1;
+                f = t[p];
+            }
         }
 
         final void makeNext() {
             if (!hasNext()) {
                 throw new TNoSuchElementException();
             }
-            currentEntry = snapshot[position++];
+            var f = futureEntry;
+            currentEntry = f.forward == null ? f : f.live();
+            futureEntry = f.next;
         }
 
         public final void remove() {
@@ -369,7 +431,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         Objects.requireNonNull(newValue);
         var entry = getEntryByKeyAndValue(key, oldValue);
         if (entry != null) {
-            entry.setValue(newValue);
+            entry.value = newValue;
             return true;
         }
         return false;
@@ -383,24 +445,28 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             return null;
         }
 
-        var result = entry.getValue();
-        entry.setValue(value);
+        var result = entry.value;
+        entry.value = value;
         return result;
     }
 
     @Override
     public V getOrDefault(Object key, V defaultValue) {
         var m = getEntry(key);
-        return m != null ? m.getValue() : defaultValue;
+        return m != null ? m.value : defaultValue;
     }
 
     @Override
     public void forEach(BiConsumer<? super K, ? super V> action) {
         Objects.requireNonNull(action);
-        // The action can change the map and resize the table, which relinks the entries, so traverse a snapshot
-        for (var entry : snapshotEntries()) {
-            if (!entry.removed) {
-                action.accept(entry.getKey(), entry.getValue());
+        // The action can change the map, so traverse as the iterators do (see AbstractMapIterator)
+        traversed = true;
+        for (var head : elementData) {
+            for (var e = head; e != null; e = e.next) {
+                var entry = e.forward == null ? e : e.live();
+                if (!entry.removed) {
+                    action.accept(entry.key, entry.value);
+                }
             }
         }
     }
@@ -413,34 +479,25 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         var entry = getEntry(key, hash);
 
         if (entry != null) {
-            return entry.getValue();
+            return entry.value;
         }
         var index = computeIndex(hash);
-        entry = placeHashedEntry(key, index, hash);
-        entry.setValue(value);
+        placeHashedEntry(key, value, index, hash);
         return null;
     }
 
     @Override
     public void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
         Objects.requireNonNull(function);
-        for (var entry : snapshotEntries()) {
-            if (!entry.removed) {
-                entry.setValue(function.apply(entry.getKey(), entry.getValue()));
+        traversed = true;
+        for (var head : elementData) {
+            for (var e = head; e != null; e = e.next) {
+                var entry = e.forward == null ? e : e.live();
+                if (!entry.removed) {
+                    entry.value = Objects.requireNonNull(function.apply(entry.key, entry.value));
+                }
             }
         }
-    }
-
-    // The current entries. Traversals use it, so that they stay valid while the map changes.
-    private HashEntry<K, V>[] snapshotEntries() {
-        var result = newElementArray(elementCount);
-        var i = 0;
-        for (var entry : elementData) {
-            for (var e = entry; e != null; e = e.next) {
-                result[i++] = e;
-            }
-        }
-        return result;
     }
 
     @Override
@@ -451,20 +508,19 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         var hash = key.hashCode();
         var entry = getEntry(key, hash);
         if (entry != null) {
-            return entry.getValue();
+            return entry.value;
         }
 
         var newValue = mappingFunction.apply(key);
         entry = getEntry(key, hash);
         if (entry != null) {
-            return entry.getValue();
+            return entry.value;
         }
         if (newValue == null) {
             return null;
         }
         var index = computeIndex(hash);
-        entry = placeHashedEntry(key, index, hash);
-        entry.setValue(newValue);
+        placeHashedEntry(key, newValue, index, hash);
         return newValue;
     }
 
@@ -482,7 +538,7 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
                 return null;
             }
 
-            var oldValue = entry.getValue();
+            var oldValue = entry.value;
             if (!newValueComputed) {
                 newValueComputed = true;
                 newValue = remappingFunction.apply(key, oldValue);
@@ -490,11 +546,11 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             entry = getEntry(key, hash);
             if (entry == null) {
                 return null;
-            } else if (entry.getValue() == oldValue) {
+            } else if (entry.value == oldValue) {
                 if (newValue == null) {
                     removeEntry(entry);
                 } else {
-                    entry.setValue(newValue);
+                    entry.value = newValue;
                 }
                 return newValue;
             }
@@ -514,20 +570,19 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
                 if (getEntry(key, hash) == null) {
                     if (newValue != null) {
                         var index = computeIndex(hash);
-                        entry = placeHashedEntry(key, index, hash);
-                        entry.setValue(newValue);
+                        placeHashedEntry(key, newValue, index, hash);
                     }
                     return newValue;
                 }
             } else {
-                var oldValue = entry.getValue();
+                var oldValue = entry.value;
                 var newValue = remappingFunction.apply(key, oldValue);
                 entry = getEntry(key, hash);
-                if (entry != null && entry.getValue() == oldValue) {
+                if (entry != null && entry.value == oldValue) {
                     if (newValue == null) {
                         removeEntry(entry);
                     } else {
-                        entry.setValue(newValue);
+                        entry.value = newValue;
                     }
                     return newValue;
                 }
@@ -721,7 +776,8 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         var index = computeIndex(hash);
 
         if (entry == null) {
-            entry = placeHashedEntry(key, index, hash);
+            placeHashedEntry(key, value, index, hash);
+            return null;
         }
 
         V result = entry.value;
@@ -729,12 +785,13 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         return result;
     }
 
-    private HashEntry<K, V> placeHashedEntry(K key, int index, int hash) {
+    // Sets the value before a resize, which may copy the entry
+    private void placeHashedEntry(K key, V value, int index, int hash) {
         var entry = createHashedEntry(key, index, hash);
+        entry.value = value;
         if (++elementCount > threshold) {
             rehash();
         }
-        return entry;
     }
 
     private HashEntry<K, V> createHashedEntry(K key, int index, int hash) {
@@ -766,15 +823,30 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         int length = calculateCapacity(capacity == 0 ? 1 : capacity << 1);
 
         var newData = newElementArray(length);
-        for (int i = 0; i < elementData.length; i++) {
-            var entry = elementData[i];
-            elementData[i] = null;
-            while (entry != null) {
-                int index = indexFor(entry.origKeyHash, length);
-                var next = entry.next;
-                entry.next = newData[index];
-                newData[index] = entry;
-                entry = next;
+        if (traversed) {
+            // A traversal may still read this table, so leave it and its chains as they are
+            traversed = false;
+            for (var head : elementData) {
+                for (var entry = head; entry != null; entry = entry.next) {
+                    int index = indexFor(entry.origKeyHash, length);
+                    var copy = new HashEntry<K, V>(entry.key, entry.origKeyHash);
+                    copy.value = entry.value;
+                    copy.next = newData[index];
+                    newData[index] = copy;
+                    entry.forward = copy;
+                }
+            }
+        } else {
+            for (int i = 0; i < elementData.length; i++) {
+                var entry = elementData[i];
+                elementData[i] = null;
+                while (entry != null) {
+                    int index = indexFor(entry.origKeyHash, length);
+                    var next = entry.next;
+                    entry.next = newData[index];
+                    newData[index] = entry;
+                    entry = next;
+                }
             }
         }
         elementData = newData;
