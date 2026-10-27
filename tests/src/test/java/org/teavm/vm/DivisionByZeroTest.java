@@ -176,6 +176,24 @@ public class DivisionByZeroTest {
         }
     }
 
+    // The division throws even when nothing uses its result.
+    @Test
+    @SuppressWarnings("unused")
+    public void unusedDivisionByZeroThrows() {
+        try {
+            var result = intSeven / intZero;
+            fail("no exception");
+        } catch (ArithmeticException e) {
+            // expected
+        }
+        try {
+            var result = longSeven % longZero;
+            fail("no exception");
+        } catch (ArithmeticException e) {
+            // expected
+        }
+    }
+
     // Integer.divideUnsigned and the like divide with the same instructions in every backend.
     @Test
     public void unsignedDivisionByZeroThrows() {
