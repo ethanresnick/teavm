@@ -33,6 +33,7 @@ import org.teavm.runtime.fs.VirtualFileSystemProvider;
 
 public class TFile implements Serializable, Comparable<TFile> {
     private String path;
+    private transient TPath filePath;
 
     public static final char separatorChar = fs().isWindows() ? '\\' : '/';
     public static final String separator = String.valueOf(separatorChar);
@@ -152,7 +153,12 @@ public class TFile implements Serializable, Comparable<TFile> {
     }
 
     public TPath toPath() {
-        return TFileSystems.getDefault().getPath(getPath());
+        var result = filePath;
+        if (result == null) {
+            result = TFileSystems.getDefault().getPath(getPath());
+            filePath = result;
+        }
+        return result;
     }
 
     public TFile getAbsoluteFile() {
