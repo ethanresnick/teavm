@@ -230,9 +230,8 @@ public class WeakReferenceTest {
     }
 
     @Test
-    // On Wasm GC, ReferenceQueue.supply does not call reportNext, so a thread in remove() never wakes up.
     // On C, ReferenceQueueGenerator generates an empty body for remove(), so remove() returns garbage.
-    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC })
+    @SkipPlatform(TestPlatform.C)
     public void queueRemove() throws InterruptedException {
         var queue = new ReferenceQueue<>();
         var ref = createAndTestRef(queue);
