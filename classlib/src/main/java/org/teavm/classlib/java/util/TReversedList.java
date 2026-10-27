@@ -59,12 +59,12 @@ class TReversedList<E> extends TAbstractList<E> {
 
     @Override
     public E removeFirst() {
-        return base.remove(size() - 1);
+        return base.removeLast();
     }
 
     @Override
     public E removeLast() {
-        return base.remove(0);
+        return base.removeFirst();
     }
 
     @Override
@@ -165,7 +165,10 @@ class TReversedList<E> extends TAbstractList<E> {
 
         @Override
         public void add(E e) {
+            // The base iterator places its cursor after the new element. In reverse order the new
+            // element must come before the cursor, so step the base iterator back over it.
             lit.add(e);
+            lit.previous();
         }
 
         @Override

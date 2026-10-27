@@ -342,10 +342,10 @@ public class TLinkedList<E> extends TAbstractSequentialList<E> implements TDeque
             }
             removeEntry(currentEntry);
             if (currentEntry == prevEntry) {
-                prevEntry = hasNext() ? nextEntry.previous : null;
+                prevEntry = currentEntry.previous;
                 --index;
             } else if (currentEntry == nextEntry) {
-                nextEntry = hasPrevious() ? prevEntry.next : null;
+                nextEntry = currentEntry.next;
             }
             version = modCount;
             currentEntry = null;
@@ -408,6 +408,7 @@ public class TLinkedList<E> extends TAbstractSequentialList<E> implements TDeque
                 lastEntry = newEntry;
             }
             prevEntry = newEntry;
+            ++index;
             ++size;
             ++modCount;
             version = modCount;
@@ -653,12 +654,12 @@ public class TLinkedList<E> extends TAbstractSequentialList<E> implements TDeque
 
         @Override
         public boolean offer(E e) {
-            return list.offerLast(e);
+            return list.offerFirst(e);
         }
 
         @Override
         public E remove() {
-            return list.removeFirst();
+            return list.removeLast();
         }
 
         @Override
@@ -681,12 +682,14 @@ public class TLinkedList<E> extends TAbstractSequentialList<E> implements TDeque
 
         @Override
         public int lastIndexOf(Object o) {
-            return list.size() - list.indexOf(o) - 1;
+            int index = list.indexOf(o);
+            return index >= 0 ? list.size() - index - 1 : -1;
         }
 
         @Override
         public int indexOf(Object o) {
-            return list.size() - list.lastIndexOf(o) - 1;
+            int index = list.lastIndexOf(o);
+            return index >= 0 ? list.size() - index - 1 : -1;
         }
 
         @Override
@@ -731,7 +734,7 @@ public class TLinkedList<E> extends TAbstractSequentialList<E> implements TDeque
 
         @Override
         public boolean add(E e) {
-            list.addLast(e);
+            list.addFirst(e);
             return true;
         }
 

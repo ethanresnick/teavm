@@ -15,9 +15,7 @@
  */
 package org.teavm.classlib.java.util;
 
-import java.lang.reflect.Array;
-
-class TReversedDeque<E> implements TDeque<E> {
+class TReversedDeque<E> extends TAbstractCollection<E> implements TDeque<E> {
     private final TDeque<E> base;
 
     TReversedDeque(TDeque<E> base) {
@@ -50,34 +48,6 @@ class TReversedDeque<E> implements TDeque<E> {
     }
 
     @Override
-    public Object[] toArray() {
-        Object[] arr = new Object[size()];
-        int i = 0;
-        for (var it = base.descendingIterator(); it.hasNext();) {
-            arr[i++] = it.next();
-        }
-        return arr;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T> T[] toArray(T[] a) {
-        int size = size();
-        if (a.length < size) {
-            a = (T[]) Array.newInstance(a.getClass().getComponentType(), size);
-        } else {
-            for (int i = size; i < a.length; ++i) {
-                a[i] = null;
-            }
-        }
-        int i = 0;
-        for (var it = base.descendingIterator(); it.hasNext();) {
-            a[i++] = (T) it.next();
-        }
-        return a;
-    }
-
-    @Override
     public boolean add(E e) {
         base.addFirst(e);
         return true;
@@ -91,59 +61,6 @@ class TReversedDeque<E> implements TDeque<E> {
     @Override
     public void addLast(E e) {
         base.addFirst(e);
-    }
-
-    @Override
-    public boolean remove(Object o) {
-        for (var it = base.descendingIterator(); it.hasNext();) {
-            E e = it.next();
-            if (TObjects.equals(e, o)) {
-                it.remove();
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean containsAll(TCollection<?> c) {
-        return base.contains(c);
-    }
-
-    @Override
-    public boolean addAll(TCollection<? extends E> c) {
-        boolean changed = false;
-        for (var it = c.iterator(); it.hasNext();) {
-            addFirst(it.next());
-            changed = true;
-        }
-        return changed;
-    }
-
-    @Override
-    public boolean removeAll(TCollection<?> c) {
-        boolean changed = false;
-        for (var it = base.descendingIterator(); it.hasNext();) {
-            E e = it.next();
-            if (c.contains(e)) {
-                it.remove();
-                changed = true;
-            }
-        }
-        return changed;
-    }
-
-    @Override
-    public boolean retainAll(TCollection<?> c) {
-        boolean changed = false;
-        for (var it = base.descendingIterator(); it.hasNext();) {
-            E e = it.next();
-            if (!c.contains(e)) {
-                it.remove();
-                changed = true;
-            }
-        }
-        return changed;
     }
 
     @Override

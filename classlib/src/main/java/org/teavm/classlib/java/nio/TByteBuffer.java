@@ -272,10 +272,9 @@ public abstract class TByteBuffer extends TBuffer implements TComparable<TByteBu
 
     @Override
     public int hashCode() {
-        int hashCode = 0;
-        int pos = position();
-        for (int i = position(); i < limit; ++i) {
-            hashCode = 31 * hashCode + get(pos);
+        int hashCode = 1;
+        for (int i = limit - 1; i >= position; --i) {
+            hashCode = 31 * hashCode + get(i);
         }
         return hashCode;
     }
