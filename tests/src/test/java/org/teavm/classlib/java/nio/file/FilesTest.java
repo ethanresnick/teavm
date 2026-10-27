@@ -43,6 +43,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileAttribute;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -610,6 +611,124 @@ public class FilesTest {
             new File("test-file-1").delete();
             new File("test-file-2").delete();
             new File("test-file-3").delete();
+        }
+    }
+
+    // StandardOpenOption.CREATE_NEW: "Create a new file, failing if the file already exists. The check for the
+    // existence of the file and the creation of the file if it does not exist is atomic". Files.createFile: "The
+    // check for the existence of the file and the creation of the new file if it does not exist are a single
+    // operation"; it throws "FileAlreadyExistsException - If a file of that name already exists (optional specific
+    // exception)". Files.copy without REPLACE_EXISTING throws FileAlreadyExistsException "if the target file
+    // exists". Every way to create a new file fails on an existing file or directory and leaves it unchanged.
+    @Test
+    public void createNewFailsOnExistingEntryAndLeavesItUnchanged() throws IOException {
+        var file = Path.of("test-create-new-file");
+        var dir = Path.of("test-create-new-dir");
+        var source = Path.of("test-create-new-source");
+        try {
+            Files.write(source, new byte[] { 7 });
+            Files.createDirectory(dir);
+            Files.createFile(dir.resolve("child"));
+            for (var target : new Path[] { file, dir }) {
+                for (var creation : createNewCalls(source)) {
+                    var message = creation.name + " on " + target;
+                    Files.write(file, new byte[] { 1, 2, 3 });
+                    assertThrows(FileAlreadyExistsException.class, () -> creation.run(target), message);
+                    assertArrayEquals(new byte[] { 1, 2, 3 }, Files.readAllBytes(file), message);
+                    assertTrue(Files.isDirectory(dir), message);
+                    assertTrue(Files.isRegularFile(dir.resolve("child")), message);
+                }
+            }
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(dir.resolve("child"));
+            Files.deleteIfExists(dir);
+            Files.deleteIfExists(source);
+        }
+    }
+
+    interface Creation {
+        void create(Path path) throws IOException;
+    }
+
+    static final class NamedCreation {
+        final String name;
+        final Creation creation;
+
+        NamedCreation(String name, Creation creation) {
+            this.name = name;
+            this.creation = creation;
+        }
+
+        void run(Path path) throws IOException {
+            creation.create(path);
+        }
+    }
+
+    // Every call that must create a new file, failing with FileAlreadyExistsException if anything is at the path.
+    static NamedCreation[] createNewCalls(Path source) {
+        return new NamedCreation[] {
+            new NamedCreation("newOutputStream(CREATE_NEW)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, WRITE)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, WRITE, TRUNCATE_EXISTING)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE,
+                            StandardOpenOption.TRUNCATE_EXISTING).close()),
+            // "If the CREATE_NEW option is present then CREATE is ignored"
+            new NamedCreation("newOutputStream(CREATE_NEW, CREATE)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.CREATE).close()),
+            new NamedCreation("newOutputStream(CREATE_NEW, APPEND)",
+                    p -> Files.newOutputStream(p, StandardOpenOption.CREATE_NEW, StandardOpenOption.APPEND).close()),
+            new NamedCreation("write(bytes, CREATE_NEW)",
+                    p -> Files.write(p, new byte[] { 9 }, StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("write(lines, CREATE_NEW)",
+                    p -> Files.write(p, Arrays.asList("x"), StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("writeString(CREATE_NEW)",
+                    p -> Files.writeString(p, "x", StandardOpenOption.CREATE_NEW)),
+            new NamedCreation("newBufferedWriter(CREATE_NEW)",
+                    p -> Files.newBufferedWriter(p, StandardOpenOption.CREATE_NEW).close()),
+            new NamedCreation("createFile", p -> Files.createFile(p)),
+            new NamedCreation("copy(Path, Path)", p -> Files.copy(source, p)),
+            new NamedCreation("copy(InputStream, Path)",
+                    p -> Files.copy(new ByteArrayInputStream(new byte[] { 9 }), p)),
+        };
+    }
+
+    // Files.createFile, createDirectory, createDirectories, createTempFile and createTempDirectory throw
+    // "UnsupportedOperationException - if the array contains an attribute that cannot be set atomically when
+    // creating the file". An attribute is never silently dropped, and nothing is created.
+    @Test
+    public void creationRejectsUnsupportedAttribute() throws IOException {
+        var attribute = new FileAttribute<String>() {
+            @Override
+            public String name() {
+                return "teavm-test:unsupported";
+            }
+
+            @Override
+            public String value() {
+                return "value";
+            }
+        };
+        var dir = Files.createDirectories(Path.of("test-attribute-dir"));
+        try {
+            assertThrows(UnsupportedOperationException.class, () -> Files.createFile(dir.resolve("f"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectory(dir.resolve("d"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectories(dir.resolve("e"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createDirectories(dir.resolve("g").resolve("h"), attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createTempFile(dir, "abc", null, attribute));
+            assertThrows(UnsupportedOperationException.class,
+                    () -> Files.createTempDirectory(dir, "abc", attribute));
+            try (var entries = Files.list(dir)) {
+                assertEquals(0, entries.count());
+            }
+        } finally {
+            Files.delete(dir);
         }
     }
 

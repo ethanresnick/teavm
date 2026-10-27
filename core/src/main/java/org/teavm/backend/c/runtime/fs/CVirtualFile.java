@@ -114,9 +114,14 @@ public class CVirtualFile implements VirtualFile {
 
     @Override
     public boolean createFile(String fileName) throws IOException {
+        return createFile(fileName, false);
+    }
+
+    @Override
+    public boolean createFile(String fileName, boolean ownerOnly) throws IOException {
         String newPath = constructPath(path, fileName);
         char[] chars = newPath.toCharArray();
-        int result = CFileSystem.createFile(chars, chars.length);
+        int result = CFileSystem.createFile(chars, chars.length, ownerOnly);
         switch (result) {
             case 0:
                 return true;
@@ -129,9 +134,14 @@ public class CVirtualFile implements VirtualFile {
 
     @Override
     public boolean createDirectory(String fileName) {
+        return createDirectory(fileName, false);
+    }
+
+    @Override
+    public boolean createDirectory(String fileName, boolean ownerOnly) {
         String newPath = constructPath(path, fileName);
         char[] chars = newPath.toCharArray();
-        return CFileSystem.createDirectory(chars, chars.length);
+        return CFileSystem.createDirectory(chars, chars.length, ownerOnly);
     }
 
     @Override
