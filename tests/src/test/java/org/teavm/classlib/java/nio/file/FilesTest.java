@@ -32,6 +32,7 @@ import java.nio.file.FileSystemException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.FileVisitor;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
@@ -603,6 +604,19 @@ public class FilesTest {
             new File("test-file-1").delete();
             new File("test-file-2").delete();
             new File("test-file-3").delete();
+        }
+    }
+
+    @Test
+    public void newInputStreamAcceptsReadOptions() throws IOException {
+        var path = Path.of("test-file-read-option");
+        try {
+            Files.write(path, new byte[] { 1, 2 });
+            try (var input = Files.newInputStream(path, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+                assertArrayEquals(new byte[] { 1, 2 }, input.readAllBytes());
+            }
+        } finally {
+            Files.deleteIfExists(path);
         }
     }
 }
