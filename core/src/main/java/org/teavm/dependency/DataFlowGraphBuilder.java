@@ -189,6 +189,11 @@ public class DataFlowGraphBuilder extends AbstractInstructionReader {
     @Override
     public void cloneArray(VariableReader receiver, VariableReader array) {
         builder.addEdge(array.getIndex(), receiver.getIndex());
+        // Cloning an array is an invocation of Object.clone() with the array as `this`, and the
+        // dependency graph passes the array's types to that method (backends such as Wasm GC rely
+        // on it to generate per-type clone functions). Like the instance of any invocation, the
+        // array must therefore keep its node, even when neither it nor the clone escapes otherwise.
+        escaping.add(array.getIndex());
     }
 
     @Override
