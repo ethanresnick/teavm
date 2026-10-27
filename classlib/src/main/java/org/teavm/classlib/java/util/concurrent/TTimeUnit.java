@@ -61,12 +61,10 @@ public enum TTimeUnit {
             nanos -= 1_000_000_000;
         }
         var s = convert(secs, SECONDS);
-        if (s == Long.MAX_VALUE || s == Long.MIN_VALUE) {
-            return s;
-        }
         var n = convert(nanos, NANOSECONDS);
         var sum = s + n;
-        // The sum overflows when both parts have the same sign and the sum's sign differs.
+        // The sum overflows when both parts have the same sign and the sum's sign differs. The nanoseconds part
+        // never has the opposite sign to the seconds part, so this also keeps a saturated seconds part saturated.
         if (((s ^ sum) & (n ^ sum)) < 0) {
             return s < 0 ? Long.MIN_VALUE : Long.MAX_VALUE;
         }
