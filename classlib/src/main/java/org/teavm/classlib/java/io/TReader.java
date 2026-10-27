@@ -16,7 +16,6 @@
 package org.teavm.classlib.java.io;
 
 import java.io.IOException;
-import java.util.Objects;
 import org.teavm.classlib.java.lang.TMath;
 import org.teavm.classlib.java.lang.TObject;
 import org.teavm.classlib.java.lang.TReadable;
@@ -24,6 +23,8 @@ import org.teavm.classlib.java.nio.TCharBuffer;
 import org.teavm.classlib.java.nio.TReadOnlyBufferException;
 
 public abstract class TReader implements TCloseable, TReadable {
+    private static final int TRANSFER_BUFFER_SIZE = 2048;
+
     protected TObject lock;
 
     protected TReader() {
@@ -70,15 +71,20 @@ public abstract class TReader implements TCloseable, TReadable {
     }
 
     public long transferTo(TWriter out) throws IOException {
-        Objects.requireNonNull(out);
-        long transferred = 0;
-        char[] buffer = new char[8192];
-        int n;
-        while ((n = read(buffer, 0, buffer.length)) >= 0) {
-            out.write(buffer, 0, n);
-            transferred += n;
+        if (out == null) {
+            throw new NullPointerException();
         }
-        return transferred;
+        var buffer = new char[TRANSFER_BUFFER_SIZE];
+        var charsTransferred = 0L;
+        while (true) {
+            var charsRead = read(buffer);
+            if (charsRead < 0) {
+                break;
+            }
+            out.write(buffer, 0, charsRead);
+            charsTransferred += charsRead;
+        }
+        return charsTransferred;
     }
 
     public long skip(long n) throws IOException {
