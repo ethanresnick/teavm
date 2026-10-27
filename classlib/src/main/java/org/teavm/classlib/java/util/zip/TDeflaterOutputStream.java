@@ -25,6 +25,8 @@ public class TDeflaterOutputStream extends FilterOutputStream {
     protected byte[] buf;
     protected TDeflater def;
     boolean done;
+    // The JDK's syncFlush flag. flush() emits a sync-flush block only when it is true.
+    private final boolean syncFlush;
 
     public TDeflaterOutputStream(OutputStream os, TDeflater def) {
         this(os, def, BUF_SIZE);
@@ -35,7 +37,20 @@ public class TDeflaterOutputStream extends FilterOutputStream {
     }
 
     public TDeflaterOutputStream(OutputStream os, TDeflater def, int bsize) {
+        this(os, def, bsize, false);
+    }
+
+    public TDeflaterOutputStream(OutputStream os, TDeflater def, boolean syncFlush) {
+        this(os, def, BUF_SIZE, syncFlush);
+    }
+
+    public TDeflaterOutputStream(OutputStream os, boolean syncFlush) {
+        this(os, new TDeflater(), BUF_SIZE, syncFlush);
+    }
+
+    public TDeflaterOutputStream(OutputStream os, TDeflater def, int bsize, boolean syncFlush) {
         super(os);
+        this.syncFlush = syncFlush;
         if (os == null || def == null) {
             throw new NullPointerException();
         }
@@ -52,6 +67,21 @@ public class TDeflaterOutputStream extends FilterOutputStream {
             x = def.deflate(buf);
             out.write(buf, 0, x);
         } while (!def.needsInput());
+    }
+
+    @Override
+    public void flush() throws IOException {
+        if (syncFlush && !def.finished()) {
+            // A full buffer means more flushed output may be pending, so deflate again.
+            int count;
+            do {
+                count = def.deflate(buf, 0, buf.length, TDeflater.SYNC_FLUSH);
+                if (count > 0) {
+                    out.write(buf, 0, count);
+                }
+            } while (count == buf.length);
+        }
+        out.flush();
     }
 
     @Override
