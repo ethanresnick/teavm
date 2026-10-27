@@ -605,4 +605,29 @@ public class FilesTest {
             new File("test-file-3").delete();
         }
     }
+
+    // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
+    @Test
+    public void accessChecksFollowFilePermissions() throws IOException {
+        var file = new File("test-file-permissions");
+        var path = Path.of("test-file-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(Files.isReadable(path));
+            assertTrue(Files.isWritable(path));
+            assertFalse(Files.isExecutable(path));
+
+            assertTrue(file.setExecutable(true));
+            assertTrue(Files.isExecutable(path));
+            assertTrue(file.setReadable(false));
+            assertFalse(Files.isReadable(path));
+            assertTrue(file.setWritable(false));
+            assertFalse(Files.isWritable(path));
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+        assertFalse(Files.isExecutable(path));
+    }
 }

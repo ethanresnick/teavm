@@ -172,6 +172,16 @@ public class CFileSystem implements VirtualFileSystem {
     @Unmanaged
     static native boolean canWrite(char[] name, int nameSize);
 
+    @Import(name = "teavm_file_canExecute")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean canExecute(char[] name, int nameSize);
+
+    @Import(name = "teavm_file_setAccess")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean setAccess(char[] name, int nameSize, int modeBits, boolean enable);
+
     @Import(name = "teavm_file_setReadonly")
     @RuntimeInclude("file.h")
     @Unmanaged

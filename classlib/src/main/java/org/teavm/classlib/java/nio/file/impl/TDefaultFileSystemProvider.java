@@ -406,7 +406,10 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
                     }
                     break;
                 case EXECUTE:
-                    throw new AccessDeniedException(defaultPath.pathString);
+                    if (!vfile.canExecute()) {
+                        throw new AccessDeniedException(defaultPath.pathString);
+                    }
+                    break;
             }
         }
     }

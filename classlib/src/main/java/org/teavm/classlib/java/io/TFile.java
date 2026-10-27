@@ -106,6 +106,11 @@ public class TFile implements Serializable, Comparable<TFile> {
         return virtualFile != null && virtualFile.canWrite();
     }
 
+    public boolean canExecute() {
+        VirtualFile virtualFile = findVirtualFile();
+        return virtualFile != null && virtualFile.canExecute();
+    }
+
     @Override
     public int compareTo(TFile o) {
         return path.compareTo(o.path);

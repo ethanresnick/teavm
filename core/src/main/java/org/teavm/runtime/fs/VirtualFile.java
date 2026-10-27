@@ -44,6 +44,10 @@ public interface VirtualFile {
 
     boolean canWrite();
 
+    default boolean canExecute() {
+        return false;
+    }
+
     long lastModified();
 
     boolean setLastModified(long lastModified);
@@ -52,8 +56,9 @@ public interface VirtualFile {
 
     /**
      * Sets ({@code enable}) or clears the POSIX permission bits {@code modeBits} (for example 0444 for read by
-     * everyone). java.io.File's setReadable, setWritable, and setExecutable use it. A file system without
-     * permission bits returns false.
+     * everyone). java.io.File's setReadable, setWritable, and setExecutable use it. A file system that cannot
+     * distinguish the owner from others applies the bits to everybody. A file system without permission bits
+     * returns false.
      */
     default boolean setAccess(int modeBits, boolean enable) {
         return false;

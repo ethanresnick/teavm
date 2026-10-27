@@ -24,7 +24,7 @@ public class InMemoryVirtualDirectory extends AbstractInMemoryVirtualFile {
     final Map<String, AbstractInMemoryVirtualFile> children = new LinkedHashMap<>();
 
     InMemoryVirtualDirectory(String name) {
-        super(name);
+        super(name, 0777);
     }
 
     @Override
