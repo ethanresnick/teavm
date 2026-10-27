@@ -384,8 +384,9 @@ public class MacTest {
         var mac = Mac.getInstance("HmacSHA256");
         // Javadoc of init(Key): "InvalidKeyException - if the given key is inappropriate for initializing this
         // MAC". A key without an encoding and a key that is not a SecretKey are inappropriate for HMAC.
-        assertThrows(InvalidKeyException.class, () -> mac.init(new RawKey(null)));
-        assertThrows(InvalidKeyException.class, () -> mac.init(new NotSecretKey()));
+        // Separate Macs: after a rejected key, the JDK's Mac may refuse later keys while it picks a provider.
+        assertThrows(InvalidKeyException.class, () -> Mac.getInstance("HmacSHA256").init(new RawKey(null)));
+        assertThrows(InvalidKeyException.class, () -> Mac.getInstance("HmacSHA256").init(new NotSecretKey()));
 
         // HMAC uses the bytes of any secret key, whatever its algorithm name or format.
         mac.init(new SecretKeySpec(new byte[] { 1, 2, 3 }, "HmacSHA256"));
