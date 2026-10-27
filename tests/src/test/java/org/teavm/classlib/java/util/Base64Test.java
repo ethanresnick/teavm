@@ -341,27 +341,54 @@ public class Base64Test {
     // will not be separated in lines".
     @Test
     public void mimeEncoderMatchesReference() {
+        forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> {
+            assertEquals(expected, encoder.encodeToString(data), message);
+            assertEquals(expectedUnpadded, encoder.withoutPadding().encodeToString(data), message);
+        });
+        var random = new Random(76);
+        for (var length = 0; length <= 100; ++length) {
+            var data = new byte[length];
+            random.nextBytes(data);
+            assertEquals(wrap(referenceEncode(data, false, true), 76, "\r\n"),
+                    Base64.getMimeEncoder().encodeToString(data), Arrays.toString(data));
+        }
+    }
+
+    @Test
+    public void mimeDecoderDecodesMimeEncoderOutput() {
+        forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> {
+            assertArrayEquals(data, Base64.getMimeDecoder().decode(expected), message);
+            assertArrayEquals(data, Base64.getMimeDecoder().decode(expectedUnpadded), message);
+        });
+    }
+
+    @Test
+    public void mimeArrayAndBufferOverloads() {
+        forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> checkOverloads(data,
+                expected.getBytes(StandardCharsets.ISO_8859_1), encoder, Base64.getMimeDecoder(), message));
+    }
+
+    interface MimeCase {
+        void check(byte[] data, String expected, String expectedUnpadded, Base64.Encoder encoder, String message);
+    }
+
+    // The MIME cases are split over the three tests above: in one test they crash the C backend's GC (a segfault
+    // in GC.markFromOldGeneration, seen on Linux with the unoptimized build), a GC bug rather than a Base64 one.
+    private static void forEachMimeCase(MimeCase mimeCase) {
         var random = new Random(69);
         var separators = new byte[][] { {}, { '\n' }, { '\r', '\n' }, { '*', '#', '!' } };
         for (var length = 0; length <= 100; ++length) {
             var data = new byte[length];
             random.nextBytes(data);
-            var message = Arrays.toString(data);
             var padded = referenceEncode(data, false, true);
             var unpadded = referenceEncode(data, false, false);
-            assertEquals(wrap(padded, 76, "\r\n"), Base64.getMimeEncoder().encodeToString(data), message);
             for (var lineLength : new int[] { -4, 0, 3, 4, 5, 8, 10, 76, 77 }) {
                 for (var separator : separators) {
                     var separatorText = new String(separator, StandardCharsets.ISO_8859_1);
-                    var encoder = Base64.getMimeEncoder(lineLength, separator);
-                    var expected = wrap(padded, lineLength & ~3, separatorText);
-                    var lineMessage = message + " " + lineLength + " " + separatorText;
-                    assertEquals(expected, encoder.encodeToString(data), lineMessage);
-                    assertEquals(wrap(unpadded, lineLength & ~3, separatorText),
-                            encoder.withoutPadding().encodeToString(data), lineMessage);
-                    assertArrayEquals(data, Base64.getMimeDecoder().decode(expected), lineMessage);
-                    checkOverloads(data, expected.getBytes(StandardCharsets.ISO_8859_1), encoder,
-                            Base64.getMimeDecoder(), lineMessage);
+                    mimeCase.check(data, wrap(padded, lineLength & ~3, separatorText),
+                            wrap(unpadded, lineLength & ~3, separatorText),
+                            Base64.getMimeEncoder(lineLength, separator),
+                            Arrays.toString(data) + " " + lineLength + " " + separatorText);
                 }
             }
         }
