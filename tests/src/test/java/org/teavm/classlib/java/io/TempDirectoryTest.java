@@ -20,28 +20,29 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
-import org.teavm.junit.TestPlatform;
 import org.teavm.runtime.fs.VirtualFileSystemProvider;
 import org.teavm.runtime.fs.memory.InMemoryVirtualFileSystem;
 
+// File.createTempFile: "If the directory argument is null then the system-dependent default temporary-file directory
+// will be used. The default temporary-file directory is specified by the system property java.io.tmpdir."
+// Files.createTempFile(String, String, FileAttribute...) and Files.createTempDirectory(String, FileAttribute...)
+// create their file "in the default temporary-file directory".
 @TeaVMTest
+// The JDK reads java.io.tmpdir once, at startup, so System.setProperty does not move its temporary files.
 @SkipJVM
 @EachTestCompiledSeparately
 public class TempDirectoryTest {
     // The default file system keeps the VirtualFileSystem that it finds first, and the system properties take
     // their defaults once. So this test installs its file system before any use of either, in its own program.
-    // On C, the default temporary directory comes from the C file system (CFileSystem.tempDirectory), not from
-    // VirtualFileSystem, so an in-memory file system cannot set it there.
     @Test
-    @SkipPlatform(TestPlatform.C)
     public void tempFilesGoToJavaIoTmpdir() throws IOException {
         VirtualFileSystemProvider.setInstance(new InMemoryVirtualFileSystem() {
-            // Overrides VirtualFileSystem.tempDirectory(); no @Override, so that the test also compiles without it.
+            @Override
             public String tempDirectory() {
                 return "/fake-temp";
             }
@@ -50,20 +51,19 @@ public class TempDirectoryTest {
         Files.createDirectories(Path.of("/other-temp"));
 
         assertEquals("/fake-temp", System.getProperty("java.io.tmpdir"));
-        assertEquals("/fake-temp", File.createTempFile("abc", ".txt").getParent());
-        assertEquals(Path.of("/fake-temp"), Files.createTempFile("abc", ".txt").getParent());
-        assertEquals(Path.of("/fake-temp"), Files.createTempDirectory("abc").getParent());
+        assertTempFilesIn("/fake-temp");
 
         System.setProperty("java.io.tmpdir", "/other-temp");
-        try {
-            assertEquals("/other-temp", File.createTempFile("abc", null).getParent());
-            assertEquals(Path.of("/other-temp"), Files.createTempFile("abc", null).getParent());
-            assertEquals(Path.of("/other-temp"), Files.createTempDirectory("abc").getParent());
-        } finally {
-            System.setProperty("java.io.tmpdir", "/fake-temp");
-        }
+        assertTempFilesIn("/other-temp");
+
+        // The default shows through again once the program's own value is gone.
+        System.clearProperty("java.io.tmpdir");
+        assertEquals("/fake-temp", System.getProperty("java.io.tmpdir"));
+        assertTempFilesIn("/fake-temp");
     }
 
+    // Programmatic changes to java.io.tmpdir "are not guaranteed to have any effect" in the JDK. A TeaVM program has
+    // no command line to set the property on, so TeaVM applies them, to every later call.
     @Test
     public void tempFilesFollowJavaIoTmpdir() throws IOException {
         var defaultDir = System.getProperty("java.io.tmpdir");
@@ -72,21 +72,54 @@ public class TempDirectoryTest {
         if (!Files.isDirectory(Path.of(defaultDir))) {
             Files.createDirectories(Path.of(defaultDir));
         }
-        var other = Files.createTempDirectory("teavm-tmpdir-test");
-        System.setProperty("java.io.tmpdir", other.toString());
+        var base = Files.createTempDirectory("teavm-tmpdir-test").toString();
+        var dirs = List.of(base, base + "/nested/deeper", base + "/with space", base + "/trailing/", base);
         try {
-            var file = File.createTempFile("abc", null);
-            var path = Files.createTempFile("abc", null);
-            var dir = Files.createTempDirectory("abc");
-            assertEquals(other.toString(), file.getParent());
-            assertEquals(other, path.getParent());
-            assertEquals(other, dir.getParent());
-            file.delete();
-            Files.delete(path);
-            Files.delete(dir);
+            for (var dir : dirs) {
+                Files.createDirectories(Path.of(dir));
+                System.setProperty("java.io.tmpdir", dir);
+                assertTempFilesIn(dir);
+            }
+
+            // A directory given explicitly wins over the property.
+            var explicit = new File(base, "explicit");
+            explicit.mkdir();
+            System.setProperty("java.io.tmpdir", base + "/nested");
+            var file = File.createTempFile("abc", null, explicit);
+            var path = Files.createTempFile(Path.of(explicit.getPath()), "abc", null);
+            var tempDir = Files.createTempDirectory(Path.of(explicit.getPath()), "abc");
+            assertEquals(explicit.getPath(), file.getParent());
+            assertEquals(Path.of(explicit.getPath()), path.getParent());
+            assertEquals(Path.of(explicit.getPath()), tempDir.getParent());
         } finally {
             System.setProperty("java.io.tmpdir", defaultDir);
-            Files.delete(other);
+            deleteTree(new File(base));
         }
+        assertTempFilesIn(defaultDir);
+    }
+
+    private static void assertTempFilesIn(String dir) throws IOException {
+        var file = File.createTempFile("abc", ".txt");
+        var path = Files.createTempFile("abc", null);
+        var tempDir = Files.createTempDirectory("abc");
+        try {
+            assertEquals(new File(dir).getPath(), file.getParent());
+            assertEquals(Path.of(dir), path.getParent());
+            assertEquals(Path.of(dir), tempDir.getParent());
+        } finally {
+            file.delete();
+            Files.delete(path);
+            Files.delete(tempDir);
+        }
+    }
+
+    private static void deleteTree(File file) {
+        var children = file.listFiles();
+        if (children != null) {
+            for (var child : children) {
+                deleteTree(child);
+            }
+        }
+        file.delete();
     }
 }

@@ -223,20 +223,16 @@ public final class TSystem extends TObject {
         }
     }
 
-    // As in the JDK, File.createTempFile and Files.createTempFile use java.io.tmpdir, so a program can move its
-    // temporary files with System.setProperty. Its default comes from the file system.
+    // File.createTempFile and Files.createTempFile read java.io.tmpdir on every call. The JDK reads it once, at
+    // startup, which its Javadoc allows: "programmatic changes to this property are not guaranteed to have any
+    // effect". A TeaVM program has no command line to set the property on, so System.setProperty is the only way.
     public static String getTempDir() {
         String dir = getProperty("java.io.tmpdir");
         return dir != null ? dir : defaultTempDir();
     }
 
     private static String defaultTempDir() {
-        if (!PlatformDetector.isC()) {
-            return VirtualFileSystemProvider.getInstance().tempDirectory();
-        }
-        Address resultPtr = Memory.malloc(Address.sizeOf());
-        int length = CFileSystem.tempDirectory(resultPtr);
-        return VirtualFileSystemProvider.getInstance().canonicalize(toJavaString(resultPtr, length));
+        return VirtualFileSystemProvider.getInstance().tempDirectory();
     }
 
     private static String getHomeDir() {

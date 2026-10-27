@@ -31,7 +31,8 @@ public interface VirtualFileSystem {
     String[] getRoots();
 
     /**
-     * Returns the directory for temporary files: the default of the {@code java.io.tmpdir} system property.
+     * Returns the default directory for temporary files: the default value of the {@code java.io.tmpdir} system
+     * property, which {@code File.createTempFile} and {@code Files.createTempFile} use.
      */
     default String tempDirectory() {
         return "/tmp";
