@@ -22,6 +22,7 @@ import org.teavm.classlib.java.lang.TObject;
 import org.teavm.classlib.java.lang.TThrowable;
 import org.teavm.classlib.java.util.THashMap;
 import org.teavm.classlib.java.util.TMap;
+import org.teavm.classlib.java.util.TResourceBundle;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.impl.JS;
 
@@ -281,6 +282,17 @@ public class TLogger {
 
     public boolean isLoggable(@SuppressWarnings("unused") TLevel level) {
         return true;
+    }
+
+    // TeaVM's loggers have no resource bundles, so, as in the JDK for a logger made by
+    // getLogger(name), the bundle name is null.
+    public String getResourceBundleName() {
+        return null;
+    }
+
+    // The bundle itself, also null for the same reason.
+    public TResourceBundle getResourceBundle() {
+        return null;
     }
 
     public String getName() {

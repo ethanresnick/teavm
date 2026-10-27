@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.time.Instant;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -44,5 +45,11 @@ public class DateTest {
         assertEquals(2023, date.getYear());
         assertEquals(1, date.getMonth());
         assertEquals(20, date.getDate());
+    }
+
+    @Test
+    public void instantConversions() {
+        assertEquals(Instant.ofEpochMilli(1600000000123L), new Date(1600000000123L).toInstant());
+        assertEquals(5, Date.from(Instant.ofEpochMilli(5)).getTime());
     }
 }

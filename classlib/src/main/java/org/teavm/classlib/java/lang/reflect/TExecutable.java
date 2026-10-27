@@ -86,7 +86,12 @@ public abstract class TExecutable extends TAccessibleObject implements TMember, 
             resolveParameterTypes();
             var reflection = methodInfo.reflection();
             if (reflection == null) {
-                genericParameterTypes = new TType[0];
+                // As in the JDK, the erased types when a method has no generic signature.
+                genericParameterTypes = new TType[parameterTypes.length];
+                for (var i = 0; i < genericParameterTypes.length; ++i) {
+                    genericParameterTypes[i] = (TClass<?>) (Object) ClassInfoUtil.resolve(
+                            methodInfo.parameterType(i)).classObject();
+                }
             } else {
                 genericParameterTypes = new TType[parameterTypes.length];
                 var count = reflection.parameterInfoCount();

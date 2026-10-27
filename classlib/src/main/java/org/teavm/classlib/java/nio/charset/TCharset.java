@@ -74,6 +74,16 @@ public abstract class TCharset implements Comparable<TCharset> {
         return charset;
     }
 
+    // As in the JDK, an illegal name throws IllegalCharsetNameException and null throws
+    // IllegalArgumentException.
+    public static boolean isSupported(String charsetName) {
+        if (charsetName == null) {
+            throw new IllegalArgumentException();
+        }
+        checkCanonicalName(charsetName);
+        return Charsets.value.get(charsetName.toUpperCase()) != null;
+    }
+
     public static TCharset defaultCharset() {
         return Charsets.value.get("UTF-8");
     }

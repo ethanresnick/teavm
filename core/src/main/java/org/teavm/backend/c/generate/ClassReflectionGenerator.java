@@ -260,6 +260,18 @@ class ClassReflectionGenerator {
         writer.outdent().print("}");
     }
 
+    /**
+     * The method's modifiers as declared. The linker marks a method that the program never calls abstract when it
+     * drops its body, so the linked method can report ABSTRACT for a method with a body (a default method's
+     * isDefault() was then false). The class source before linking keeps the declaration.
+     */
+    private int declaredModifiers(MethodReader method) {
+        var cls = context.getDependencies().getClassSource().get(method.getOwnerName());
+        var declared = cls != null ? cls.getMethod(method.getDescriptor()) : null;
+        var source = declared != null ? declared : method;
+        return ElementModifier.asModifiersInfo(source.readModifiers(), source.getLevel());
+    }
+
     private void generateMethod(MethodReader method) {
         includes.addInclude("<stddef.h>");
 
@@ -268,8 +280,7 @@ class ClassReflectionGenerator {
         var nameIndex = context.getStringPool().getStringIndex(method.getName());
         writer.print(".name = TEAVM_GET_STRING_ADDRESS(").print(String.valueOf(nameIndex)).println("),");
 
-        var modifiers = ElementModifier.asModifiersInfo(method.readModifiers(), method.getLevel());
-        writer.print(".modifiers = ").print(String.valueOf(modifiers)).println(",");
+        writer.print(".modifiers = ").print(String.valueOf(declaredModifiers(method))).println(",");
 
         writer.print(".returnType = ");
         writeType(method.getResultType());

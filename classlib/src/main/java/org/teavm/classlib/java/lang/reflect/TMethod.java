@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
@@ -50,25 +51,109 @@ public class TMethod extends TExecutable implements TMember {
         return genericReturnType;
     }
 
+    public boolean isDefault() {
+        // A public, non-abstract, non-static method of an interface.
+        int flags = getModifiers() & (TModifier.PUBLIC | TModifier.ABSTRACT | TModifier.STATIC);
+        return flags == TModifier.PUBLIC && getDeclaringClass().isInterface();
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append(TModifier.toString(getModifiers(), (getDeclaringClass().getModifiers() & TModifier.INTERFACE) != 0));
-        if (sb.length() > 0) {
-            sb.append(' ');
-        }
-        sb.append(getReturnType().getName()).append(' ').append(getDeclaringClass().getName()).append('.')
-                .append(getName()).append('(');
-        TClass<?>[] parameterTypes = getParameterTypes();
-        if (parameterTypes.length > 0) {
-            sb.append(parameterTypes[0].getName());
-            for (int i = 1; i < parameterTypes.length; ++i) {
-                sb.append(',').append(parameterTypes[i].getName());
+        appendModifiers(sb);
+        sb.append(getReturnType().getTypeName()).append(' ');
+        appendMemberName(sb);
+        TClass<?>[] params = getParameterTypes();
+        sb.append('(');
+        for (int i = 0; i < params.length; i++) {
+            if (i > 0) {
+                sb.append(',');
             }
+            sb.append(params[i].getTypeName());
         }
         sb.append(')');
-
+        TClass<?>[] exceptions = getExceptionTypes();
+        for (int i = 0; i < exceptions.length; i++) {
+            sb.append(i == 0 ? " throws " : ",").append(exceptions[i].getTypeName());
+        }
         return sb.toString();
+    }
+
+    public String toGenericString() {
+        StringBuilder sb = new StringBuilder();
+        appendModifiers(sb);
+        TTypeVariable<?>[] typeParams = getTypeParameters();
+        if (typeParams.length > 0) {
+            sb.append('<');
+            for (int i = 0; i < typeParams.length; i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                appendTypeParameter(sb, typeParams[i]);
+            }
+            sb.append("> ");
+        }
+        sb.append(getGenericReturnType().getTypeName()).append(' ');
+        appendMemberName(sb);
+        TType[] params = getGenericParameterTypes();
+        sb.append('(');
+        for (int i = 0; i < params.length; i++) {
+            if (i > 0) {
+                sb.append(',');
+            }
+            String name = params[i].getTypeName();
+            // The last parameter of a varargs method prints as "T..." instead of "T[]".
+            if (i == params.length - 1 && isVarArgs() && name.endsWith("[]")) {
+                name = name.substring(0, name.length() - 2) + "...";
+            }
+            sb.append(name);
+        }
+        sb.append(')');
+        TType[] exceptions = getExceptionTypes();
+        for (int i = 0; i < exceptions.length; i++) {
+            sb.append(i == 0 ? " throws " : ",").append(exceptions[i].getTypeName());
+        }
+        return sb.toString();
+    }
+
+    // Appends the method modifiers (JLS 8.4.3) in JLS order, each followed by a space.
+    // "default" goes after "abstract". Other flag bits, such as bridge and varargs, never print.
+    private void appendModifiers(StringBuilder sb) {
+        int mods = getModifiers();
+        appendIf(sb, mods, TModifier.PUBLIC, "public");
+        appendIf(sb, mods, TModifier.PROTECTED, "protected");
+        appendIf(sb, mods, TModifier.PRIVATE, "private");
+        appendIf(sb, mods, TModifier.ABSTRACT, "abstract");
+        if (isDefault()) {
+            sb.append("default ");
+        }
+        appendIf(sb, mods, TModifier.STATIC, "static");
+        appendIf(sb, mods, TModifier.FINAL, "final");
+        appendIf(sb, mods, TModifier.SYNCHRONIZED, "synchronized");
+        appendIf(sb, mods, TModifier.NATIVE, "native");
+        appendIf(sb, mods, TModifier.STRICT, "strictfp");
+    }
+
+    private static void appendIf(StringBuilder sb, int mods, int flag, String word) {
+        if ((mods & flag) != 0) {
+            sb.append(word).append(' ');
+        }
+    }
+
+    private void appendMemberName(StringBuilder sb) {
+        sb.append(getDeclaringClass().getTypeName()).append('.').append(getName());
+    }
+
+    // Writes "T", or "T extends A & B" when the bounds say more than Object.
+    private static void appendTypeParameter(StringBuilder sb, TTypeVariable<?> variable) {
+        sb.append(variable.getName());
+        TType[] bounds = variable.getBounds();
+        if (bounds.length == 1 && bounds[0] == (Object) Object.class) {
+            return;
+        }
+        for (int i = 0; i < bounds.length; i++) {
+            sb.append(i == 0 ? " extends " : " & ").append(bounds[i].getTypeName());
+        }
     }
 
     public Object invoke(Object obj, Object... args) throws TIllegalAccessException, TIllegalArgumentException,
@@ -84,7 +169,10 @@ public class TMethod extends TExecutable implements TMember {
             }
         }
         validateArgs(args);
-        if ((methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+        // Only the C backend initializes the class here. On Wasm GC the reflective caller initializes
+        // it, at a suspend point when the initializer can suspend; this call could not suspend (ClassInfo.initialize
+        // is an intrinsic that AsyncMethodFinder never marks async). On JS a static method initializes its class.
+        if (PlatformDetector.isC() && (methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
             declaringClass.initialize();
         }
 

@@ -17,6 +17,7 @@ package org.teavm.classlib.java.util.logging;
 
 import org.teavm.classlib.java.io.TSerializable;
 import org.teavm.classlib.java.lang.*;
+import org.teavm.classlib.java.util.TResourceBundle;
 
 public class TLogRecord extends TObject implements TSerializable {
     private static long sequenceNumberGenerator;
@@ -37,6 +38,29 @@ public class TLogRecord extends TObject implements TSerializable {
         this.millis = TSystem.currentTimeMillis();
         this.sequenceNumber = sequenceNumberGenerator++;
         this.threadID = TThread.currentThread().getId();
+    }
+
+    // The JDK keeps the name of the record's resource bundle. TeaVM's logging has no resource bundles, so nothing
+    // localizes with it.
+    private String resourceBundleName;
+
+    public String getResourceBundleName() {
+        return resourceBundleName;
+    }
+
+    public void setResourceBundleName(String name) {
+        resourceBundleName = name;
+    }
+
+    // The record's resource bundle, kept as the JDK keeps it.
+    private TResourceBundle resourceBundle;
+
+    public TResourceBundle getResourceBundle() {
+        return resourceBundle;
+    }
+
+    public void setResourceBundle(TResourceBundle bundle) {
+        resourceBundle = bundle;
     }
 
     public TLevel getLevel() {

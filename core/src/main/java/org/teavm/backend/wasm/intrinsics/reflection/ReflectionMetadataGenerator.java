@@ -331,8 +331,7 @@ public class ReflectionMetadataGenerator {
             }
 
             if (methodInfoStruct.modifiersIndex() >= 0) {
-                var modifiers = ElementModifier.asModifiersInfo(method.readModifiers(), method.getLevel());
-                builder.i32Const(modifiers);
+                builder.i32Const(declaredModifiers(method));
             }
 
             if (methodInfoStruct.returnTypeIndex() >= 0) {
@@ -878,6 +877,9 @@ public class ReflectionMetadataGenerator {
         module.functions.add(function);
         function.setReferenced(true);
         var async = asyncMethods.test(method.getReference());
+        // A static method's class initializer can suspend, even when the method itself cannot.
+        var initAsync = method.hasModifier(ElementModifier.STATIC) && asyncMethods.test(
+                new MethodReference(method.getOwnerName(), "<clinit>", ValueType.VOID));
 
         var dataField = objectArrayClass.getStructure().getFields()
                 .get(WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET);
@@ -895,7 +897,7 @@ public class ReflectionMetadataGenerator {
         WasmFunction callee = null;
         var virtual = false;
         if (method.hasModifier(ElementModifier.STATIC)) {
-            initClass(classInfo, method.getOwnerName(), function);
+            initClass(classInfo, method.getOwnerName(), function, initAsync);
             callee = functions.forStaticMethod(method.getReference());
         } else {
             virtual = !method.hasModifier(ElementModifier.FINAL) && method.getLevel() != AccessLevel.PRIVATE
@@ -941,7 +943,7 @@ public class ReflectionMetadataGenerator {
             boxIfNecessary(body, method.getResultType());
         }
 
-        if (async) {
+        if (async || initAsync) {
             var transformation = new CoroutineTransformation(functionTypes, functions, classInfoProvider);
             transformation.transform(function);
         }
@@ -949,13 +951,35 @@ public class ReflectionMetadataGenerator {
         return function;
     }
 
+    /**
+     * The method's modifiers as declared. The linker marks a method that the program never calls abstract when it
+     * drops its body, so the linked method can report ABSTRACT for a method with a body (a default method's
+     * isDefault() was then false). The class source before linking keeps the declaration.
+     */
+    private int declaredModifiers(MethodReader method) {
+        var cls = dependencies.getClassSource().get(method.getOwnerName());
+        var declared = cls != null ? cls.getMethod(method.getDescriptor()) : null;
+        var source = declared != null ? declared : method;
+        return ElementModifier.asModifiersInfo(source.readModifiers(), source.getLevel());
+    }
+
     private void initClass(WasmGCClassInfo classInfo, String className, WasmFunction function) {
+        initClass(classInfo, className, function, false);
+    }
+
+    /**
+     * Calls the class initializer through its pointer. suspend marks the call as a suspend point, as
+     * WasmGCInstructionGenerationVisitor does for an initializer that can suspend. Without it, the coroutine
+     * transformation does not see the initializer suspend: the caller went on, and the next use of the class
+     * entered the initializer again.
+     */
+    private void initClass(WasmGCClassInfo classInfo, String className, WasmFunction function, boolean suspend) {
         if (classInitInfo.isDynamicInitializer(className)
                 && classInfo.getInitializerPointer() != null) {
             var initType = functionTypes.of(null);
             function.getBody().builder()
                     .getGlobal(classInfo.getInitializerPointer())
-                    .callReference(initType);
+                    .callReference(initType, suspend);
         }
     }
 
