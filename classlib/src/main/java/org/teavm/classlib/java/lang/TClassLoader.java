@@ -59,11 +59,27 @@ public abstract class TClassLoader extends TObject {
         if (c == null) {
             c = findClass(name);
         }
+        if (resolve) {
+            resolveClass(c);
+        }
         return c;
     }
 
     protected TClass<?> findClass(String name) throws TClassNotFoundException {
         throw new TClassNotFoundException();
+    }
+
+    // A loader can not define classes in TeaVM, and the compiled program never resolves a class reference through
+    // a user loader, so no loader is ever recorded as a class's defining or initiating loader.
+    protected final TClass<?> findLoadedClass(String name) {
+        return null;
+    }
+
+    // TeaVM links every class at compile time, so there is nothing left to link.
+    protected final void resolveClass(TClass<?> c) {
+        if (c == null) {
+            throw new NullPointerException();
+        }
     }
 
     /**
