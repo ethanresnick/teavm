@@ -411,8 +411,12 @@ public class SimpleDateFormatTest {
     // only, so this test doesn't run on the JVM). Each lookup takes the longest name that the text starts
     // with, ignoring case. This checks that against a brute-force scan, for every display name and every
     // ID, in two cases, followed by text that may or may not continue a longer name.
+    // Skipped on C: this many parses make the C runtime's GC hang in markFromOldGeneration or crash with
+    // SIGSEGV. 30000 parses of "... Europe/Paris" crash the same way without this PR's change, so it is a
+    // separate C GC bug (see numericTimeZoneRangeSweep); the targeted GMT tests above still run on C.
     @Test
     @SkipJVM
+    @SkipPlatform(TestPlatform.C)
     public void everyZoneNameParsedUpToLongestMatch() {
         String[] ids = TimeZone.getAvailableIDs();
         String[] displayNames = new String[ids.length];
