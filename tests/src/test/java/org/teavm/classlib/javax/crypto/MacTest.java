@@ -26,7 +26,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
@@ -119,6 +121,20 @@ public class MacTest {
                 "6ea83f8e7315072c0bdaa33b93a26fc1659974637a9db8a887d06c05a7f35a66" }
     };
 
+    // SHA-256 over the MACs of sweep(): every key length from 0 to 260 and every message length from 0 to 300,
+    // which crosses the 64- and 128-byte block sizes and the point where the key is hashed first. Computed with
+    // the JDK's own Mac; the JVM run of this test checks the values against it.
+    private static final String[][] SWEEP = {
+            { "HmacMD5", "ae7028cfdb18ebbc8e72aa107658fac276689fa551592145b952c824df178e7a" },
+            { "HmacSHA1", "cf90151a28dbad594649e729fd9f76bd5f03ce6595a31154b3531937db9bd2d5" },
+            { "HmacSHA224", "e1ffab5f2ac707ba7a1b47c5e003f9d21fea90c78d91fd6231620b274a141609" },
+            { "HmacSHA256", "818ee4090905ec569612688619f7f09fe198706844de44476dddce0d6e71c05b" },
+            { "HmacSHA384", "bd361ac68bcf7f054c40c57d92828d0f741ce21dec1952f24328d6eab45bd900" },
+            { "HmacSHA512", "59a8dbcacb9c68d4891ad91a2f6a1f829711fb168c2160623688e9b2cc4c8f8c" },
+            { "HmacSHA512/224", "9d7b01e10cf8b41987fef77ac22a7f9ef3bcec00e46f9be1f7dcddc0ae514dd2" },
+            { "HmacSHA512/256", "ad786bd1a66e269be507f57fbf4a3436cd74ac71f8cf74f44a4a4110d4eac10c" }
+    };
+
     @Test
     public void rfc2202Vectors() throws Exception {
         var data = new String[] { "4869205468657265", "7768617420646f2079612077616e7420666f72206e6f7468696e673f",
@@ -134,6 +150,13 @@ public class MacTest {
         for (var i = 0; i < data.length; ++i) {
             assertEquals(RFC_2202[i][0], hmac("HmacMD5", md5Keys[i], data[i]), "HmacMD5 case " + (i + 1));
             assertEquals(RFC_2202[i][1], hmac("HmacSHA1", sha1Keys[i], data[i]), "HmacSHA1 case " + (i + 1));
+        }
+    }
+
+    @Test
+    public void matchesJdkAcrossKeyAndMessageLengths() throws Exception {
+        for (var entry : SWEEP) {
+            assertEquals(entry[1], sweep(entry[0]), entry[0]);
         }
     }
 
@@ -182,6 +205,209 @@ public class MacTest {
     }
 
     @Test
+    public void incrementalUpdatesMatchOneShot() throws Exception {
+        // Every update form, including ByteBuffer views whose arrayOffset() is not 0, gives the same MAC as one
+        // doFinal(input) call, for every message length from 0 to 300.
+        var mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(ascii("incremental key"), "HmacSHA256"));
+        for (var n = 0; n <= 300; ++n) {
+            var msg = new byte[n];
+            for (var i = 0; i < n; ++i) {
+                msg[i] = (byte) (i * 13 + n * 5 + 3);
+            }
+            var expected = mac.doFinal(msg);
+            var pos = 0;
+            var step = 0;
+            while (pos < n) {
+                var len = Math.min(n - pos, (step * 7 + n) % 23);
+                var view = ByteBuffer.wrap(msg);
+                view.position(pos);
+                view.limit(pos + len);
+                switch (step++ % 6) {
+                    case 0:
+                        mac.update(msg[pos]);
+                        len = 1;
+                        break;
+                    case 1:
+                        mac.update(msg, pos, len);
+                        break;
+                    case 2:
+                        mac.update(ByteBuffer.wrap(msg, pos, len));
+                        break;
+                    case 3:
+                        mac.update(view.slice());
+                        break;
+                    case 4:
+                        mac.update(view.duplicate());
+                        break;
+                    default:
+                        mac.update(view.asReadOnlyBuffer());
+                        break;
+                }
+                pos += len;
+            }
+            assertArrayEquals(expected, mac.doFinal(), "length " + n);
+        }
+    }
+
+    @Test
+    public void byteBufferViews() throws Exception {
+        // Javadoc of update(ByteBuffer): "Processes input.remaining() bytes in the ByteBuffer input, starting at
+        // input.position(). Upon return, the buffer's position will be equal to its limit; its limit will not have
+        // changed."
+        var data = new byte[200];
+        for (var i = 0; i < data.length; ++i) {
+            data[i] = (byte) (i * 7 + 1);
+        }
+        var mac = Mac.getInstance("HmacSHA512");
+        mac.init(new SecretKeySpec(ascii("buffer key"), "HmacSHA512"));
+        mac.update(data, 30, 150);
+        var expected = mac.doFinal();
+
+        var base = ByteBuffer.wrap(data);
+        base.position(20);
+        var slice = base.slice();
+        slice.position(10);
+        slice.limit(160);
+        var readOnlySlice = base.slice().asReadOnlyBuffer();
+        readOnlySlice.position(10);
+        readOnlySlice.limit(160);
+        var view = ByteBuffer.wrap(data);
+        view.position(30);
+        view.limit(180);
+        var direct = ByteBuffer.allocateDirect(200);
+        direct.put(data);
+        direct.position(30);
+        direct.limit(180);
+        var buffers = new ByteBuffer[] { slice, readOnlySlice, view.duplicate(), view.asReadOnlyBuffer(),
+                view.slice(), ByteBuffer.wrap(data, 30, 150), direct };
+        for (var i = 0; i < buffers.length; ++i) {
+            var buffer = buffers[i];
+            var limit = buffer.limit();
+            mac.update(buffer);
+            assertEquals(limit, buffer.position(), "buffer " + i);
+            assertEquals(limit, buffer.limit(), "buffer " + i);
+            assertArrayEquals(expected, mac.doFinal(), "buffer " + i);
+        }
+        // An empty buffer changes nothing.
+        mac.update(ByteBuffer.allocate(0));
+        assertArrayEquals(mac.doFinal(), mac.doFinal(new byte[0]));
+    }
+
+    @Test
+    public void cloneCopiesState() throws Exception {
+        var key = new SecretKeySpec(ascii("clone key"), "HmacSHA512");
+        var mac = Mac.getInstance("HmacSHA512");
+        mac.init(key);
+        var expectedAb = mac.doFinal(ascii("ab"));
+        var expectedAc = mac.doFinal(ascii("ac"));
+
+        // A clone taken mid-stream continues from the same state, independently of the original.
+        mac.update((byte) 'a');
+        var copy = (Mac) mac.clone();
+        assertEquals("HmacSHA512", copy.getAlgorithm());
+        assertEquals(64, copy.getMacLength());
+        mac.update((byte) 'b');
+        copy.update((byte) 'c');
+        assertArrayEquals(expectedAb, mac.doFinal());
+        assertArrayEquals(expectedAc, copy.doFinal());
+
+        // Re-initializing the original with another key does not change the key of the clone.
+        mac.init(new SecretKeySpec(ascii("other key"), "HmacSHA512"));
+        assertArrayEquals(expectedAc, copy.doFinal(ascii("ac")));
+        assertNotEquals(hex(expectedAc), hex(mac.doFinal(ascii("ac"))));
+
+        // A clone of a Mac that has no key yet has no key either, and initializing it leaves the original alone.
+        var fresh = Mac.getInstance("HmacSHA512");
+        var freshCopy = (Mac) fresh.clone();
+        assertThrows(IllegalStateException.class, () -> freshCopy.update((byte) 1));
+        freshCopy.init(key);
+        assertArrayEquals(expectedAb, freshCopy.doFinal(ascii("ab")));
+        assertThrows(IllegalStateException.class, () -> fresh.update((byte) 1));
+    }
+
+    @Test
+    public void initAndResetState() throws Exception {
+        var keyA = new SecretKeySpec(ascii("key A"), "HmacSHA256");
+        var keyB = new SecretKeySpec(ascii("key B"), "HmacSHA256");
+        var mac = Mac.getInstance("HmacSHA256");
+        // reset() before init does nothing and does not throw.
+        mac.reset();
+        mac.init(keyB);
+        var expectedB = mac.doFinal(ascii("message"));
+        mac.init(keyA);
+        var expectedA = mac.doFinal(ascii("message"));
+        assertNotEquals(hex(expectedA), hex(expectedB));
+
+        // init with a new key discards data processed with the old key.
+        mac.update(ascii("discarded"));
+        mac.init(keyB);
+        assertArrayEquals(expectedB, mac.doFinal(ascii("message")));
+        // So does init with the same key.
+        mac.update(ascii("discarded"));
+        mac.init(keyB);
+        assertArrayEquals(expectedB, mac.doFinal(ascii("message")));
+
+        // A null array is ignored by update and doFinal, as in the JDK.
+        mac.update((byte[]) null);
+        mac.update(null, 0, 5);
+        assertArrayEquals(mac.doFinal(), mac.doFinal(null));
+        // Bad ranges and a null buffer are rejected. Javadoc of update(ByteBuffer): "IllegalArgumentException - if
+        // input is null".
+        assertThrows(IllegalArgumentException.class, () -> mac.update(new byte[3], 2, 2));
+        assertThrows(IllegalArgumentException.class, () -> mac.update(new byte[3], -1, 1));
+        assertThrows(IllegalArgumentException.class, () -> mac.update(new byte[3], 0, -1));
+        assertThrows(IllegalArgumentException.class, () -> mac.update((ByteBuffer) null));
+        // Javadoc of doFinal(byte[], int): "ShortBufferException - if the given output buffer is too small to hold
+        // the result".
+        assertThrows(ShortBufferException.class, () -> mac.doFinal(null, 0));
+        assertThrows(ShortBufferException.class, () -> mac.doFinal(new byte[31], 0));
+        assertThrows(ShortBufferException.class, () -> mac.doFinal(new byte[32], 1));
+        assertThrows(ArrayIndexOutOfBoundsException.class, () -> mac.doFinal(new byte[40], -1));
+        var exact = new byte[32];
+        mac.doFinal(exact, 0);
+        assertArrayEquals(mac.doFinal(), exact);
+
+        // Javadoc of the update and doFinal methods: "IllegalStateException - if this Mac has not been
+        // initialized".
+        var uninitialized = Mac.getInstance("HmacSHA256");
+        assertEquals(32, uninitialized.getMacLength());
+        assertThrows(IllegalStateException.class, () -> uninitialized.update(new byte[1]));
+        assertThrows(IllegalStateException.class, () -> uninitialized.update(new byte[1], 0, 1));
+        assertThrows(IllegalStateException.class, () -> uninitialized.update(ByteBuffer.allocate(1)));
+        assertThrows(IllegalStateException.class, () -> uninitialized.doFinal(new byte[1]));
+        assertThrows(IllegalStateException.class, () -> uninitialized.doFinal(new byte[32], 0));
+    }
+
+    @Test
+    public void keyHandling() throws Exception {
+        var mac = Mac.getInstance("HmacSHA256");
+        // Javadoc of init(Key): "InvalidKeyException - if the given key is inappropriate for initializing this
+        // MAC". A key without an encoding and a key that is not a SecretKey are inappropriate for HMAC.
+        assertThrows(InvalidKeyException.class, () -> mac.init(new RawKey(null)));
+        assertThrows(InvalidKeyException.class, () -> mac.init(new NotSecretKey()));
+
+        // HMAC uses the bytes of any secret key, whatever its algorithm name or format.
+        mac.init(new SecretKeySpec(new byte[] { 1, 2, 3 }, "HmacSHA256"));
+        var expected = mac.doFinal(ascii("message"));
+        mac.init(new SecretKeySpec(new byte[] { 1, 2, 3 }, "AES"));
+        assertArrayEquals(expected, mac.doFinal(ascii("message")));
+
+        // The Mac keeps no reference to the key's bytes: changing them after init does not change the MAC.
+        var shared = new byte[] { 1, 2, 3 };
+        mac.init(new SharedKey(shared));
+        shared[0] = 9;
+        shared[1] = 9;
+        assertArrayEquals(expected, mac.doFinal(ascii("message")));
+
+        // An empty key is a valid HMAC key (zero-padded to the block size), as in the JDK.
+        mac.init(new RawKey(new byte[0]));
+        var empty = mac.doFinal(ascii("message"));
+        mac.init(new RawKey(new byte[64]));
+        assertArrayEquals(empty, mac.doFinal(ascii("message")));
+    }
+
+    @Test
     public void algorithmNamesAndErrors() throws Exception {
         var mac = Mac.getInstance("HmacSHA256");
         assertEquals("HmacSHA256", mac.getAlgorithm());
@@ -189,7 +415,15 @@ public class MacTest {
         assertEquals("hmacsha256", Mac.getInstance("hmacsha256").getAlgorithm());
         assertEquals(16, Mac.getInstance("HmacMD5").getMacLength());
         assertEquals(20, Mac.getInstance("HmacSHA1").getMacLength());
+        assertEquals(28, Mac.getInstance("HmacSHA224").getMacLength());
         assertEquals(48, Mac.getInstance("HmacSHA384").getMacLength());
+        assertEquals(64, Mac.getInstance("HmacSHA512").getMacLength());
+        assertEquals(28, Mac.getInstance("HmacSHA512/224").getMacLength());
+        assertEquals(32, Mac.getInstance("HmacSHA512/256").getMacLength());
+        assertEquals("HMACSHA512", Mac.getInstance("HMACSHA512").getAlgorithm());
+        assertThrows(NullPointerException.class, () -> Mac.getInstance(null));
+        assertThrows(NoSuchAlgorithmException.class, () -> Mac.getInstance("SHA-256"));
+        assertThrows(NoSuchAlgorithmException.class, () -> Mac.getInstance(""));
         assertThrows(NoSuchAlgorithmException.class, () -> Mac.getInstance("HmacNope"));
         assertThrows(IllegalStateException.class, () -> mac.update((byte) 1));
         assertThrows(IllegalStateException.class, () -> mac.doFinal());
@@ -232,6 +466,96 @@ public class MacTest {
         assertEquals("HmacSHA1", asKey.getAlgorithm());
         assertFalse(key.isDestroyed());
         assertThrows(DestroyFailedException.class, key::destroy);
+    }
+
+    private static String sweep(String algorithm) throws Exception {
+        var acc = MessageDigest.getInstance("SHA-256");
+        var mac = Mac.getInstance(algorithm);
+        for (var k = 0; k <= 260; ++k) {
+            acc.update(sweepOne(mac, k, (k * 37) % 301));
+        }
+        for (var n = 0; n <= 300; ++n) {
+            acc.update(sweepOne(mac, (n * 53) % 261, n));
+        }
+        return hex(acc.digest());
+    }
+
+    private static byte[] sweepOne(Mac mac, int keyLen, int msgLen) throws Exception {
+        var key = new byte[keyLen];
+        for (var i = 0; i < keyLen; ++i) {
+            key[i] = (byte) (i * 31 + keyLen * 7 + 1);
+        }
+        var msg = new byte[msgLen];
+        for (var i = 0; i < msgLen; ++i) {
+            msg[i] = (byte) (i * 13 + msgLen * 5 + 3);
+        }
+        mac.init(new RawKey(key));
+        return mac.doFinal(msg);
+    }
+
+    // A secret key with any bytes, including none (SecretKeySpec rejects an empty key) or a null encoding.
+    private static final class RawKey implements SecretKey {
+        private final byte[] bytes;
+
+        RawKey(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        @Override
+        public String getAlgorithm() {
+            return "RAW";
+        }
+
+        @Override
+        public String getFormat() {
+            return "RAW";
+        }
+
+        @Override
+        public byte[] getEncoded() {
+            return bytes != null ? bytes.clone() : null;
+        }
+    }
+
+    // A secret key whose getEncoded() returns its own array rather than a copy.
+    private static final class SharedKey implements SecretKey {
+        private final byte[] bytes;
+
+        SharedKey(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        @Override
+        public String getAlgorithm() {
+            return "RAW";
+        }
+
+        @Override
+        public String getFormat() {
+            return "RAW";
+        }
+
+        @Override
+        public byte[] getEncoded() {
+            return bytes;
+        }
+    }
+
+    private static final class NotSecretKey implements PublicKey {
+        @Override
+        public String getAlgorithm() {
+            return "RAW";
+        }
+
+        @Override
+        public String getFormat() {
+            return "RAW";
+        }
+
+        @Override
+        public byte[] getEncoded() {
+            return new byte[] { 1, 2, 3 };
+        }
     }
 
     private static String hmac(String algorithm, String keyHex, String dataHex) throws Exception {

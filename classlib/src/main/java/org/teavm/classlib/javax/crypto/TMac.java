@@ -20,6 +20,8 @@ import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
 
 // HMAC (RFC 2104) over java.security.MessageDigest.
@@ -97,7 +99,8 @@ public class TMac implements Cloneable {
     }
 
     public final void init(Key key) throws InvalidKeyException {
-        if (key == null) {
+        // HMAC takes a secret key; null and non-secret keys (such as public keys) are rejected.
+        if (!(key instanceof SecretKey)) {
             throw new InvalidKeyException();
         }
         byte[] keyBytes = key.getEncoded();
@@ -105,7 +108,8 @@ public class TMac implements Cloneable {
             throw new InvalidKeyException();
         }
         // A key longer than the block is replaced by its hash; a shorter one is zero-padded.
-        if (keyBytes.length > blockSize) {
+        boolean hashed = keyBytes.length > blockSize;
+        if (hashed) {
             inner.reset();
             keyBytes = inner.digest(keyBytes);
         }
@@ -115,6 +119,15 @@ public class TMac implements Cloneable {
             byte k = i < keyBytes.length ? keyBytes[i] : 0;
             ipad[i] = (byte) (k ^ IPAD);
             opad[i] = (byte) (k ^ OPAD);
+        }
+        // Wipe the key material this Mac owns: the hashed key and the pads of the previous key. The array from
+        // getEncoded() may belong to the key, so it is left alone.
+        if (hashed) {
+            Arrays.fill(keyBytes, (byte) 0);
+        }
+        if (innerPad != null) {
+            Arrays.fill(innerPad, (byte) 0);
+            Arrays.fill(outerPad, (byte) 0);
         }
         innerPad = ipad;
         outerPad = opad;
@@ -190,7 +203,11 @@ public class TMac implements Cloneable {
         TMac copy = (TMac) super.clone();
         copy.inner = (MessageDigest) inner.clone();
         copy.outer = (MessageDigest) outer.clone();
-        // The pad arrays never change after init, so the copy can share them.
+        // init wipes the old pads, so the copy needs its own.
+        if (innerPad != null) {
+            copy.innerPad = innerPad.clone();
+            copy.outerPad = outerPad.clone();
+        }
         return copy;
     }
 
