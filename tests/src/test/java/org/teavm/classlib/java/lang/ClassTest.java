@@ -48,10 +48,7 @@ public class ClassTest {
         assertNull(ClassTest.class.getResource("/class-relative-resource"));
     }
 
-    // On C, URL.openStream does not compile: TURL maps http and https to the JS-only TXHRStreamHandler, so every
-    // openStream call links the XHR connection. This gap is older than getResource.
     @Test
-    @SkipPlatform(TestPlatform.C)
     public void getResourceResolvesNamesAsGetResourceAsStream() throws IOException {
         // A relative name is in the class's package, and a leading "/" makes the name absolute.
         try (var input = ClassTest.class.getResource("class-relative-resource").openStream()) {

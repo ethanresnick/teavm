@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -29,13 +30,13 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
-import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 @EachTestCompiledSeparately
@@ -76,6 +77,9 @@ public class ClassLoaderTest {
         assertNull(input);
     }
 
+    // ClassLoader.getResource: "Returns: URL object for reading the resource; null if the resource could not be
+    // found, a URL could not be constructed to locate the resource, ...". getResources: "If no resources could be
+    // found, the enumeration will be empty."
     @Test
     public void getResourceFindsOnlyExistingResources() throws IOException {
         URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
@@ -87,10 +91,39 @@ public class ClassLoaderTest {
         assertFalse(ClassLoader.getSystemResources("non-existent-resource.txt").hasMoreElements());
     }
 
-    // On C, URL.openStream does not compile: TURL maps http and https to the JS-only TXHRStreamHandler, so every
-    // openStream call links the XHR connection. This gap is older than getResource.
+    // Names that try to reach outside the program's resources find nothing: a resource name has no leading "/",
+    // ".." is not resolved, and an absolute URL is just a name.
     @Test
-    @SkipPlatform(TestPlatform.C)
+    public void getResourceDoesNotLeaveTheResources() throws IOException {
+        var loader = ClassLoader.getSystemClassLoader();
+        for (var name : new String[] { "/resources-for-test/1", "../resources-for-test/1",
+                "../../resources-for-test/1", "http://example.com/resources-for-test/1",
+                "file:///etc/passwd", "resource:/resources-for-test/1" }) {
+            assertNull(loader.getResource(name), name);
+            assertFalse(loader.getResources(name).hasMoreElements(), name);
+        }
+    }
+
+    // On JS the resources are a JavaScript object, so a name of one of its inherited properties must not count as
+    // a resource.
+    @Test
+    public void namesOfJavaScriptObjectPropertiesAreNotResources() {
+        var loader = ClassLoader.getSystemClassLoader();
+        for (var name : new String[] { "constructor", "__proto__", "toString", "hasOwnProperty", "valueOf" }) {
+            assertNull(loader.getResourceAsStream(name), name);
+            assertNull(loader.getResource(name), name);
+        }
+    }
+
+    // getResource and getResources: "Throws: NullPointerException - If name is null".
+    @Test
+    public void getResourceRejectsNullName() {
+        var loader = ClassLoader.getSystemClassLoader();
+        assertThrows(NullPointerException.class, () -> loader.getResource(null));
+        assertThrows(NullPointerException.class, () -> loader.getResources(null));
+    }
+
+    @Test
     public void getResourceGivesUrlThatReadsTheResource() throws IOException {
         URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
         try (var input = url.openStream()) {
@@ -101,6 +134,75 @@ public class ClassLoaderTest {
         try (var input = urls.get(0).openStream()) {
             assertArrayEquals(new byte[] { 'q', 'w', 'e' }, input.readAllBytes());
         }
+        try (var input = ClassLoader.getSystemResource("resources-for-test/binary-all-bytes").openStream()) {
+            byte[] bytes = input.readAllBytes();
+            assertEquals(256, bytes.length);
+            for (int i = 0; i < 256; i++) {
+                assertEquals((byte) i, bytes[i]);
+            }
+        }
+    }
+
+    // A '#' or '%' in the name is part of the name, not a fragment or an escape of the URL.
+    @Test
+    public void getResourceKeepsSpecialCharactersOfName() throws IOException {
+        URL url = ClassLoader.getSystemResource("resources-for-test/hash#percent%41");
+        assertNotNull(url);
+        assertNull(url.getRef());
+        assertNull(url.getQuery());
+        try (var input = url.openStream()) {
+            assertArrayEquals(new byte[] { 'h', 'p' }, input.readAllBytes());
+        }
+        assertNull(ClassLoader.getSystemResource("resources-for-test/hash"));
+        assertNull(ClassLoader.getSystemResource("resources-for-test/hash#percentA"));
+    }
+
+    // getResource: "This method will first search the parent class loader for the resource; if the parent is null
+    // the path of the class loader built into the virtual machine is searched. If not found, this method will
+    // invoke findResource(String) to find the resource." getResources: "The search order is described in the
+    // documentation for getResource(String)."
+    @Test
+    public void getResourceSearchesParentThenFindResource() throws IOException {
+        var own = new URL("http://example.com/own");
+        var loader = new ClassLoader() {
+            @Override
+            protected URL findResource(String name) {
+                return name.equals("own") || name.equals("resources-for-test/1") ? own : null;
+            }
+
+            @Override
+            protected Enumeration<URL> findResources(String name) {
+                return Collections.enumeration(name.equals("resources-for-test/1") ? List.of(own) : List.of());
+            }
+        };
+        assertSame(own, loader.getResource("own"));
+        assertNull(loader.getResource("missing"));
+        String fromParent = ClassLoader.getSystemResource("resources-for-test/1").toString();
+        assertEquals(fromParent, loader.getResource("resources-for-test/1").toString());
+        List<URL> urls = Collections.list(loader.getResources("resources-for-test/1"));
+        assertEquals(2, urls.size());
+        assertEquals(fromParent, urls.get(0).toString());
+        assertSame(own, urls.get(1));
+        assertFalse(loader.getResources("own").hasMoreElements());
+    }
+
+    // With a null parent, only the built-in loader and findResource are searched. The program's resources belong to
+    // the system loader, as the class path does in the JDK.
+    @Test
+    public void loaderWithoutParentDoesNotSeeProgramResources() throws IOException {
+        var loader = new ClassLoader(null) { };
+        assertNull(loader.getResource("resources-for-test/1"));
+        assertFalse(loader.getResources("resources-for-test/1").hasMoreElements());
+    }
+
+    // getResourceAsStream: "The search order is described in the documentation for getResource(String)." TeaVM's
+    // getResourceAsStream reads the embedded resources for every loader (the Wasm GC and C backends replace its
+    // body), so a loader without a parent still sees the program's resources through it.
+    @Test
+    @Disabled("Known gap: getResourceAsStream does not follow getResource's delegation")
+    public void loaderWithoutParentDoesNotStreamProgramResources() {
+        var loader = new ClassLoader(null) { };
+        assertNull(loader.getResourceAsStream("resources-for-test/1"));
     }
 
     private static String loadResource(String name) {

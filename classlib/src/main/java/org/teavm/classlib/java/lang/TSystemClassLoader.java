@@ -15,6 +15,10 @@
  */
 package org.teavm.classlib.java.lang;
 
+import org.teavm.classlib.java.net.TURL;
+import org.teavm.classlib.java.util.TCollections;
+import org.teavm.classlib.java.util.TEnumeration;
+
 class TSystemClassLoader extends TClassLoader {
     // The root of delegation, so an explicit null parent: TClassLoader() means the system loader.
     TSystemClassLoader() {
@@ -25,5 +29,19 @@ class TSystemClassLoader extends TClassLoader {
     @Override
     protected TClass<?> loadClass(String name, boolean resolve) throws TClassNotFoundException {
         return TClass.forName((TString) (Object) name);
+    }
+
+    // The system loader's resources are the ones embedded in the program.
+    @Override
+    protected TURL findResource(String name) {
+        return findEmbeddedResource(name);
+    }
+
+    @Override
+    protected TEnumeration<TURL> findResources(String name) {
+        TURL url = findEmbeddedResource(name);
+        return url != null
+                ? TCollections.enumeration(TCollections.singletonList(url))
+                : TCollections.emptyEnumeration();
     }
 }

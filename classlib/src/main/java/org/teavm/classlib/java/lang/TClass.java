@@ -728,7 +728,10 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         }
         String prefix = cls.getName().toString();
         int index = prefix.lastIndexOf('.');
-        return index >= 0 ? prefix.substring(0, index + 1).replace('.', '/') + name : name;
+        if (index >= 0) {
+            name = prefix.substring(0, index + 1).replace('.', '/') + name;
+        }
+        return name;
     }
 
     public InputStream getResourceAsStream(String name) {

@@ -24,7 +24,8 @@ import org.teavm.extension.spi.resources.DefaultResourcesPolicy;
 public class TestResourcesPolicy extends DefaultResourcesPolicy {
     @Override
     public String[] supplyResources(Collection<? extends String> availableClassNames) {
-        String[] names = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "binary-null", "binary-all-bytes" };
+        String[] names = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "binary-null", "binary-all-bytes",
+                "hash#percent%41" };
         for (int i = 0; i < names.length; ++i) {
             names[i] = "resources-for-test/" + names[i];
         }
