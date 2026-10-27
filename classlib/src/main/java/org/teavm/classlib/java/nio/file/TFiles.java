@@ -26,7 +26,7 @@ import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystemException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -78,22 +78,37 @@ public final class TFiles {
 
     public static TPath createDirectories(TPath dir, TFileAttribute<?>... attrs) throws IOException {
         if (dir.getNameCount() <= 1) {
-            return createDirectory(dir, attrs);
+            // As in the JDK, a directory that already exists is not an error, even through a symbolic link.
+            try {
+                return createDirectory(dir, attrs);
+            } catch (FileAlreadyExistsException e) {
+                if (!isDirectory(dir)) {
+                    throw e;
+                }
+                return dir;
+            }
         }
 
         var index = dir.getNameCount() + 1;
         for (; index > 1; --index) {
-            if (exists(dir.subpath(0, index - 1))) {
+            if (exists(prefix(dir, index - 1))) {
                 break;
             }
         }
         if (index > dir.getNameCount() && !isDirectory(dir)) {
-            throw new FileSystemException(dir.toString());
+            throw new FileAlreadyExistsException(dir.toString());
         }
         while (index <= dir.getNameCount()) {
-            createDirectory(dir.subpath(0, index++));
+            createDirectory(prefix(dir, index++));
         }
         return dir;
+    }
+
+    // The first count names of the path. Unlike subpath, it keeps the root of an absolute path.
+    private static TPath prefix(TPath path, int count) {
+        var names = path.subpath(0, count);
+        var root = path.getRoot();
+        return root != null ? root.resolve(names) : names;
     }
 
     public static TPath createTempFile(TPath dir, String prefix, String suffix, TFileAttribute<?>... attrs)

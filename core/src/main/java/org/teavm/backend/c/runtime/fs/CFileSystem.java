@@ -58,6 +58,11 @@ public class CFileSystem implements VirtualFileSystem {
     }
 
     CVirtualFile getByPath(String path) {
+        if (path.isEmpty()) {
+            // An empty path names the working directory, as it does for java.nio.file.Path. The C functions
+            // would fail on it.
+            path = ".";
+        }
         Entry entry = cache.get(path);
         if (entry == null || entry.get() == null) {
             entry = new Entry(new CVirtualFile(this, path), referenceQueue);

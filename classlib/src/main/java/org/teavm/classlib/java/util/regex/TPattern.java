@@ -197,6 +197,11 @@ public final class TPattern implements Serializable {
             return new String[] { "" }; //$NON-NLS-1$
         } else {
             while (mat.find() && (index + 1 < limit || limit <= 0)) {
+                // Pattern.split: "A zero-width match at the beginning however never produces such empty
+                // leading substring." Only such a match ends at 0.
+                if (mat.end() == 0) {
+                    continue;
+                }
                 res.add(inputSeq.subSequence(curPos, mat.start()).toString());
                 curPos = mat.end();
                 index++;

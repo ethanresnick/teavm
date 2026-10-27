@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
@@ -78,20 +79,8 @@ public final class TCollectors {
 
     public static TCollector<CharSequence, ?, String> joining(CharSequence delimiter, CharSequence prefix,
             CharSequence suffix) {
-        BiConsumer<StringBuilder, CharSequence> accumulator = (sb, item) -> {
-            if (sb.length() > 0) {
-                sb.append(delimiter);
-            }
-            sb.append(item);
-        };
-        BinaryOperator<StringBuilder> combiner = (a, b) -> {
-            if (a.length() > 0) {
-                a.append(delimiter);
-            }
-            return a.append(b);
-        };
-        return TCollector.of(StringBuilder::new, accumulator, combiner,
-                sb -> sb.insert(0, prefix).append(suffix).toString());
+        return TCollector.of(() -> new StringJoiner(delimiter, prefix, suffix), StringJoiner::add,
+                StringJoiner::merge, StringJoiner::toString);
     }
 
     public static <T, A, R, K> TCollector<T, ?, K> mapping(Function<? super T, ? extends A> mapper,

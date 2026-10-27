@@ -1670,4 +1670,66 @@ public class PatternTest {
         checkHitEnd("x[a-z]*+", "xab", true, true);
         checkHitEnd("(?:a|ab)c", "ab", true, true);
     }
+
+    // Pattern, "Groups and capturing": "The captured input associated with a group is always the subsequence that
+    // the group most recently matched."
+    @Test
+    public void repeatedGroupCapturesLastIteration() {
+        var matcher = Pattern.compile("(.)+x").matcher("abcx");
+        assertTrue(matcher.find());
+        assertEquals(2, matcher.start(1));
+
+        // A counted group inside a repeated group: each iteration of the outer group counts anew.
+        matcher = Pattern.compile("((ab){2})+").matcher("abab");
+        assertTrue(matcher.matches());
+        assertEquals(0, matcher.start(1));
+        assertEquals(2, matcher.start(2));
+        matcher = Pattern.compile("((.[ab]){2})+").matcher("bacaa");
+        assertTrue(matcher.find());
+        assertEquals(0, matcher.start());
+        assertEquals(0, matcher.start(1));
+        assertEquals(4, matcher.end(1));
+    }
+
+    // Pattern: "X{n,m}? X, at least n but not more than m times" (reluctant), and the same for X{n,m}. A failed
+    // attempt at one start must not count towards the next one.
+    @Test
+    public void countedGroupQuantifiersCountEachAttempt() {
+        assertFalse(Pattern.compile("(ab){1,2}?").matcher("ba").find());
+        assertFalse(Pattern.compile("(ab){1,2}").matcher("ba").find());
+        assertFalse(Pattern.compile("(a+b){1,2}?").matcher("ba").find());
+        var matcher = Pattern.compile("(ab){2,3}?").matcher("abxababab");
+        assertTrue(matcher.find());
+        assertEquals(3, matcher.start());
+        assertEquals(7, matcher.end());
+        // The group must match at least once, even when it can only match the empty string.
+        matcher = Pattern.compile("((\\b\\b){1,}.)+").matcher("acbca");
+        assertTrue(matcher.find());
+        assertEquals(0, matcher.start());
+        assertEquals(1, matcher.end());
+    }
+
+    // Before, these recursed without end and threw StackOverflowError.
+    @Test
+    public void countedGroupsThatMatchEmptyTerminate() {
+        assertFalse(Pattern.compile("(?:.|\\b){2}?").matcher("caacc").matches());
+        var matcher = Pattern.compile("(?:.|\\b){2}?").matcher("caacc");
+        var found = new ArrayList<String>();
+        while (matcher.find()) {
+            found.add(matcher.start() + "-" + matcher.end());
+        }
+        assertEquals("[0-2, 2-4, 4-5, 5-5]", found.toString());
+        assertFalse(Pattern.compile("(?:(b|){2}?|\\b)*?").matcher("bc").matches());
+        assertTrue(Pattern.compile("(?:(b|){2}?|\\b)*?").matcher("bb").matches());
+    }
+
+    // Without the fix, the first pattern loops forever, so this test hangs instead of failing.
+    @Test
+    public void possessiveQuantifiersOverGroups() {
+        assertTrue(Pattern.compile("(a?)*+b").matcher("aab").matches());
+        assertTrue(Pattern.compile("(\\b)*+x").matcher("x").matches());
+        var matcher = Pattern.compile("(.){0,2}+c").matcher("abc");
+        assertTrue(matcher.matches());
+        assertEquals("b", matcher.group(1));
+    }
 }
