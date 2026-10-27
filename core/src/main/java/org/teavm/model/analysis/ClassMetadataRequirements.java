@@ -41,6 +41,9 @@ public class ClassMetadataRequirements {
             "getEnclosingClass", Class.class);
     private static final MethodReference NEW_ARRAY = new MethodReference(Array.class,
             "newInstance", Class.class, int.class, Object.class);
+    private static final MethodReference CLASS_INFO_NEW_ARRAY = new MethodReference(
+            "org.teavm.runtime.reflect.ClassInfo", "newArrayInstance", ValueType.INTEGER,
+            ValueType.object("java.lang.Object"));
     private static final MethodReference ARRAY_GET = new MethodReference(Array.class,
             "get", Object.class, int.class, Object.class);
     private static final MethodReference ARRAY_SET = new MethodReference(Array.class,
@@ -137,6 +140,13 @@ public class ClassMetadataRequirements {
             for (var type : types) {
                 requirements.computeIfAbsent(type, k -> new ClassInfo()).newArray = true;
             }
+        }
+
+        // Array.newInstance is not the only caller of the low-level array constructor: Class.getEnumConstants
+        // (and thus Enum.valueOf, EnumSet, etc.) calls it directly.
+        var classInfoNewArray = dependencyInfo.getMethod(CLASS_INFO_NEW_ARRAY);
+        if (classInfoNewArray != null && classInfoNewArray.isUsed()) {
+            hasArrayNewInstance = true;
         }
 
         var arrayGet = dependencyInfo.getMethod(ARRAY_GET);

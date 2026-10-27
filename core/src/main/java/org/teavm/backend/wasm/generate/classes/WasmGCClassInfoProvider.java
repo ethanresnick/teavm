@@ -49,7 +49,13 @@ public interface WasmGCClassInfoProvider {
 
     WasmFunction getArrayConstructor(ValueType type);
 
-    WasmFunction getMultiArrayConstructor(int depth);
+    /**
+     * Returns a function that creates a {@code depth}-dimensional array.
+     *
+     * @param leafItemType item type of the innermost created arrays; all reference types may be passed
+     *                     as {@code java.lang.Object}.
+     */
+    WasmFunction getMultiArrayConstructor(int depth, ValueType leafItemType);
 
     WasmFunction getGetArrayClassFunction();
 

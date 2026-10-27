@@ -129,7 +129,7 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
     private WasmFunction arraySetObjectFunction;
     private WasmFunction arrayLengthObjectFunction;
     private WasmFunction arrayCopyObjectFunction;
-    private List<WasmFunction> multiArrayFunctions = new ArrayList<>();
+    private Map<MultiArrayKey, WasmFunction> multiArrayFunctions = new HashMap<>();
     private List<WasmStructure> nonInitializedStructures = new ArrayList<>();
     private WasmArray objectArrayType;
     private WasmGCSystemFunctionGenerator systemFunctions;
@@ -441,13 +441,20 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
     }
 
     @Override
-    public WasmFunction getMultiArrayConstructor(int depth) {
-        if (depth >= multiArrayFunctions.size()) {
-            multiArrayFunctions.addAll(Collections.nCopies(depth + 1, null));
+    public WasmFunction getMultiArrayConstructor(int depth, ValueType leafItemType) {
+        if (!(leafItemType instanceof ValueType.Primitive)) {
+            leafItemType = ValueType.object("java.lang.Object");
         }
-        var result = newArrayGenerator.generateNewMultiArrayFunction(depth);
-        multiArrayFunctions.set(depth, result);
+        var key = new MultiArrayKey(depth, leafItemType);
+        var result = multiArrayFunctions.get(key);
+        if (result == null) {
+            result = newArrayGenerator.generateNewMultiArrayFunction(depth, leafItemType);
+            multiArrayFunctions.put(key, result);
+        }
         return result;
+    }
+
+    private record MultiArrayKey(int depth, ValueType leafItemType) {
     }
 
     @Override

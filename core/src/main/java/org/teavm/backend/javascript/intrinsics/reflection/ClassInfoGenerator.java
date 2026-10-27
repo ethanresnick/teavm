@@ -160,7 +160,9 @@ public class ClassInfoGenerator implements Injector, Generator {
         writer.append("switch").ws().append("(").append(context.getParameterName(0)).append(".primitiveKind)")
                 .appendBlockStart();
         var length = context.getParameterName(1);
-        var types = Set.of(dependency.getResult().getTypes());
+        // Array.newInstance is the only way to create a primitive array here. Other callers (like
+        // Class.getEnumConstants) only create arrays of objects, so they may be reached without it.
+        var types = dependency != null ? Set.of(dependency.getResult().getTypes()) : Set.<ValueType>of();
         writeArrayClause(types, ValueType.BOOLEAN, writer, ClassInfo.PrimitiveKind.BOOLEAN,
                 "$rt_createBooleanArray", length);
         writeArrayClause(types, ValueType.BYTE, writer, ClassInfo.PrimitiveKind.BYTE,
