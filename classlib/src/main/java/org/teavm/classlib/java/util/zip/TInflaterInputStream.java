@@ -129,14 +129,13 @@ public class TInflaterInputStream extends FilterInputStream {
     @Override
     public long skip(long nbytes) throws IOException {
         if (nbytes >= 0) {
-            if (buf == null) {
-                buf = new byte[(int) Math.min(nbytes, BUF_SIZE)];
-            }
+            // Not buf: it holds the compressed input that the inflater has not consumed yet.
+            byte[] skipBuf = new byte[(int) Math.min(nbytes, BUF_SIZE)];
             long count = 0;
             long rem;
             while (count < nbytes) {
                 rem = nbytes - count;
-                int x = read(buf, 0, rem > buf.length ? buf.length : (int) rem);
+                int x = read(skipBuf, 0, rem > skipBuf.length ? skipBuf.length : (int) rem);
                 if (x == -1) {
                     return count;
                 }
