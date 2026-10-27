@@ -15,10 +15,16 @@
  */
 package org.teavm.model.analysis;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.teavm.model.BasicBlockReader;
+import org.teavm.model.ClassHierarchy;
+import org.teavm.model.ClassReader;
+import org.teavm.model.ClassReaderSource;
 import org.teavm.model.FieldReference;
+import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 import org.teavm.model.VariableReader;
@@ -28,14 +34,18 @@ import org.teavm.model.instructions.InvocationType;
 
 /**
  * The exceptions that the instructions of a block can throw from the checks that the backends insert, after
- * dependency analysis, for null values, array indexes, casts and negative array sizes. No instruction creates
- * these exceptions, but analyses must deliver them to the block's handlers.
+ * dependency analysis, for null values, array indexes, casts and negative array sizes, and the errors of the class
+ * initializers that they trigger. No instruction creates these exceptions, but analyses must deliver them to the
+ * block's handlers.
  */
 public final class ImplicitExceptions {
     public static final String NULL_POINTER = NullPointerException.class.getName();
     public static final String ARRAY_INDEX_OUT_OF_BOUNDS = ArrayIndexOutOfBoundsException.class.getName();
     public static final String CLASS_CAST = ClassCastException.class.getName();
     public static final String NEGATIVE_ARRAY_SIZE = NegativeArraySizeException.class.getName();
+    public static final String EXCEPTION_IN_INITIALIZER = ExceptionInInitializerError.class.getName();
+    public static final String NO_CLASS_DEF_FOUND = NoClassDefFoundError.class.getName();
+    private static final MethodDescriptor CLINIT = new MethodDescriptor("<clinit>", void.class);
 
     private ImplicitExceptions() {
     }
@@ -57,6 +67,78 @@ public final class ImplicitExceptions {
         }
         if (reader.negativeArraySize) {
             consumer.accept(NEGATIVE_ARRAY_SIZE);
+        }
+    }
+
+    /**
+     * Passes to the consumer, once each, the classes whose initialization the block's instructions can trigger, as
+     * dependency analysis sees them: the owner of a static field, the class of a method that is not called
+     * virtually (the backends initialize it on entry to its static methods and constructors), and the class of an
+     * explicit initialization. {@link #readInitializers} adds their superclasses.
+     */
+    public static void readInitializedClasses(BasicBlockReader block, Consumer<String> consumer) {
+        var reader = new InitializedClassReader();
+        block.readAllInstructions(reader);
+        reader.classes.forEach(consumer);
+    }
+
+    /**
+     * Passes to the consumer the class initializers that initializing the class can run: its own and those of its
+     * superclasses. What they throw reaches the code that triggers the initialization.
+     */
+    public static void readInitializers(ClassReaderSource classSource, String className,
+            Consumer<MethodReference> consumer) {
+        for (ClassReader cls = classSource.get(className); cls != null;
+                cls = cls.getParent() != null ? classSource.get(cls.getParent()) : null) {
+            if (cls.getMethod(CLINIT) != null) {
+                consumer.accept(new MethodReference(cls.getName(), CLINIT));
+            }
+        }
+    }
+
+    /**
+     * Passes to the consumer the errors that the backends throw when a class initializer throws the given type:
+     * ExceptionInInitializerError the first time, unless the type is an {@link Error}, which they rethrow as it is,
+     * and NoClassDefFoundError on every later use of the class. No initializer declares these errors.
+     */
+    public static void readInitializerFailure(ClassHierarchy hierarchy, ValueType thrownType,
+            Consumer<String> consumer) {
+        if (!hierarchy.isSuperType(ValueType.object(Error.class.getName()), thrownType, false)) {
+            consumer.accept(EXCEPTION_IN_INITIALIZER);
+        }
+        consumer.accept(NO_CLASS_DEF_FOUND);
+    }
+
+    private static class InitializedClassReader extends AbstractInstructionReader {
+        final Set<String> classes = new LinkedHashSet<>();
+
+        @Override
+        public void initClass(String className) {
+            classes.add(className);
+        }
+
+        @Override
+        public void getField(VariableReader receiver, VariableReader instance, FieldReference field,
+                ValueType fieldType) {
+            if (instance == null) {
+                classes.add(field.getClassName());
+            }
+        }
+
+        @Override
+        public void putField(VariableReader instance, FieldReference field, VariableReader value,
+                ValueType fieldType) {
+            if (instance == null) {
+                classes.add(field.getClassName());
+            }
+        }
+
+        @Override
+        public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
+                List<? extends VariableReader> arguments, InvocationType type) {
+            if (instance == null || type == InvocationType.SPECIAL) {
+                classes.add(method.getClassName());
+            }
         }
     }
 

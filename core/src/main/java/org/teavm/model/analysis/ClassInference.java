@@ -222,6 +222,10 @@ public class ClassInference {
                 insn.acceptVisitor(visitor);
             }
             ImplicitExceptions.read(block, type -> propagateException(type, block));
+            if (!block.getTryCatchBlocks().isEmpty()) {
+                ImplicitExceptions.readInitializedClasses(block,
+                        className -> propagateInitializerExceptions(className, block));
+            }
 
             if (block.getExceptionVariable() != null) {
                 getNodeTypes(packNodeAndDegree(block.getExceptionVariable().getIndex(), 0));
@@ -691,6 +695,25 @@ public class ClassInference {
                 }
             }
         }
+    }
+
+    // A class initializer throws into the code that triggers it, not into the method that this code calls, and the
+    // backends turn what it throws into the errors of a failed initialization. Dependency analysis has collected
+    // what each initializer throws.
+    private void propagateInitializerExceptions(String className, BasicBlock block) {
+        ImplicitExceptions.readInitializers(dependencyInfo.getClassSource(), className, clinit -> {
+            MethodDependencyInfo clinitDep = dependencyInfo.getMethod(clinit);
+            if (clinitDep == null) {
+                return;
+            }
+            for (var thrownType : clinitDep.getThrown().getTypes()) {
+                if (thrownType instanceof ValueType.Object) {
+                    propagateException(((ValueType.Object) thrownType).getClassName(), block);
+                    ImplicitExceptions.readInitializerFailure(hierarchy, thrownType,
+                            error -> propagateException(error, block));
+                }
+            }
+        });
     }
 
     private void propagateException(String thrownTypeName, BasicBlock block) {
