@@ -9,6 +9,7 @@ extern int32_t teavm_file_tempDirectory(char16_t**);
 extern int32_t teavm_file_isFile(char16_t*, int32_t);
 extern int32_t teavm_file_isDir(char16_t*, int32_t);
 extern int32_t teavm_file_exists(char16_t* name, int32_t nameSize);
+extern int32_t teavm_file_isSymbolicLink(char16_t*, int32_t);
 extern int32_t teavm_file_canRead(char16_t*, int32_t);
 extern int32_t teavm_file_canWrite(char16_t*, int32_t);
 extern int32_t teavm_file_canExecute(char16_t*, int32_t);

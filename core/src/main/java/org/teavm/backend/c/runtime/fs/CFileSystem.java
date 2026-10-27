@@ -167,6 +167,11 @@ public class CFileSystem implements VirtualFileSystem {
     @Unmanaged
     static native boolean exists(char[] name, int nameSize);
 
+    @Import(name = "teavm_file_isSymbolicLink")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean isSymbolicLink(char[] name, int nameSize);
+
     @Import(name = "teavm_file_canRead")
     @RuntimeInclude("file.h")
     @Unmanaged

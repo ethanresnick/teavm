@@ -28,7 +28,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
@@ -297,7 +296,8 @@ public final class TFiles {
 
     public static boolean isSymbolicLink(TPath path) {
         try {
-            var attr = readAttributes(path, TBasicFileAttributes.class);
+            // As in the JDK, read the link itself, not its target.
+            var attr = readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
             return attr.isSymbolicLink();
         } catch (IOException e) {
             return false;
@@ -342,11 +342,8 @@ public final class TFiles {
 
     public static boolean notExists(TPath path, TLinkOption... options) {
         try {
-            if (Arrays.asList(options).contains(TLinkOption.NOFOLLOW_LINKS)) {
-                path.getFileSystem().provider().checkAccess(path);
-            } else {
-                readAttributes(path, TBasicFileAttributes.class);
-            }
+            // With NOFOLLOW_LINKS, ask about the link itself (lstat), as the JDK does. checkAccess follows the link.
+            readAttributes(path, TBasicFileAttributes.class, options);
         } catch (NoSuchFileException e) {
             return true;
         } catch (IOException e) {
@@ -384,20 +381,37 @@ public final class TFiles {
 
     public static TPath walkFileTree(TPath start, Set<TFileVisitOption> options, int maxDepth,
             TFileVisitor<? super TPath> visitor) throws IOException {
-        walkFileTreeRec(start, maxDepth, visitor);
+        // "By default, symbolic links are not automatically followed by this method. If the options parameter
+        // contains the FOLLOW_LINKS option then symbolic links are followed." A link to a directory is then visited
+        // as a file. With FOLLOW_LINKS, this walk does not detect cycles (FileSystemLoopException), because
+        // VirtualFile has no file keys.
+        TLinkOption[] linkOptions = options.contains(TFileVisitOption.FOLLOW_LINKS)
+                ? new TLinkOption[0]
+                : new TLinkOption[] { TLinkOption.NOFOLLOW_LINKS };
+        walkFileTreeRec(start, maxDepth, visitor, linkOptions);
         return start;
     }
 
     private static TFileVisitResult walkFileTreeRec(TPath path, int remainingDepth,
-            TFileVisitor<? super TPath> visitor) throws IOException {
+            TFileVisitor<? super TPath> visitor, TLinkOption[] linkOptions) throws IOException {
         TBasicFileAttributes attrs;
         IOException exc;
         try {
-            attrs = readAttributes(path, TBasicFileAttributes.class);
+            attrs = readAttributes(path, TBasicFileAttributes.class, linkOptions);
             exc = null;
         } catch (IOException e) {
             exc = e;
             attrs = null;
+            if (linkOptions.length == 0) {
+                // "When following links, and the attributes of the target cannot be read, then this method attempts
+                // to get the BasicFileAttributes of the link."
+                try {
+                    attrs = readAttributes(path, TBasicFileAttributes.class, TLinkOption.NOFOLLOW_LINKS);
+                    exc = null;
+                } catch (IOException e2) {
+                    // report the first error
+                }
+            }
         }
         if (exc != null) {
             return visitor.visitFileFailed(path, exc);
@@ -419,7 +433,7 @@ public final class TFiles {
         }
         try (var stream = newDirectoryStream(path)) {
             loop: for (var child : stream) {
-                switch (walkFileTreeRec(child, remainingDepth - 1, visitor)) {
+                switch (walkFileTreeRec(child, remainingDepth - 1, visitor, linkOptions)) {
                     case CONTINUE:
                     case SKIP_SUBTREE:
                         break;
