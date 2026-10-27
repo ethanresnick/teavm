@@ -98,10 +98,20 @@ public final class TMath extends TObject {
     @Unmanaged
     public static native double sqrt(double a);
 
+    // cbrt, expm1, log1p, sinh, cosh and tanh use StrictMath's fdlibm ports on Wasm GC, since V8 calls these Math
+    // imports 2-4 times slower than the ports run. On JS, the host's functions are faster than the ports (whose bit
+    // manipulation goes through BigInt), and C uses libm.
+    public static double cbrt(double a) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.cbrt(a);
+        }
+        return cbrtImpl(a);
+    }
+
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "cbrt")
     @Unmanaged
-    public static native double cbrt(double a);
+    private static native double cbrtImpl(double a);
 
     public static double IEEEremainder(double f1, double f2) {
         int n = (int) (f1 / f2);
@@ -841,24 +851,46 @@ public final class TMath extends TObject {
         return d < 0 ? -1 : d > 0 ? 1 : d;
     }
 
+    public static double sinh(double x) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.sinh(x);
+        }
+        return sinhImpl(x);
+    }
+
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "sinh")
     @Unmanaged
-    public static native double sinh(double x);
+    private static native double sinhImpl(double x);
+
+    public static double cosh(double x) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.cosh(x);
+        }
+        return coshImpl(x);
+    }
 
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "cosh")
     @Unmanaged
-    public static native double cosh(double x);
+    private static native double coshImpl(double x);
+
+    public static double tanh(double x) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.tanh(x);
+        }
+        return tanhImpl(x);
+    }
 
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "tanh")
     @Unmanaged
-    public static native double tanh(double x);
+    private static native double tanhImpl(double x);
 
     public static double hypot(double x, double y) {
         // Not the host's hypot: V8's Math.hypot is more than 1 ulp off for a few percent of inputs, and so is
-        // macOS libm's hypot for some.
+        // macOS libm's hypot for some. Not StrictMath's fdlibm port either: on JS this is about twice as fast, and
+        // it's within about half an ulp.
         x = abs(x);
         y = abs(y);
         if (x == TDouble.POSITIVE_INFINITY || y == TDouble.POSITIVE_INFINITY) {
@@ -908,15 +940,29 @@ public final class TMath extends TObject {
         return ((ah * ah - aa) + 2 * ah * al) + al * al;
     }
 
+    public static double expm1(double x) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.expm1(x);
+        }
+        return expm1Impl(x);
+    }
+
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "expm1")
     @Unmanaged
-    public static native double expm1(double x);
+    private static native double expm1Impl(double x);
+
+    public static double log1p(double x) {
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.log1p(x);
+        }
+        return log1pImpl(x);
+    }
 
     @GeneratedBy(MathNativeGenerator.class)
     @Import(module = "teavmMath", name = "log1p")
     @Unmanaged
-    public static native double log1p(double x);
+    private static native double log1pImpl(double x);
 
     public static float copySign(float magnitude, float sign) {
         return Float.intBitsToFloat((Float.floatToRawIntBits(sign) & Integer.MIN_VALUE)

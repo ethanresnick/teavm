@@ -30,7 +30,8 @@ import org.openjdk.jmh.annotations.Warmup;
 
 /**
  * Measures {@link Math} functions that aren't a single host call or instruction everywhere: log10, cbrt, expm1,
- * log1p, sinh, cosh, tanh and hypot. Every benchmark performs {@link #SIZE} operations.
+ * log1p, sinh, cosh, tanh and hypot, and their {@link StrictMath} versions (fdlibm ports). Every benchmark performs
+ * {@link #SIZE} operations.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
@@ -124,6 +125,78 @@ public class MathFunctionsBenchmark {
         var result = 0.0;
         for (var i = 0; i < SIZE; ++i) {
             result += Math.hypot(positive[i], other[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictLog10() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.log10(positive[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictCbrt() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.cbrt(signed[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictExpm1() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.expm1(signed[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictLog1p() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.log1p(positive[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictSinh() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.sinh(signed[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictCosh() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.cosh(signed[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictTanh() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.tanh(signed[i]);
+        }
+        return result;
+    }
+
+    @Benchmark
+    public double strictHypot() {
+        var result = 0.0;
+        for (var i = 0; i < SIZE; ++i) {
+            result += StrictMath.hypot(positive[i], other[i]);
         }
         return result;
     }
