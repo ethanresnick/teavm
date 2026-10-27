@@ -18,10 +18,14 @@ package org.teavm.classlib.java.util;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.AbstractQueue;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.Queue;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
@@ -59,6 +63,76 @@ public class PriorityQueueTest {
             }
             expectedList.remove(indexToRemove);
             assertArrayEquals(expectedList.toArray(), list.toArray());
+        }
+    }
+
+    // AbstractQueue.addAll: "Attempts to addAll of a queue to itself result in IllegalArgumentException."
+    // Throws: "IllegalArgumentException - ... or if the specified collection is this queue"
+    @Test
+    public void addAllOfItselfThrows() {
+        PriorityQueue<Integer> queue = fillQueue();
+        assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+        assertEquals(8, queue.size());
+        assertDrainsTo(queue, 0, 1, 2, 3, 4, 5, 6, 7);
+
+        PriorityQueue<Integer> empty = new PriorityQueue<>();
+        assertThrows(IllegalArgumentException.class, () -> empty.addAll(empty));
+        assertEquals(0, empty.size());
+    }
+
+    @Test
+    public void addAllOfEqualQueueAdds() {
+        PriorityQueue<Integer> queue = new PriorityQueue<>(List.of(2, 1));
+        assertTrue(queue.addAll(new PriorityQueue<>(queue)));
+        assertDrainsTo(queue, 1, 1, 2, 2);
+    }
+
+    // A user subclass of AbstractQueue inherits the same rule.
+    @Test
+    public void addAllOfItselfThrowsInAbstractQueueSubclass() {
+        Queue<Integer> queue = new ListQueue();
+        queue.add(3);
+        queue.add(4);
+        assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+        assertEquals(List.of(3, 4), new ArrayList<>(queue));
+        assertTrue(queue.addAll(List.of(5)));
+        assertEquals(List.of(3, 4, 5), new ArrayList<>(queue));
+    }
+
+    private static void assertDrainsTo(Queue<Integer> queue, Integer... expected) {
+        List<Integer> list = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            list.add(queue.poll());
+        }
+        assertEquals(List.of(expected), list);
+    }
+
+    static class ListQueue extends AbstractQueue<Integer> {
+        private final List<Integer> list = new ArrayList<>();
+
+        @Override
+        public Iterator<Integer> iterator() {
+            return list.iterator();
+        }
+
+        @Override
+        public int size() {
+            return list.size();
+        }
+
+        @Override
+        public boolean offer(Integer e) {
+            return list.add(e);
+        }
+
+        @Override
+        public Integer poll() {
+            return list.isEmpty() ? null : list.remove(0);
+        }
+
+        @Override
+        public Integer peek() {
+            return list.isEmpty() ? null : list.get(0);
         }
     }
 

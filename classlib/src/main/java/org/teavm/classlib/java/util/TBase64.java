@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.util;
 
+import java.nio.ByteBuffer;
 import org.teavm.classlib.impl.Base64Impl;
 
 public final class TBase64 {
@@ -26,7 +27,7 @@ public final class TBase64 {
     }
 
     public static Encoder getUrlEncoder() {
-        return new Encoder(Base64Impl.urlAlphabet, false);
+        return new Encoder(Base64Impl.urlAlphabet, true);
     }
 
     public static class Encoder {
@@ -40,6 +41,21 @@ public final class TBase64 {
 
         public byte[] encode(byte[] src) {
             return Base64Impl.encode(src, mapping, padding);
+        }
+
+        public int encode(byte[] src, byte[] dst) {
+            var bytes = encode(src);
+            if (dst.length < bytes.length) {
+                throw new IllegalArgumentException();
+            }
+            System.arraycopy(bytes, 0, dst, 0, bytes.length);
+            return bytes.length;
+        }
+
+        public ByteBuffer encode(ByteBuffer buffer) {
+            var src = new byte[buffer.remaining()];
+            buffer.get(src);
+            return ByteBuffer.wrap(encode(src));
         }
 
         public String encodeToString(byte[] src) {
@@ -73,6 +89,28 @@ public final class TBase64 {
 
         public byte[] decode(byte[] src) {
             return Base64Impl.decode(src, mapping);
+        }
+
+        public int decode(byte[] src, byte[] dst) {
+            var bytes = decode(src);
+            if (dst.length < bytes.length) {
+                throw new IllegalArgumentException();
+            }
+            System.arraycopy(bytes, 0, dst, 0, bytes.length);
+            return bytes.length;
+        }
+
+        public ByteBuffer decode(ByteBuffer buffer) {
+            // As in the JDK, the source buffer's position does not move when the input is invalid.
+            var position = buffer.position();
+            var src = new byte[buffer.remaining()];
+            buffer.get(src);
+            try {
+                return ByteBuffer.wrap(decode(src));
+            } catch (IllegalArgumentException e) {
+                buffer.position(position);
+                throw e;
+            }
         }
 
         public byte[] decode(String src) {

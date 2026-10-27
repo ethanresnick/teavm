@@ -26,4 +26,12 @@ public class TLinkedBlockingDeque<T> extends TLinkedList<T> {
     public TLinkedBlockingDeque(TCollection<T> coll) {
         super(coll);
     }
+
+    @Override
+    public boolean addAll(TCollection<? extends T> c) {
+        if (c == this) {
+            throw new IllegalArgumentException();
+        }
+        return super.addAll(c);
+    }
 }
