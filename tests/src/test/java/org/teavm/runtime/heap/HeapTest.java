@@ -278,6 +278,27 @@ public class HeapTest {
     }
 
     @Test
+    public void allocNearIntLimitFailsWithDefaultMaxSize() {
+        // The JS runtime passes Integer.MAX_VALUE as maxSize unless the application sets one. A request that
+        // can't fit together with its record header must fail, and must not wrap around when aligned.
+        Heap.init(Heap.getStart(), Heap.getCurrentSize(), Integer.MAX_VALUE);
+        var a = Heap.alloc(256);
+        for (var i = 0; i <= 64; ++i) {
+            var size = Integer.MAX_VALUE - i;
+            assertEquals(0, Heap.alloc(size).toInt(), "alloc(" + size + ")");
+            assertEquals(0, Heap.realloc(a, size).toInt(), "realloc(" + size + ")");
+            check();
+        }
+        assertEquals(0, Heap.alloc(Integer.MIN_VALUE).toInt());
+        assertEquals(0, Heap.realloc(a, -1).toInt());
+        var b = Heap.alloc(256);
+        assertTrue(b.toInt() != 0);
+        Heap.release(a);
+        Heap.release(b);
+        check();
+    }
+
+    @Test
     public void growReportsFailure() {
         // 32767 pages on top of the current memory (at least 2 pages) exceed the Wasm GC module's maximum of 32768
         // pages, so memory.grow fails. Heap.grow must then report 0 bytes. The heap itself does not change.

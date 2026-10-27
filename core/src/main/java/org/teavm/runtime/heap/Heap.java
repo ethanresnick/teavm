@@ -75,10 +75,8 @@ public final class Heap {
 
     @Export(name = "teavm.malloc")
     public static Address alloc(int bytes) {
-        // A request larger than the heap can ever be fails here. Without this check, alignSize overflows for a size
-        // near Integer.MAX_VALUE and returns a small block.
-        if (bytes < 0 || bytes > maxSize) {
-            return null;
+        if (!fits(bytes)) {
+            return Address.fromInt(0);
         }
         bytes = alignSize(bytes);
         var result = tryAlloc(bytes);
@@ -96,8 +94,8 @@ public final class Heap {
 
     @Export(name = "teavm.realloc")
     public static Address realloc(Address address, int newSize) {
-        if (newSize < 0 || newSize > maxSize) {
-            return null;
+        if (!fits(newSize)) {
+            return Address.fromInt(0);
         }
         newSize = alignSize(newSize);
 
@@ -113,6 +111,13 @@ public final class Heap {
         } else {
             return expand(record, oldSize, newSize);
         }
+    }
+
+    // A block and its record header must fit in maxSize bytes. A larger request can never succeed, and rejecting it
+    // first also keeps alignSize from overflowing: maxSize is at most Integer.MAX_VALUE, which the JS runtime
+    // passes by default.
+    private static boolean fits(int bytes) {
+        return bytes >= 0 && bytes <= maxSize - Structure.sizeOf(HeapRecord.class);
     }
 
     private static int alignSize(int bytes) {
