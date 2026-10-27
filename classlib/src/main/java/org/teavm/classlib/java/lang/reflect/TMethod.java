@@ -15,7 +15,6 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
-import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.lang.TClass;
 import org.teavm.classlib.java.lang.TIllegalAccessException;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
@@ -63,19 +62,8 @@ public class TMethod extends TExecutable implements TMember {
         appendModifiers(sb);
         sb.append(getReturnType().getTypeName()).append(' ');
         appendMemberName(sb);
-        TClass<?>[] params = getParameterTypes();
-        sb.append('(');
-        for (int i = 0; i < params.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(params[i].getTypeName());
-        }
-        sb.append(')');
-        TClass<?>[] exceptions = getExceptionTypes();
-        for (int i = 0; i < exceptions.length; i++) {
-            sb.append(i == 0 ? " throws " : ",").append(exceptions[i].getTypeName());
-        }
+        appendParameters(sb, getParameterTypes(), false);
+        appendThrows(sb);
         return sb.toString();
     }
 
@@ -95,25 +83,33 @@ public class TMethod extends TExecutable implements TMember {
         }
         sb.append(getGenericReturnType().getTypeName()).append(' ');
         appendMemberName(sb);
-        TType[] params = getGenericParameterTypes();
+        appendParameters(sb, getGenericParameterTypes(), isVarArgs());
+        appendThrows(sb);
+        return sb.toString();
+    }
+
+    // With varargsSugar, the last parameter prints as "T..." instead of "T[]".
+    private static void appendParameters(StringBuilder sb, TType[] params, boolean varargsSugar) {
         sb.append('(');
         for (int i = 0; i < params.length; i++) {
             if (i > 0) {
                 sb.append(',');
             }
             String name = params[i].getTypeName();
-            // The last parameter of a varargs method prints as "T..." instead of "T[]".
-            if (i == params.length - 1 && isVarArgs() && name.endsWith("[]")) {
-                name = name.substring(0, name.length() - 2) + "...";
+            if (varargsSugar && i == params.length - 1 && name.endsWith("[]")) {
+                sb.append(name, 0, name.length() - 2).append("...");
+            } else {
+                sb.append(name);
             }
-            sb.append(name);
         }
         sb.append(')');
-        TType[] exceptions = getExceptionTypes();
+    }
+
+    private void appendThrows(StringBuilder sb) {
+        TClass<?>[] exceptions = getExceptionTypes();
         for (int i = 0; i < exceptions.length; i++) {
             sb.append(i == 0 ? " throws " : ",").append(exceptions[i].getTypeName());
         }
-        return sb.toString();
     }
 
     // Appends the method modifiers (JLS 8.4.3) in JLS order, each followed by a space.
@@ -169,10 +165,7 @@ public class TMethod extends TExecutable implements TMember {
             }
         }
         validateArgs(args);
-        // Only the C backend initializes the class here. On Wasm GC the reflective caller initializes
-        // it, at a suspend point when the initializer can suspend; this call could not suspend (ClassInfo.initialize
-        // is an intrinsic that AsyncMethodFinder never marks async). On JS a static method initializes its class.
-        if (PlatformDetector.isC() && (methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
+        if ((methodInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
             declaringClass.initialize();
         }
 

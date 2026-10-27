@@ -31,6 +31,9 @@ public class TLogRecord extends TObject implements TSerializable {
     private String sourceMethodName;
     private long threadID;
     private TThrowable thrown;
+    // TeaVM's Logger does not localize messages, so it ignores these; a custom Formatter can read them.
+    private String resourceBundleName;
+    private TResourceBundle resourceBundle;
 
     public TLogRecord(TLevel level, String msg) {
         this.level = level;
@@ -40,10 +43,6 @@ public class TLogRecord extends TObject implements TSerializable {
         this.threadID = TThread.currentThread().getId();
     }
 
-    // The JDK keeps the name of the record's resource bundle. TeaVM's logging has no resource bundles, so nothing
-    // localizes with it.
-    private String resourceBundleName;
-
     public String getResourceBundleName() {
         return resourceBundleName;
     }
@@ -51,9 +50,6 @@ public class TLogRecord extends TObject implements TSerializable {
     public void setResourceBundleName(String name) {
         resourceBundleName = name;
     }
-
-    // The record's resource bundle, kept as the JDK keeps it.
-    private TResourceBundle resourceBundle;
 
     public TResourceBundle getResourceBundle() {
         return resourceBundle;

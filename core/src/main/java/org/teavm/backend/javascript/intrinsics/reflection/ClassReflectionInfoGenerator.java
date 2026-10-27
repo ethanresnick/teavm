@@ -430,18 +430,6 @@ public class ClassReflectionInfoGenerator implements Injector {
         }
     }
 
-    /**
-     * The method's modifiers as declared. The linker marks a method that the program never calls abstract when it
-     * drops its body, so the linked method can report ABSTRACT for a method with a body (a default method's
-     * isDefault() was then false). The class source before linking keeps the declaration.
-     */
-    private int declaredModifiers(MethodReader method) {
-        var cls = dependencyInfo.getClassSource().get(method.getOwnerName());
-        var declared = cls != null ? cls.getMethod(method.getDescriptor()) : null;
-        var source = declared != null ? declared : method;
-        return ElementModifier.asModifiersInfo(source.readModifiers(), source.getLevel());
-    }
-
     private void generateMethods(InjectorContext context, ClassReader cls, List<MethodReader> methods) {
         var writer = context.getMetadataWriter();
         writer.append("m:").ws().append('[').indent();
@@ -454,7 +442,8 @@ public class ClassReflectionInfoGenerator implements Injector {
             first = false;
             writer.append('[');
             writer.append('"').append(RenderingUtil.escapeString(method.getName())).append("\",").ws();
-            writer.append(declaredModifiers(method)).append(",").ws();
+            writer.append(ElementModifier.declaredModifiersInfo(dependencyInfo.getClassSource(), method))
+                    .append(",").ws();
             RenderingUtil.typeToClsString(writer, method.getResultType());
             writer.append(',').ws();
             if (method.parameterCount() == 0) {

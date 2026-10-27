@@ -63,11 +63,7 @@ public abstract class TCharset implements Comparable<TCharset> {
     }
 
     public static TCharset forName(String charsetName) {
-        if (charsetName == null) {
-            throw new IllegalArgumentException("charsetName is null");
-        }
-        checkCanonicalName(charsetName);
-        TCharset charset = Charsets.value.get(charsetName.toUpperCase());
+        TCharset charset = lookup(charsetName);
         if (charset == null) {
             throw new TUnsupportedCharsetException(charsetName);
         }
@@ -77,11 +73,15 @@ public abstract class TCharset implements Comparable<TCharset> {
     // As in the JDK, an illegal name throws IllegalCharsetNameException and null throws
     // IllegalArgumentException.
     public static boolean isSupported(String charsetName) {
+        return lookup(charsetName) != null;
+    }
+
+    private static TCharset lookup(String charsetName) {
         if (charsetName == null) {
-            throw new IllegalArgumentException();
+            throw new IllegalArgumentException("charsetName is null");
         }
         checkCanonicalName(charsetName);
-        return Charsets.value.get(charsetName.toUpperCase()) != null;
+        return Charsets.value.get(charsetName.toUpperCase());
     }
 
     public static TCharset defaultCharset() {

@@ -17,6 +17,8 @@ package org.teavm.classlib.java.util.logging;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import java.util.ListResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -25,18 +27,45 @@ import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
 public class LoggerTest {
+    // Logger.getResourceBundleName(): "Returns: localization bundle name (may be null)". getResourceBundle():
+    // "Returns: localization bundle (may be null)". getLogger(String) creates a logger without a bundle.
     @Test
     public void resourceBundleOfNamedLoggerIsNull() {
         var logger = Logger.getLogger("teavm.test.logger");
         assertNull(logger.getResourceBundleName());
         assertNull(logger.getResourceBundle());
+        var anonymous = Logger.getAnonymousLogger();
+        assertNull(anonymous.getResourceBundleName());
+        assertNull(anonymous.getResourceBundle());
     }
 
+    // LogRecord.setResourceBundleName(String): "Set the localization resource bundle name."
+    // LogRecord.setResourceBundle(ResourceBundle): "Set the localization resource bundle."
     @Test
     public void logRecordResourceBundleName() {
         var record = new LogRecord(Level.INFO, "message");
         assertNull(record.getResourceBundleName());
         record.setResourceBundleName("bundle");
         assertEquals("bundle", record.getResourceBundleName());
+        record.setResourceBundleName(null);
+        assertNull(record.getResourceBundleName());
+    }
+
+    @Test
+    public void logRecordResourceBundle() {
+        var record = new LogRecord(Level.INFO, "message");
+        assertNull(record.getResourceBundle());
+        var bundle = new ListResourceBundle() {
+            @Override
+            protected Object[][] getContents() {
+                return new Object[][] { { "message", "localized" } };
+            }
+        };
+        record.setResourceBundle(bundle);
+        assertSame(bundle, record.getResourceBundle());
+        // The bundle and its name are separate properties.
+        assertNull(record.getResourceBundleName());
+        record.setResourceBundle(null);
+        assertNull(record.getResourceBundle());
     }
 }

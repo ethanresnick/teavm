@@ -756,9 +756,21 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
 
     @Override
     public String getTypeName() {
-        return isArray()
-            ? getComponentType().getTypeName() + "[]"
-            : getName();
+        if (!isArray()) {
+            return getName();
+        }
+        // A loop, not recursion: the optimizer inlined the recursive form several levels deep at each call site.
+        TClass<?> cls = this;
+        var dimensions = 0;
+        while (cls.isArray()) {
+            cls = cls.getComponentType();
+            ++dimensions;
+        }
+        var sb = new StringBuilder(cls.getName());
+        for (var i = 0; i < dimensions; ++i) {
+            sb.append("[]");
+        }
+        return sb.toString();
     }
 
     @PluggableDependency(ClassGenerator.class)

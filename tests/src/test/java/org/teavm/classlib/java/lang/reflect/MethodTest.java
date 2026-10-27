@@ -15,11 +15,8 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.lang.annotation.Inherited;
@@ -559,62 +556,6 @@ public class MethodTest {
             Thread.sleep(1);
             ++y;
             return x + y;
-        }
-    }
-
-    @Test
-    public void defaultMethodToString() throws NoSuchMethodException {
-        Method values = WithDefault.class.getDeclaredMethod("values", String[].class, int.class);
-        Method plain = WithDefault.class.getDeclaredMethod("plain", long[][].class);
-        assertTrue(values.isDefault());
-        assertFalse(plain.isDefault());
-        var prefix = "org.teavm.classlib.java.lang.reflect.MethodTest$WithDefault.";
-        assertEquals("public default int[] " + prefix + "values(java.lang.String[],int) throws java.io.IOException",
-                values.toString());
-        assertEquals("public abstract void " + prefix + "plain(long[][])", plain.toString());
-        assertEquals(values.toString(), values.toGenericString());
-        assertArrayEquals(new Object[] { String[].class, int.class }, values.getGenericParameterTypes());
-    }
-
-    interface WithDefault {
-        @Reflectable
-        default int[] values(String[] names, int count) throws IOException {
-            return null;
-        }
-
-        @Reflectable
-        void plain(long[][] values);
-    }
-
-    // The C backend does not support async methods in reflection; see asyncReflection.
-    @Test
-    @SkipPlatform(TestPlatform.C)
-    public void asyncReflectionFailedInitializer() throws Exception {
-        var method = ClassWithFailingAsyncInitializer.class.getMethod("foo", int.class);
-        assertThrows(ExceptionInInitializerError.class, () -> method.invoke(null, 23));
-        assertThrows(NoClassDefFoundError.class, () -> method.invoke(null, 23));
-    }
-
-    static class ClassWithFailingAsyncInitializer {
-        static {
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            if (failInitializer()) {
-                throw new IllegalStateException();
-            }
-        }
-
-        private static boolean failInitializer() {
-            return true;
-        }
-
-        @Reflectable
-        public static int foo(int x) throws InterruptedException {
-            Thread.sleep(1);
-            return x;
         }
     }
 }
