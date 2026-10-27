@@ -324,6 +324,9 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         exceptionCons.getVariable(1).propagate(dependencyAnalyzer.getClassType(Throwable.class.getName()));
         exceptionCons.use();
 
+        dependencyAnalyzer.linkMethod(Renderer.INITIALIZATION_ENTER).propagate(1, String.class).use();
+        dependencyAnalyzer.linkMethod(Renderer.INITIALIZATION_EXIT).propagate(1, String.class).use();
+
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getMessage", String.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getCause", Throwable.class)).use();
 

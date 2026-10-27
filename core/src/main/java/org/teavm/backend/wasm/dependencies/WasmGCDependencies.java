@@ -144,6 +144,8 @@ public class WasmGCDependencies {
         analyzer.linkMethod(new MethodReference(WasmGCSupport.class, "nextCharArray", char[].class)).use();
         analyzer.linkMethod(WasmGCMethodGenerator.FAILED_INITIALIZER).use();
         analyzer.linkMethod(WasmGCMethodGenerator.INITIALIZER_ERROR).propagate(1, Throwable.class).use();
+        analyzer.linkMethod(WasmGCMethodGenerator.INITIALIZATION_ENTER).propagate(1, String.class).use();
+        analyzer.linkMethod(WasmGCMethodGenerator.INITIALIZATION_EXIT).propagate(1, String.class).use();
     }
 
     private void contributeString() {
