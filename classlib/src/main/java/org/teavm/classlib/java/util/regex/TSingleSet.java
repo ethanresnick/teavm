@@ -64,11 +64,10 @@ class TSingleSet extends TJointSet {
     }
 
     /**
-     * The start of the group's first iteration, while kid.find has not found it yet. Under X+ the first
-     * iteration enters through find, and later iterations through matches, which save this value and set their own
-     * start. Before, it set the start to the found position after the whole match, which overwrote the start of the
-     * group's last iteration: (.)+x captured from the first character, not the last. The value only marks "not
-     * re-entered": a group that a back reference reads is a TBackReferencedSingleSet, which sets its start first.
+     * The start of the group's first iteration, while kid.find has not found it yet. Under X+ the first iteration
+     * enters through find and later ones through matches, which set their own start; find must not overwrite it,
+     * or (.)+x captures the first character, not the last. While kid.find runs, the group's start reads as this
+     * value. A group that a back reference reads is a TBackReferencedSingleSet, which sets its start first.
      */
     private static final int FIRST_ITERATION = Integer.MIN_VALUE;
 
