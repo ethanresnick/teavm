@@ -2,7 +2,7 @@
 #include "core.h"
 
 int32_t teavm_reference_enqueue(TeaVM_Reference* reference) {
-    reference->object = NULL;
+    teavm_reference_clear(reference);
     TeaVM_ReferenceQueue* queue = reference->queue;
     if (queue == NULL || reference->next != NULL) {
         return INT32_C(0);

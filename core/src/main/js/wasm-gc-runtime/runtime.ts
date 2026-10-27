@@ -422,7 +422,11 @@ function coreImports(imports: Record<string, unknown>, context: Context): void {
         }
     });
     imports.teavm = {
-        createWeakRef(value: object, ref: object, queue: unknown) {
+        createWeakRef(value: object | null, ref: object, queue: unknown) {
+            if (value === null) {
+                // A null referent is never enqueued; get() returns null when the WeakRef is null
+                return null;
+            }
             const weakRef = new WeakRef(value);
             if (queue !== null) {
                 finalizationRegistry.register(value, { ref: new WeakRef(ref), queue }, weakRef);

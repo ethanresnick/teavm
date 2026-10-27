@@ -19,7 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
+import java.lang.ref.SoftReference;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -128,14 +130,44 @@ public class WeakReferenceTest {
         assertNull(ref.get());
     }
 
+    // Reference.enqueue(): "Clears this reference object and adds it to the queue with which it is registered, if any."
     @Test
     public void enqueueClears() {
         var obj = new Object();
-        var ref = new WeakReference<>(obj, new ReferenceQueue<>());
-        assertSame(obj, ref.get());
+        var queue = new ReferenceQueue<>();
+        List<Reference<Object>> refs = List.of(new WeakReference<>(obj, queue), new WeakReference<>(obj),
+                new SoftReference<>(obj, queue), new SoftReference<>(obj));
+        for (var ref : refs) {
+            assertSame(obj, ref.get());
+            ref.enqueue();
+            assertNull(ref.get());
+        }
+    }
 
-        ref.enqueue();
-        assertNull(ref.get());
+    @Test
+    public void clearTwice() {
+        var obj = new Object();
+        var queue = new ReferenceQueue<>();
+        var refs = List.of(new WeakReference<>(obj), new WeakReference<>(obj, queue));
+        for (var ref : refs) {
+            ref.clear();
+            assertNull(ref.get());
+            ref.clear();
+            assertNull(ref.get());
+        }
+        assertNull(queue.poll());
+    }
+
+    @Test
+    public void nullReferent() {
+        var queue = new ReferenceQueue<>();
+        var refs = List.of(new WeakReference<>(null), new WeakReference<>(null, queue));
+        for (var ref : refs) {
+            assertNull(ref.get());
+            ref.clear();
+            assertNull(ref.get());
+        }
+        assertNull(queue.poll());
     }
 
     @Test
@@ -186,15 +218,18 @@ public class WeakReferenceTest {
         var result = new ArrayList<Object>();
         for (var i = 0; i < 50 && !result.contains(expected); ++i) {
             sleep(100);
-            for (var ref = queue.poll(); ref != null; ref = queue.poll()) {
-                result.add(ref);
-            }
+            drain(queue, result);
         }
+        // Wait a little more to catch references that are enqueued but should not be
         sleep(100);
+        drain(queue, result);
+        return result;
+    }
+
+    private static void drain(ReferenceQueue<?> queue, List<Object> result) {
         for (var ref = queue.poll(); ref != null; ref = queue.poll()) {
             result.add(ref);
         }
-        return result;
     }
 
     private static void sleep(long millis) {
