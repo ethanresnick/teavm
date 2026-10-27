@@ -33,7 +33,6 @@ import org.teavm.model.ClassReader;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.ElementModifier;
 import org.teavm.model.FieldHolder;
-import org.teavm.model.FieldReference;
 import org.teavm.model.MethodHolder;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
@@ -312,8 +311,10 @@ public class AnnotationGenerationHelper {
                 if (value == null) {
                     value = methodDecl.getAnnotationDefault();
                 }
-                var field = agent.linkField(new FieldReference(implementor, "$" + methodDecl.getName()));
-                propagateAnnotationValue(agent, value, methodDecl.getResultType(), field.getValue());
+                // The implementor's accessor reads the value from native annotation data, so the value's types
+                // (e.g. the classes that Class-valued members name) must be propagated into its result.
+                var accessor = agent.linkMethod(new MethodReference(implementor, methodDecl.getDescriptor()));
+                propagateAnnotationValue(agent, value, methodDecl.getResultType(), accessor.getResult());
             }
             var initParamType = ValueType.object(annotation.getType() + ANNOTATION_DATA_SUFFIX);
             agent.linkMethod(new MethodReference(implementor, "<init>", initParamType, ValueType.VOID)).use();
@@ -344,10 +345,6 @@ public class AnnotationGenerationHelper {
                 }
                 outputNode.getClassValueNode().propagate(agent.getType(value.getJavaClass()));
                 outputNode.propagate(agent.getType(ValueType.object("java.lang.Class")));
-                // A class that an annotation value or default names is reflective data, so it keeps its name.
-                var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
-                getName.getVariable(0).propagate(agent.getType(ValueType.object("java.lang.Class")));
-                getName.getVariable(0).getClassValueNode().propagate(agent.getType(value.getJavaClass()));
                 break;
             }
             case AnnotationValue.ANNOTATION:
