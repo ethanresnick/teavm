@@ -22,6 +22,7 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.net.impl.TDummyStreamHandler;
 import org.teavm.classlib.java.net.impl.TXHRStreamHandler;
 
@@ -294,7 +295,11 @@ public final class TURL implements Serializable {
         switch (protocol) {
             case "http":
             case "https":
-                strmHandler = new TXHRStreamHandler();
+                // The XHR connection exists only on JS and Wasm GC. On C, linking it failed the build of every
+                // program that opens a URL, so http and https have no connection there, like other protocols.
+                strmHandler = PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()
+                        ? new TXHRStreamHandler()
+                        : new TDummyStreamHandler(80);
                 break;
             case "ftp":
                 strmHandler = new TDummyStreamHandler(21);

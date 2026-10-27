@@ -43,6 +43,18 @@ public class URLTest {
     
     
     @Test
+    public void openStreamOfUnsupportedProtocolThrowsIOException() throws MalformedURLException {
+        // On C, this test also checks that a program that opens a URL builds.
+        var url = new URL("ftp://example.com/file");
+        try {
+            url.openStream();
+            fail();
+        } catch (IOException e) {
+            // ok
+        }
+    }
+
+    @Test
     public void test_ConstructorLjava_lang_String() throws IOException {
         // Tests for multiple URL instantiation basic parsing test
         u = new URL("http://www.yahoo1.com:8080/dir1/dir2/test.cgi?point1.html#anchor1");
