@@ -436,4 +436,8 @@ public class TThread extends TObject implements TRunnable {
     public interface UncaughtExceptionHandler {
         void uncaughtException(TThread t, Throwable e);
     }
+
+    // The park state of java.util.concurrent.locks.LockSupport. Only that class uses it, so a program without it
+    // does not have the field.
+    public Object parkState;
 }

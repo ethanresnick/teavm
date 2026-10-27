@@ -326,6 +326,12 @@ public final class TFiles {
         return readAttributes(path, TBasicFileAttributes.class, options).lastModifiedTime();
     }
 
+    public static TPath setLastModifiedTime(TPath path, TFileTime time) throws IOException {
+        Objects.requireNonNull(time);
+        ((TDefaultFileSystemProvider) path.getFileSystem().provider()).setLastModifiedTime(path, time);
+        return path;
+    }
+
     public static long size(TPath path) throws IOException {
         return readAttributes(path, TBasicFileAttributes.class).size();
     }
