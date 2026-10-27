@@ -141,11 +141,14 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
                         case SPARSE:
                             break;
                         case READ:
-                            throw new UnsupportedOperationException();
+                            throw new IllegalArgumentException();
                     }
                 } else if (option != TLinkOption.NOFOLLOW_LINKS) {
                     throw new UnsupportedOperationException();
                 }
+            }
+            if (append && truncate) {
+                throw new IllegalArgumentException();
             }
         }
 
