@@ -249,7 +249,6 @@ public final class Fiber {
                     + "(perhaps, from native JS method). See https://teavm.org/docs/runtime/coroutines.html "
                     + "('Interaction with JavaScript' section)");
         }
-        Thread javaThread = Thread.currentThread();
         if (fiber.isResuming()) {
             fiber.state = STATE_RUNNING;
             // Take the outcome of this call and clear it, so that it does not leak into a later call. Without
@@ -263,6 +262,9 @@ public final class Fiber {
             }
             return result;
         }
+        // Thread.currentThread() can be suspendable (it can initialize Thread). Suspendable code reads the fiber's
+        // state, so it must not run while the fiber resumes.
+        Thread javaThread = Thread.currentThread();
         PendingCall pendingCall = new PendingCall(call, lastPendingCall);
         if (lastPendingCall != null) {
             lastPendingCall.next = pendingCall;
