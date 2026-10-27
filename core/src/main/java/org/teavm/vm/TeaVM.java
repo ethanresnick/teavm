@@ -158,6 +158,7 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
     private boolean cancelled;
     private ListableClassHolderSource writtenClasses;
     private TeaVMTarget target;
+    private final boolean strict;
     private Map<Class<?>, TeaVMHostExtension> extensions = new HashMap<>();
     private Set<? extends MethodReference> virtualMethods;
     private AnnotationAwareCacheStatus cacheStatus;
@@ -182,6 +183,7 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         services.put(ExtensionEnvironment.class, dependencyAnalyzer.extensionEnvironment());
         dependencyAnalyzer.setObfuscated(builder.obfuscated);
         dependencyAnalyzer.setStrict(builder.strict);
+        strict = builder.strict;
         progressListener = new TeaVMProgressListener() {
             @Override public TeaVMProgressFeedback progressReached(int progress) {
                 return TeaVMProgressFeedback.CONTINUE;
@@ -726,7 +728,7 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
                     Program program = method.getProgram();
                     var context = new MethodOptimizationContextImpl(method);
                     inlining.apply(program, method.getReference());
-                    new UnusedVariableElimination().optimize(context, program);
+                    new UnusedVariableElimination(strict).optimize(context, program);
                 }
             }
 
@@ -854,11 +856,11 @@ public class TeaVM implements TeaVMHost, ServiceRepository {
         if (optimizationLevel.ordinal() >= TeaVMOptimizationLevel.ADVANCED.ordinal()) {
             optimizations.add(new ConstantConditionElimination());
             optimizations.add(new RedundantJumpElimination());
-            optimizations.add(new UnusedVariableElimination());
+            optimizations.add(new UnusedVariableElimination(strict));
         }
         optimizations.add(new ClassInitElimination());
         optimizations.add(new UnreachableBasicBlockElimination());
-        optimizations.add(new UnusedVariableElimination());
+        optimizations.add(new UnusedVariableElimination(strict));
         if (target.needsSystemArrayCopyOptimization()) {
             optimizations.add(new SystemArrayCopyOptimization());
         }

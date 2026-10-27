@@ -22,9 +22,9 @@ public final class VariableEscapeAnalyzer {
     private VariableEscapeAnalyzer() {
     }
 
-    public static boolean[] findEscapingVariables(Program program) {
+    public static boolean[] findEscapingVariables(Program program, boolean keepCasts) {
         boolean[] escaping = new boolean[program.variableCount()];
-        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping);
+        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping, keepCasts);
         for (int i = 0; i < program.basicBlockCount(); ++i) {
             BasicBlock block = program.basicBlockAt(i);
             for (Instruction insn : block) {
@@ -36,9 +36,11 @@ public final class VariableEscapeAnalyzer {
 
     private static class InstructionAnalyzer extends AbstractInstructionVisitor {
         private boolean[] escaping;
+        private boolean keepCasts;
 
-        InstructionAnalyzer(boolean[] escaping) {
+        InstructionAnalyzer(boolean[] escaping, boolean keepCasts) {
             this.escaping = escaping;
+            this.keepCasts = keepCasts;
         }
 
         @Override
@@ -120,6 +122,13 @@ public final class VariableEscapeAnalyzer {
                 escaping[insn.getArray().getIndex()] = true;
             }
             if (insn.getReceiver() != null) {
+                escaping[insn.getReceiver().getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(CastInstruction insn) {
+            if (keepCasts && !insn.isWeak()) {
                 escaping[insn.getReceiver().getIndex()] = true;
             }
         }

@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -86,6 +87,22 @@ public class RttiTest {
             Integer[] integers = (Integer[]) o;
             assertEquals(0, integers.length);
         });
+    }
+
+    @Test
+    @SuppressWarnings("unused")
+    public void castWithUnusedResultFails() {
+        List<String> list = makeList();
+        try {
+            ArrayList<String> arrayList = (ArrayList<String>) list;
+            fail("expected ClassCastException");
+        } catch (ClassCastException expected) {
+            // expected
+        }
+    }
+
+    private static List<String> makeList() {
+        return List.of("a");
     }
 
     private void checkImplements(Object o, boolean i, boolean j, boolean k) {

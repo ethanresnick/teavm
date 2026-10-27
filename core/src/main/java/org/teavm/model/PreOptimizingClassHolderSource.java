@@ -53,7 +53,9 @@ public class PreOptimizingClassHolderSource implements ClassHolderSource {
             if (method.getProgram() != null) {
                 noSuchFieldCatchElimination.apply(method.getProgram());
                 new GlobalValueNumbering(true).optimize(method.getProgram());
-                new UnusedVariableElimination().optimize(method, method.getProgram());
+                // The target is not known here, so keep casts for strict mode. TeaVM removes unused casts later
+                // when it does not compile in strict mode.
+                new UnusedVariableElimination(true).optimize(method, method.getProgram());
             }
         }
         return cls;
