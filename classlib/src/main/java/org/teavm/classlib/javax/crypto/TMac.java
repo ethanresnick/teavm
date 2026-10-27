@@ -31,16 +31,15 @@ public class TMac implements Cloneable {
 
     private final String algorithm;
     private final int blockSize;
+    // Computes the inner hash, then (after digest() resets it) the outer one.
     private MessageDigest inner;
-    private MessageDigest outer;
     // Padded key XOR ipad / opad; null until init succeeds.
     private byte[] innerPad;
     private byte[] outerPad;
 
-    private TMac(String algorithm, MessageDigest inner, MessageDigest outer, int blockSize) {
+    private TMac(String algorithm, MessageDigest inner, int blockSize) {
         this.algorithm = algorithm;
         this.inner = inner;
-        this.outer = outer;
         this.blockSize = blockSize;
     }
 
@@ -86,8 +85,7 @@ public class TMac implements Cloneable {
             default:
                 throw new NoSuchAlgorithmException();
         }
-        return new TMac(algorithm, MessageDigest.getInstance(digestName), MessageDigest.getInstance(digestName),
-                blockSize);
+        return new TMac(algorithm, MessageDigest.getInstance(digestName), blockSize);
     }
 
     public final String getAlgorithm() {
@@ -168,9 +166,8 @@ public class TMac implements Cloneable {
     public final byte[] doFinal() {
         checkInitialized();
         byte[] innerHash = inner.digest();
-        outer.reset();
-        outer.update(outerPad);
-        byte[] result = outer.digest(innerHash);
+        inner.update(outerPad);
+        byte[] result = inner.digest(innerHash);
         restart();
         return result;
     }
@@ -202,7 +199,6 @@ public class TMac implements Cloneable {
     public final Object clone() throws CloneNotSupportedException {
         TMac copy = (TMac) super.clone();
         copy.inner = (MessageDigest) inner.clone();
-        copy.outer = (MessageDigest) outer.clone();
         // init wipes the old pads, so the copy needs its own.
         if (innerPad != null) {
             copy.innerPad = innerPad.clone();
