@@ -18,6 +18,7 @@ package org.teavm.classlib.java.util;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -60,6 +61,13 @@ public class PriorityQueueTest {
             expectedList.remove(indexToRemove);
             assertArrayEquals(expectedList.toArray(), list.toArray());
         }
+    }
+
+    @Test
+    public void addAllOfItselfThrows() {
+        PriorityQueue<Integer> queue = fillQueue();
+        assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+        assertEquals(8, queue.size());
     }
 
     private PriorityQueue<Integer> fillQueue() {

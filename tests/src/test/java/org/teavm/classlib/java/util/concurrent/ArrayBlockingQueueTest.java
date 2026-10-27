@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.WeakReference;
@@ -314,6 +315,15 @@ public class ArrayBlockingQueueTest {
         for (var i = 0; i < refs.size(); ++i) {
             assertNull(refs.get(i).get(), "a thread that ended after " + names.get(i) + " was kept alive");
         }
+    }
+
+    @Test
+    public void addAllOfItselfThrows() {
+        ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(10);
+        queue.add(1);
+        queue.add(2);
+        assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
+        assertEquals(2, queue.size());
     }
 
     interface WaitAction {
