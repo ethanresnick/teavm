@@ -426,10 +426,18 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         waitHandlers = null;
     }
 
-    @Async
-    private native Boolean waitForChange(long timeLimit) throws InterruptedException;
+    // As in the JDK, a thread interrupted before it waits throws at once, and the throw clears its interrupt status.
+    private boolean waitForChange(long timeLimit) throws InterruptedException {
+        if (TThread.interrupted()) {
+            throw new InterruptedException();
+        }
+        return waitForChangeImpl(timeLimit);
+    }
 
-    private void waitForChange(long timeLimit, AsyncCallback<Boolean> callback) {
+    @Async
+    private native Boolean waitForChangeImpl(long timeLimit) throws InterruptedException;
+
+    private void waitForChangeImpl(long timeLimit, AsyncCallback<Boolean> callback) {
         if (waitHandlers == null) {
             waitHandlers = new ArrayDeque<>();
         }
@@ -489,6 +497,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
                 return;
             }
             queue.removeWaitHandler(this);
+            thread.clearInterruptStatus();
             // interrupted() runs on the interrupting thread, inside Thread.interrupt(). Resuming the waiter there
             // failed on JS ("Another thread is running" in TeaVMThread.resume). Post the error instead, as TObject's
             // wait listener and TThread's sleep handler do.

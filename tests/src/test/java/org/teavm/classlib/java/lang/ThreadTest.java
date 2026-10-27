@@ -349,6 +349,40 @@ public class ThreadTest {
         }
     }
 
+    // join: "InterruptedException - if any thread has interrupted the current thread. The interrupted status of
+    // the current thread is cleared when this exception is thrown."
+    @Test
+    public void joinThrowsForEarlierInterrupt() throws InterruptedException {
+        var current = Thread.currentThread();
+        var other = new Thread(() -> {
+            try {
+                Thread.sleep(10_000);
+            } catch (InterruptedException e) {
+                // ends the thread
+            }
+        });
+        other.start();
+        var names = List.of("join()", "join(5000)", "join(5000, 1)");
+        var joins = List.<Action>of(other::join, () -> other.join(5000), () -> other.join(5000, 1));
+        for (var i = 0; i < joins.size(); ++i) {
+            current.interrupt();
+            long start = System.currentTimeMillis();
+            var threw = false;
+            try {
+                joins.get(i).run();
+            } catch (InterruptedException e) {
+                threw = true;
+            } catch (Exception e) {
+                fail(names.get(i) + ": " + e);
+            }
+            assertTrue(threw, names.get(i) + " did not throw");
+            assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+            assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+        }
+        other.interrupt();
+        other.join();
+    }
+
     private static void sleepUnchecked(long millis) {
         try {
             Thread.sleep(millis);

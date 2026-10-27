@@ -28,8 +28,6 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -249,29 +247,112 @@ public class ArrayBlockingQueueTest {
         return queue;
     }
 
+    // Thread.interrupt(): a thread blocked in wait(), join() or sleep() "will receive an InterruptedException",
+    // and "its interrupt status will be cleared". The JDK's ArrayBlockingQueue waits in Condition.await(), which
+    // also clears the status when it throws.
     @Test
     public void takeCanBeInterruptedAgain() throws InterruptedException {
         var queue = new ArrayBlockingQueue<Integer>(1);
-        // An AtomicInteger, not an int[] local: with an int[] local, the C backend generated code that did not
-        // compile (the local holding the array was reused for an int).
-        var interrupts = new AtomicInteger();
+        var interrupts = new int[1];
+        var statusClearedEachTime = new boolean[] { true };
+        var taken = new Integer[1];
         var thread = new Thread(() -> {
-            for (var i = 0; i < 2; ++i) {
+            while (true) {
                 try {
-                    queue.take();
+                    taken[0] = queue.take();
+                    return;
                 } catch (InterruptedException e) {
-                    interrupts.incrementAndGet();
+                    interrupts[0]++;
+                    statusClearedEachTime[0] &= !Thread.currentThread().isInterrupted();
                 }
             }
         });
         thread.start();
+        for (var i = 0; i < 4; ++i) {
+            Thread.sleep(50);
+            thread.interrupt();
+        }
         Thread.sleep(50);
-        thread.interrupt();
-        Thread.sleep(50);
-        thread.interrupt();
+        queue.add(42);
         thread.join(2000);
-        assertEquals(2, interrupts.get());
         assertFalse(thread.isAlive());
+        assertEquals(4, interrupts[0]);
+        assertTrue(statusClearedEachTime[0], "InterruptedException left the interrupt status set");
+        assertEquals(Integer.valueOf(42), taken[0], "the wait after the interrupts did not get the element");
+    }
+
+    // BlockingQueue's blocking methods throw "InterruptedException - if interrupted while waiting".
+    // Condition.await(), which the JDK's ArrayBlockingQueue waits in, throws if the thread "has its interrupted
+    // status set on entry to this method", and clears the status.
+    @Test
+    public void blockingCallsThrowForEarlierInterrupt() {
+        var current = Thread.currentThread();
+        var names = List.of("take()", "poll(5 s)", "put()", "offer(5 s)");
+        var actions = List.<WaitAction>of(
+                BlockingQueue::take,
+                queue -> queue.poll(5, TimeUnit.SECONDS),
+                queue -> queue.put(2),
+                queue -> queue.offer(2, 5, TimeUnit.SECONDS));
+        for (var i = 0; i < actions.size(); ++i) {
+            // An empty queue for take() and poll(), a full one for put() and offer().
+            var queue = new ArrayBlockingQueue<Integer>(1);
+            if (i >= 2) {
+                queue.add(1);
+            }
+            current.interrupt();
+            long start = System.currentTimeMillis();
+            try {
+                actions.get(i).run(queue);
+                fail(names.get(i) + " did not throw");
+            } catch (InterruptedException e) {
+                // expected
+            }
+            assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+            assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+            assertEquals(i >= 2 ? List.of(1) : List.of(), new ArrayList<>(queue), names.get(i) + " changed the queue");
+        }
+    }
+
+    // A wait that ends must clear only its own thread's interrupt handler. A timed-out wait ends from a timer, and
+    // a wait that add() wakes ends from a posted event; there, the current thread can be another thread, which is
+    // blocked in sleep(). If that thread's handler is cleared, interrupt() no longer wakes it.
+    @Test
+    public void endedWaitDoesNotClearAnotherThreadsInterruptHandler() throws InterruptedException {
+        var names = List.of("poll(100 ms) timed out", "offer(100 ms) timed out", "take() woken by add()");
+        for (var i = 0; i < names.size(); ++i) {
+            var queue = new ArrayBlockingQueue<Integer>(1);
+            if (i == 1) {
+                queue.add(1);
+            }
+            var interrupted = new boolean[1];
+            var addFirst = i == 2;
+            var sleeper = new Thread(() -> {
+                if (addFirst) {
+                    queue.add(1);
+                }
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    interrupted[0] = true;
+                }
+            });
+            // The sleeper starts after this thread blocks, so it is the last thread to run when the wait ends.
+            sleeper.start();
+            switch (i) {
+                case 0:
+                    assertNull(queue.poll(100, TimeUnit.MILLISECONDS));
+                    break;
+                case 1:
+                    assertFalse(queue.offer(2, 100, TimeUnit.MILLISECONDS));
+                    break;
+                default:
+                    assertEquals(Integer.valueOf(1), queue.take());
+                    break;
+            }
+            sleeper.interrupt();
+            sleeper.join(2000);
+            assertTrue(interrupted[0], "after " + names.get(i) + ", interrupt() did not wake a sleeping thread");
+        }
     }
 
     @Test
@@ -303,8 +384,6 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
-    @Disabled("On JS, interrupting a waiting take(), put() or poll() fails with \"Another thread is running\" "
-            + "before the waiter resumes (ethanresnick/teavm#70 fixes this)")
     public void interruptedWaitsDoNotKeepThreadsAlive() throws InterruptedException {
         var queues = new ArrayList<BlockingQueue<Integer>>();
         var names = new ArrayList<String>();

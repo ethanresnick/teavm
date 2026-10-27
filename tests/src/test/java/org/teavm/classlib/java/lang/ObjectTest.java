@@ -16,6 +16,7 @@
 package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -221,6 +222,32 @@ public class ObjectTest {
         assertTrue(heldLockAfterInterrupt[0], "wait() did not hold the monitor when it threw InterruptedException");
         assertTrue(flagClearedAfterInterrupt[0], "InterruptedException from wait() left the interrupt status set");
         assertTrue(state[3], "notify() after an interrupted wait() did not wake the waiting thread");
+    }
+
+    // wait(): "InterruptedException - if any thread interrupted the current thread before or while the current
+    // thread was waiting. The interrupted status of the current thread is cleared when this exception is thrown."
+    @Test
+    public void waitThrowsForEarlierInterrupt() {
+        var current = Thread.currentThread();
+        var lock = new Object();
+        var names = List.of("wait()", "wait(5000)", "wait(5000, 1)");
+        var actions = List.<WaitAction>of(Object::wait, o -> o.wait(5000), o -> o.wait(5000, 1));
+        for (var i = 0; i < actions.size(); ++i) {
+            synchronized (lock) {
+                current.interrupt();
+                long start = System.currentTimeMillis();
+                var threw = false;
+                try {
+                    actions.get(i).run(lock);
+                } catch (InterruptedException e) {
+                    threw = true;
+                }
+                assertTrue(threw, names.get(i) + " did not throw");
+                assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+                assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+                assertTrue(Thread.holdsLock(lock), names.get(i) + " released the monitor");
+            }
+        }
     }
 
     @Test

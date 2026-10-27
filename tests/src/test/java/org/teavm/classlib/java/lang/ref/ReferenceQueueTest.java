@@ -17,38 +17,114 @@ package org.teavm.classlib.java.lang.ref;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.ReferenceQueue;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
+// The C backend generates an empty body for ReferenceQueue.remove(), so a waiter there never blocks.
 @TeaVMTest
+@EachTestCompiledSeparately
+@SkipPlatform(TestPlatform.C)
 public class ReferenceQueueTest {
-    // The C backend generates an empty body for ReferenceQueue.remove(), so a waiter there never blocks.
+    // remove(): "InterruptedException - If the wait is interrupted". Thread.interrupt(): a thread blocked in
+    // wait(), which the JDK's ReferenceQueue waits in, "will receive an InterruptedException", and "its interrupt
+    // status will be cleared".
     @Test
-    @SkipPlatform(TestPlatform.C)
-    public void removeCanBeInterruptedTwice() throws InterruptedException {
-        var queue = new ReferenceQueue<Object>();
-        // An AtomicInteger, not an int[] local: see ArrayBlockingQueueTest.takeCanBeInterruptedAgain.
-        var interrupts = new AtomicInteger();
-        var thread = new Thread(() -> {
-            for (var i = 0; i < 2; ++i) {
-                try {
-                    queue.remove();
-                } catch (InterruptedException e) {
-                    interrupts.incrementAndGet();
+    public void removeCanBeInterruptedAgain() throws InterruptedException {
+        var names = List.of("remove()", "remove(10 s)");
+        for (var i = 0; i < names.size(); ++i) {
+            var queue = new ReferenceQueue<Object>();
+            var interrupts = new int[1];
+            var statusClearedEachTime = new boolean[] { true };
+            var timed = i == 1;
+            var thread = new Thread(() -> {
+                for (var j = 0; j < 4; ++j) {
+                    try {
+                        if (timed) {
+                            queue.remove(10_000);
+                        } else {
+                            queue.remove();
+                        }
+                    } catch (InterruptedException e) {
+                        interrupts[0]++;
+                        statusClearedEachTime[0] &= !Thread.currentThread().isInterrupted();
+                    }
                 }
+            });
+            thread.start();
+            for (var j = 0; j < 4; ++j) {
+                Thread.sleep(50);
+                thread.interrupt();
+            }
+            thread.join(2000);
+            assertFalse(thread.isAlive(), names.get(i) + ": the waiter did not end");
+            assertEquals(4, interrupts[0], names.get(i));
+            assertTrue(statusClearedEachTime[0], names.get(i) + ": InterruptedException left the interrupt status set");
+        }
+    }
+
+    // Object.wait(), which the JDK's ReferenceQueue waits in: "InterruptedException - if any thread interrupted
+    // the current thread before or while the current thread was waiting. The interrupted status of the current
+    // thread is cleared when this exception is thrown."
+    @Test
+    public void removeThrowsForEarlierInterrupt() {
+        var current = Thread.currentThread();
+        var queue = new ReferenceQueue<Object>();
+        var names = List.of("remove()", "remove(5 s)");
+        for (var i = 0; i < names.size(); ++i) {
+            current.interrupt();
+            long start = System.currentTimeMillis();
+            try {
+                if (i == 0) {
+                    queue.remove();
+                } else {
+                    queue.remove(5000);
+                }
+                fail(names.get(i) + " did not throw");
+            } catch (InterruptedException e) {
+                // expected
+            }
+            assertTrue(System.currentTimeMillis() - start < 2500, names.get(i) + " waited");
+            assertFalse(current.isInterrupted(), names.get(i) + " left the interrupt status set");
+        }
+    }
+
+    // remove(timeout): "Returns: A reference object, if one was available within the specified timeout period,
+    // otherwise null".
+    @Test
+    public void timedRemoveReturnsNull() throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        long start = System.currentTimeMillis();
+        assertNull(queue.remove(50));
+        assertTrue(System.currentTimeMillis() - start >= 40, "remove(50) did not wait");
+    }
+
+    // A timed-out remove() ends from a timer, where the current thread can be another thread, which is blocked in
+    // sleep(). The wait must clear only its own thread's interrupt handler: if it clears the sleeping thread's,
+    // interrupt() no longer wakes that thread.
+    @Test
+    public void timedOutRemoveDoesNotClearAnotherThreadsInterruptHandler() throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        var interrupted = new boolean[1];
+        var sleeper = new Thread(() -> {
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                interrupted[0] = true;
             }
         });
-        thread.start();
-        Thread.sleep(50);
-        thread.interrupt();
-        Thread.sleep(50);
-        thread.interrupt();
-        thread.join(2000);
-        assertEquals(2, interrupts.get());
-        assertFalse(thread.isAlive());
+        // The sleeper starts after this thread blocks, so it is the last thread to run when the wait times out.
+        sleeper.start();
+        assertNull(queue.remove(100));
+        sleeper.interrupt();
+        sleeper.join(2000);
+        assertTrue(interrupted[0], "after a timed-out remove(), interrupt() did not wake a sleeping thread");
     }
 }
