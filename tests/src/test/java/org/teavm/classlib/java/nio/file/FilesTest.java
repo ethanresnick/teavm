@@ -612,6 +612,31 @@ public class FilesTest {
         }
     }
 
+    // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
+    @Test
+    public void accessChecksFollowFilePermissions() throws IOException {
+        var file = new File("test-file-permissions");
+        var path = Path.of("test-file-permissions");
+        assertTrue(file.createNewFile());
+        try {
+            assertTrue(Files.isReadable(path));
+            assertTrue(Files.isWritable(path));
+            assertFalse(Files.isExecutable(path));
+
+            assertTrue(file.setExecutable(true));
+            assertTrue(Files.isExecutable(path));
+            assertTrue(file.setReadable(false));
+            assertFalse(Files.isReadable(path));
+            assertTrue(file.setWritable(false));
+            assertFalse(Files.isWritable(path));
+        } finally {
+            file.setReadable(true);
+            file.setWritable(true);
+            file.delete();
+        }
+        assertFalse(Files.isExecutable(path));
+    }
+
     // Files.createDirectories: "Creates a directory by creating all nonexistent parent directories first. Unlike
     // the createDirectory method, an exception is not thrown if the directory could not be created because it
     // already exists." It returns "the directory".

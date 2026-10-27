@@ -104,6 +104,12 @@ public class VirtualFileImpl implements VirtualFile {
     }
 
     @Override
+    public boolean canExecute() {
+        AbstractInMemoryVirtualFile inMemory = findInMemory();
+        return inMemory != null && inMemory.canExecute();
+    }
+
+    @Override
     public long lastModified() {
         AbstractInMemoryVirtualFile inMemory = findInMemory();
         return inMemory != null ? inMemory.lastModified() : 0;
@@ -119,6 +125,12 @@ public class VirtualFileImpl implements VirtualFile {
     public boolean setReadOnly(boolean readOnly) {
         AbstractInMemoryVirtualFile inMemory = findInMemory();
         return inMemory != null && inMemory.setReadOnly(readOnly);
+    }
+
+    @Override
+    public boolean setAccess(int modeBits, boolean enable) {
+        AbstractInMemoryVirtualFile inMemory = findInMemory();
+        return inMemory != null && inMemory.setAccess(modeBits, enable);
     }
 
     @Override
