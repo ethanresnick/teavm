@@ -99,6 +99,7 @@ import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
 import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.model.transformation.BoundCheckInsertion;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.transformation.NullCheckFilter;
 import org.teavm.model.transformation.NullCheckInsertion;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
@@ -136,6 +137,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     private boolean strict;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
     private NullCheckInsertion nullCheckInsertion = new NullCheckInsertion(NullCheckFilter.EMPTY);
+    private DivisionCheckInsertion divisionCheckInsertion = new DivisionCheckInsertion(method -> true);
     private final Map<String, String> importedModules = new LinkedHashMap<>();
     private JavaScriptTemplateFactory templateFactory;
     private JSModuleType moduleType = JSModuleType.UMD;
@@ -290,6 +292,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         exceptionCons.use();
 
         if (strict) {
+            DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
+
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     ArrayIndexOutOfBoundsException.class, "<init>", void.class));
             exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
@@ -378,6 +382,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     public void beforeInlining(Program program, MethodReader method) {
         if (strict) {
             nullCheckInsertion.transformProgram(program, method.getReference());
+            divisionCheckInsertion.transformProgram(program, method.getReference());
         }
     }
 

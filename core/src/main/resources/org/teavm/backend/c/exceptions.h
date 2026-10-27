@@ -84,6 +84,22 @@
         return index;
     }
 
+    inline static int32_t teavm_checkDivisor_i32(int32_t divisor) {
+        if (divisor == 0) {
+            teavm_throwArithmeticException();
+            TEAVM_UNREACHABLE
+        }
+        return divisor;
+    }
+
+    inline static int64_t teavm_checkDivisor_i64(int64_t divisor) {
+        if (divisor == 0) {
+            teavm_throwArithmeticException();
+            TEAVM_UNREACHABLE
+        }
+        return divisor;
+    }
+
 #else
     #define TEAVM_JUMP_SUPPORTED 0
     #define TEAVM_JUMP_TO_FRAME(frame, id)

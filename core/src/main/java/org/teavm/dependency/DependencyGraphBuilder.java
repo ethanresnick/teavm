@@ -41,7 +41,10 @@ import org.teavm.model.ValueType;
 import org.teavm.model.VariableReader;
 import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.model.instructions.ArrayElementType;
+import org.teavm.model.instructions.BinaryOperation;
+import org.teavm.model.instructions.NumericOperandType;
 import org.teavm.model.text.ListingBuilder;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 
 class DependencyGraphBuilder {
     private static final MethodDescriptor GET_CLASS = new MethodDescriptor("getClass", Class.class);
@@ -259,6 +262,20 @@ class DependencyGraphBuilder {
             }
         }
 
+        // The division check is inserted after this analysis, so no instruction here throws the exception yet.
+        @Override
+        public void binary(BinaryOperation op, VariableReader receiver, VariableReader first, VariableReader second,
+                NumericOperandType type) {
+            super.binary(op, receiver, first, second, type);
+            if (dependencyAnalyzer.integerDivisionChecked && DivisionCheckInsertion.isIntegerDivision(op, type)) {
+                throwsArithmeticException();
+            }
+        }
+
+        private void throwsArithmeticException() {
+            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(ArithmeticException.class.getName()));
+        }
+
         @Override
         public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
             super.cast(receiver, value, targetType, weak);
@@ -372,6 +389,10 @@ class DependencyGraphBuilder {
                 List<? extends VariableReader> arguments) {
             if (handleSpecialMethod(receiver, instance, method)) {
                 return;
+            }
+            if (dependencyAnalyzer.integerDivisionChecked && instance == null
+                    && DivisionCheckInsertion.isUnsignedDivision(method)) {
+                throwsArithmeticException();
             }
 
             CallLocation callLocation = getCallLocation();

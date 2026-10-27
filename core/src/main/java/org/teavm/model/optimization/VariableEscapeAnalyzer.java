@@ -20,6 +20,7 @@ import java.util.List;
 import org.teavm.model.*;
 import org.teavm.model.instructions.*;
 import org.teavm.model.optimization.UnusedVariableElimination.ImplicitExceptions;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 
 public final class VariableEscapeAnalyzer {
     private VariableEscapeAnalyzer() {
@@ -39,6 +40,7 @@ public final class VariableEscapeAnalyzer {
             }
         }
         analyzer.markArraysOfPossiblyNegativeSize();
+        analyzer.markDivisionsByPossibleZero();
         return escaping;
     }
 
@@ -47,6 +49,8 @@ public final class VariableEscapeAnalyzer {
         private ImplicitExceptions implicitExceptions;
         private boolean[] nonNegativeConstant;
         private List<Instruction> arrayAllocations;
+        private boolean[] nonZeroConstant;
+        private List<BinaryInstruction> divisions;
 
         InstructionAnalyzer(boolean[] escaping, ImplicitExceptions implicitExceptions) {
             this.escaping = escaping;
@@ -54,6 +58,23 @@ public final class VariableEscapeAnalyzer {
             if (implicitExceptions != ImplicitExceptions.REMOVE) {
                 nonNegativeConstant = new boolean[escaping.length];
                 arrayAllocations = new ArrayList<>();
+            }
+            if (implicitExceptions == ImplicitExceptions.KEEP_ALL) {
+                nonZeroConstant = new boolean[escaping.length];
+                divisions = new ArrayList<>();
+            }
+        }
+
+        // As with array sizes, a divisor may be defined in a later block. A division by a non-zero constant can't
+        // throw.
+        void markDivisionsByPossibleZero() {
+            if (divisions == null) {
+                return;
+            }
+            for (var insn : divisions) {
+                if (!nonZeroConstant[insn.getSecondOperand().getIndex()]) {
+                    escaping[insn.getReceiver().getIndex()] = true;
+                }
             }
         }
 
@@ -92,6 +113,24 @@ public final class VariableEscapeAnalyzer {
         public void visit(IntegerConstantInstruction insn) {
             if (nonNegativeConstant != null && insn.getConstant() >= 0) {
                 nonNegativeConstant[insn.getReceiver().getIndex()] = true;
+            }
+            if (nonZeroConstant != null && insn.getConstant() != 0) {
+                nonZeroConstant[insn.getReceiver().getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(LongConstantInstruction insn) {
+            if (nonZeroConstant != null && insn.getConstant() != 0) {
+                nonZeroConstant[insn.getReceiver().getIndex()] = true;
+            }
+        }
+
+        @Override
+        public void visit(BinaryInstruction insn) {
+            if (divisions != null && DivisionCheckInsertion.isIntegerDivision(insn.getOperation(),
+                    insn.getOperandType())) {
+                divisions.add(insn);
             }
         }
 
