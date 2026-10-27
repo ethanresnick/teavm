@@ -66,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
+import java.util.Random;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.SortedMap;
@@ -852,6 +853,8 @@ public class TreeMapTest {
         }
     }
 
+    // TreeMap: "A structural modification is any operation that adds or deletes one or more mappings; merely
+    // changing the value associated with an existing key is not a structural modification."
     @Test
     public void replacingValueDuringIterationIsNotStructural() {
         var map = new TreeMap<String, Integer>();
@@ -890,6 +893,68 @@ public class TreeMapTest {
             fail();
         } catch (ConcurrentModificationException e) {
             // ok
+        }
+    }
+
+    // For every size and every position of the iterator, replacing the value of any existing key, removing an absent
+    // key, or polling an empty view does not invalidate any of the map's iterators; adding a key or removing a
+    // present key does.
+    @Test
+    public void onlyStructuralChangesInvalidateIterators() {
+        var random = new Random(43);
+        for (var size = 1; size <= 24; ++size) {
+            var map = new TreeMap<Integer, Integer>();
+            for (var i = 0; i < size; ++i) {
+                map.put(i * 2, i);
+            }
+            List<Function<TreeMap<Integer, Integer>, Iterator<?>>> views = List.of(
+                    m -> m.entrySet().iterator(),
+                    m -> m.keySet().iterator(),
+                    m -> m.values().iterator(),
+                    m -> m.descendingMap().entrySet().iterator(),
+                    m -> m.headMap(Integer.MAX_VALUE).keySet().iterator(),
+                    m -> m.tailMap(Integer.MIN_VALUE, true).values().iterator());
+            for (var view : views) {
+                for (var stop = 0; stop < size; ++stop) {
+                    var it = view.apply(map);
+                    var visited = 0;
+                    while (it.hasNext()) {
+                        it.next();
+                        if (visited++ == stop) {
+                            var key = random.nextInt(size) * 2;
+                            switch (random.nextInt(7)) {
+                                case 0 -> map.put(key, random.nextInt());
+                                case 1 -> map.replace(key, random.nextInt());
+                                case 2 -> map.merge(key, 1, Integer::sum);
+                                case 3 -> map.computeIfPresent(key, (k, v) -> v + 1);
+                                case 4 -> map.putIfAbsent(key, 0);
+                                case 5 -> map.remove(key + 1);
+                                default -> map.subMap(-2, -1).pollFirstEntry();
+                            }
+                        }
+                    }
+                    assertEquals(size, visited);
+                }
+
+                for (var structural = 0; structural < 2; ++structural) {
+                    var it = view.apply(map);
+                    it.next();
+                    if (structural == 0) {
+                        map.put(-1, 0);
+                    } else {
+                        map.remove(-1);
+                    }
+                    try {
+                        it.next();
+                        if (size > 1) {
+                            fail();
+                        }
+                    } catch (ConcurrentModificationException | NoSuchElementException e) {
+                        // ok
+                    }
+                }
+            }
+            assertEquals(size, map.size());
         }
     }
 }
