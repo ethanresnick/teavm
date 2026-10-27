@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
@@ -76,6 +77,108 @@ public class ObjectTest {
         assertTrue(new Object().toString().startsWith("java.lang.Object@"));
         assertTrue(new Object[2].toString().startsWith("[Ljava.lang.Object;@"));
         assertTrue(new byte[3].toString().startsWith("[B@"));
+    }
+
+    @Test
+    public void primitiveArrayCloneCopiesOnlyTheArray() {
+        // Clones of byte, short, char and int arrays, mixed with garbage and GCs, so that copies land just before
+        // other live arrays. A clone that copied more than the array (as the C backend once did, sizing every
+        // array element as a pointer) overwrote those arrays and the heap's own bookkeeping.
+        var live = new Object[3000];
+        for (var i = 0; i < live.length; ++i) {
+            live[i] = filled(i, i % 41);
+        }
+        for (var round = 0; round < 6; ++round) {
+            for (var i = round % 2; i < live.length; i += 2) {
+                var copy = cloneOf(live[(i + 1) % live.length]);
+                live[i] = filled(i, ((i + round) * 7) % 41);
+                assertTrue(sameContents(copy, live[(i + 1) % live.length]), "clone at " + i);
+            }
+            System.gc();
+            for (var i = 0; i < live.length; ++i) {
+                assertTrue(holds(live[i], i), "array " + i + " in round " + round);
+            }
+        }
+    }
+
+    private static Object filled(int index, int length) {
+        switch (index % 4) {
+            case 0: {
+                var a = new byte[length];
+                Arrays.fill(a, (byte) index);
+                return a;
+            }
+            case 1: {
+                var a = new short[length];
+                Arrays.fill(a, (short) index);
+                return a;
+            }
+            case 2: {
+                var a = new char[length];
+                Arrays.fill(a, (char) index);
+                return a;
+            }
+            default: {
+                var a = new int[length];
+                Arrays.fill(a, index);
+                return a;
+            }
+        }
+    }
+
+    private static Object cloneOf(Object array) {
+        if (array instanceof byte[]) {
+            return ((byte[]) array).clone();
+        } else if (array instanceof short[]) {
+            return ((short[]) array).clone();
+        } else if (array instanceof char[]) {
+            return ((char[]) array).clone();
+        } else {
+            return ((int[]) array).clone();
+        }
+    }
+
+    private static boolean sameContents(Object a, Object b) {
+        if (a instanceof byte[] && b instanceof byte[]) {
+            return Arrays.equals((byte[]) a, (byte[]) b);
+        } else if (a instanceof short[] && b instanceof short[]) {
+            return Arrays.equals((short[]) a, (short[]) b);
+        } else if (a instanceof char[] && b instanceof char[]) {
+            return Arrays.equals((char[]) a, (char[]) b);
+        } else if (a instanceof int[] && b instanceof int[]) {
+            return Arrays.equals((int[]) a, (int[]) b);
+        }
+        return false;
+    }
+
+    // Whether every element of the array still has the value filled() gave it.
+    private static boolean holds(Object array, int index) {
+        if (array instanceof byte[]) {
+            for (var v : (byte[]) array) {
+                if (v != (byte) index) {
+                    return false;
+                }
+            }
+        } else if (array instanceof short[]) {
+            for (var v : (short[]) array) {
+                if (v != (short) index) {
+                    return false;
+                }
+            }
+        } else if (array instanceof char[]) {
+            for (var v : (char[]) array) {
+                if (v != (char) index) {
+                    return false;
+                }
+            }
+        } else {
+            for (var v : (int[]) array) {
+                if (v != index) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Test
