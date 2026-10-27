@@ -108,7 +108,9 @@ public class WasmGCTypeMapper {
                 var className = ((ValueType.Object) type).getClassName();
                 var cls = classes.get(className);
                 if (cls == null) {
-                    type = ValueType.object("java.lang.Object");
+                    // An array of a missing class can never be created (creating one is a link error), so its
+                    // only value is null, as for the missing class itself (see mapClassType).
+                    return WasmType.SpecialReferenceKind.NONE.asType();
                 }
             }
             while (degree-- > 0) {
@@ -197,7 +199,13 @@ public class WasmGCTypeMapper {
                     default: {
                         var cls = classes.get(className);
                         if (cls == null) {
-                            className = "java.lang.Object";
+                            // A class that is missing from the class source has no instances (creating one is a
+                            // link error), so its only value is null. Object is not a subtype of the supertypes
+                            // that the class really has (TeaVM cannot know them), so a throw, call argument,
+                            // return, or store of such a value would fail Wasm validation. The bottom type
+                            // (ref null none) is a subtype of every struct type.
+                            result = WasmType.SpecialReferenceKind.NONE.asType();
+                            break;
                         } else if (Objects.equals(cls.getParent(), AnnotationData.class.getName())) {
                             var annotClassName = cls.getName().substring(0, cls.getName().length()
                                     - AnnotationGenerationHelper.ANNOTATION_DATA_SUFFIX.length());

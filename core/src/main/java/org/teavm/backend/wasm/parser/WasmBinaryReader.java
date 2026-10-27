@@ -111,6 +111,9 @@ public class WasmBinaryReader {
                 return special(WasmType.SpecialReferenceKind.ARRAY, nullable);
             case 0x69:
                 return special(WasmType.SpecialReferenceKind.EXN, nullable);
+            case 0x71:
+                // The bottom heap type "none" (see WasmType.SpecialReferenceKind.NONE).
+                return special(WasmType.SpecialReferenceKind.NONE, nullable);
             default:
                 throw new ParseException("Unknown type", ptr);
         }

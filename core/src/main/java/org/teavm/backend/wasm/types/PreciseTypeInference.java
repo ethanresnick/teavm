@@ -88,12 +88,14 @@ public class PreciseTypeInference extends BaseTypeInference<PreciseValueType> {
                         return a;
                     }
                     var first = hierarchy.getClassSource().get(p);
-                    if (first == null) {
-                        p = "java.lang.Object";
-                    }
                     var second = hierarchy.getClassSource().get(q);
+                    // A class missing from the class path has only null values, and WasmGCTypeMapper maps it to the
+                    // bottom type (ref null none). So it joins as the bottom: the merge is the other operand.
+                    if (first == null) {
+                        return b;
+                    }
                     if (second == null) {
-                        q = "java.lang.Object";
+                        return a;
                     }
                     if (hierarchy.isSuperType(p, q, false)) {
                         return a;

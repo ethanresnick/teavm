@@ -86,6 +86,9 @@ public class WasmBinaryWriter {
             case I31:
                 writeByte(0x6c);
                 break;
+            case NONE:
+                writeByte(0x71);
+                break;
         }
     }
 

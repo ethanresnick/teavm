@@ -135,7 +135,10 @@ public abstract class WasmType {
         STRUCT,
         ARRAY,
         EXN,
-        I31;
+        I31,
+        // The bottom heap type "none". (ref null none) holds only null and is a subtype of every struct and array
+        // type. WasmGCTypeMapper gives it to a class that is missing from the class source.
+        NONE;
 
         private SpecialReference type;
         private SpecialReference nonNullType;
