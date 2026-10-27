@@ -16,9 +16,9 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/CountDownLatch.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
+ * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
+ * kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -26,14 +26,10 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: ImportOrder|NeedBraces|RedundantImport
+// CHECKSTYLE.OFF: NeedBraces
 package org.teavm.classlib.java.util.concurrent;
 
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
-import org.teavm.classlib.java.util.concurrent.locks.TAbstractQueuedSynchronizer;
-
+import java.util.concurrent.TimeUnit;
 import org.teavm.classlib.java.util.concurrent.locks.TAbstractQueuedSynchronizer;
 
 /**
@@ -46,7 +42,7 @@ import org.teavm.classlib.java.util.concurrent.locks.TAbstractQueuedSynchronizer
  * all waiting threads are released and any subsequent invocations of
  * {@link #await await} return immediately.  This is a one-shot phenomenon
  * -- the count cannot be reset.  If you need a version that resets the
- * count, consider using a {@link TCyclicBarrier}.
+ * count, consider using a {@link CyclicBarrier}.
  *
  * <p>A {@code TCountDownLatch} is a versatile synchronization tool
  * and can be used for a number of purposes.  A
@@ -111,7 +107,7 @@ import org.teavm.classlib.java.util.concurrent.locks.TAbstractQueuedSynchronizer
  * counts down on the latch, and queue all the Runnables to an
  * Executor.  When all sub-parts are complete, the coordinating thread
  * will be able to pass through await. (When threads must repeatedly
- * count down in this way, instead use a {@link TCyclicBarrier}.)
+ * count down in this way, instead use a {@link CyclicBarrier}.)
  *
  * <pre> {@code
  * class Driver2 { // ...

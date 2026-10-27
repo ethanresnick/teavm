@@ -36,7 +36,10 @@ public class DependencyTestData {
         } catch (IndexOutOfBoundsException e) {
             MetaAssertions.assertTypes(e, IndexOutOfBoundsException.class);
         } catch (RuntimeException e) {
-            MetaAssertions.assertTypes(e, UnsupportedOperationException.class, IllegalArgumentException.class);
+            // The code that creates and throws the exception dereferences values and allocates arrays, so the
+            // backends' checks can throw there too.
+            MetaAssertions.assertTypes(e, UnsupportedOperationException.class, IllegalArgumentException.class,
+                    NullPointerException.class, NegativeArraySizeException.class);
         }
     }
 
@@ -44,7 +47,8 @@ public class DependencyTestData {
         try {
             catchException();
         } catch (Throwable e) {
-            MetaAssertions.assertTypes(e, Exception.class);
+            MetaAssertions.assertTypes(e, Exception.class, NullPointerException.class,
+                    ArrayIndexOutOfBoundsException.class, NegativeArraySizeException.class);
         }
     }
 
@@ -72,6 +76,80 @@ public class DependencyTestData {
         Object[] array2 = staticArrayField;
         fillStaticArray();
         MetaAssertions.assertTypes(array2[0], Long.class, RuntimeException.class);
+    }
+
+    // The backends throw these exceptions from checks that they insert after dependency analysis. The program
+    // never creates them, but their types must reach the handlers.
+    public static void implicitExceptions() {
+        int[] array = intArrayField;
+        Holder holder = holderField;
+        Object value = objectField;
+        int size = intField;
+
+        try {
+            intField = array[size];
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, ArrayIndexOutOfBoundsException.class, NullPointerException.class);
+        }
+        try {
+            array[size] = 1;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, ArrayIndexOutOfBoundsException.class, NullPointerException.class);
+        }
+        try {
+            intField = array.length;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            intField = holder.field;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            holder.field = 1;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            holder.run();
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            synchronized (value) {
+                intField = 1;
+            }
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            objectField = (String) value;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, ClassCastException.class);
+        }
+        try {
+            intArrayField = new int[size];
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NegativeArraySizeException.class);
+        }
+        try {
+            objectField = new int[2][size];
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NegativeArraySizeException.class);
+        }
+    }
+
+    static int[] intArrayField;
+    static Holder holderField;
+    static Object objectField;
+    static int intField;
+
+    static class Holder {
+        int field;
+
+        void run() {
+        }
     }
 
     static Object[] staticArrayField;

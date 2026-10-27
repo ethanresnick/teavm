@@ -79,8 +79,8 @@ public abstract class TMessageDigest implements Cloneable {
         if (len == 0) {
             return;
         }
-        // Bulk get rather than array() and arrayOffset(): on JS and C, arrayOffset() of a duplicate() or
-        // asReadOnlyBuffer() view counts the position twice. The copy costs little next to hashing.
+        // Bulk get rather than array() and arrayOffset(): hashing costs far more than the copy, and reading the
+        // backing array directly showed no clear gain in MessageDigestBenchmark.heapByteBuffer.
         byte[] chunk = new byte[Math.min(len, 4096)];
         while (input.hasRemaining()) {
             int n = Math.min(chunk.length, input.remaining());

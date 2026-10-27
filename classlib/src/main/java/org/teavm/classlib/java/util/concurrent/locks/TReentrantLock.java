@@ -16,9 +16,9 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/locks/ReentrantLock.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
+ * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
+ * kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -26,16 +26,11 @@
  * http://creativecommons.org/publicdomain/zero/1.0/
  */
 
-// CHECKSTYLE.OFF: ImportOrder|NeedBraces|OperatorWrap|RedundantModifier|UnnecessaryParentheses|WhitespaceAfter
+// CHECKSTYLE.OFF: NeedBraces|OperatorWrap|RedundantModifier|UnnecessaryParentheses|WhitespaceAfter
 package org.teavm.classlib.java.util.concurrent.locks;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
 
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
-
 
 /**
  * A reentrant mutual exclusion {@link TLock} with the same basic
@@ -312,10 +307,6 @@ public class TReentrantLock implements TLock, java.io.Serializable {
      * at which time the lock hold count is set to one.
      */
     public void lock() {
-        // TeaVM: a preemption point. Green threads switch only when a thread blocks, so a thread that polls in
-        // a loop without blocking stops every other thread. Thread.yield switches only after the thread has run
-        // for 100 ms, and checks the time once in 30 calls, so an uncontended lock stays cheap.
-        Thread.yield();
         sync.lock();
     }
 
@@ -366,8 +357,6 @@ public class TReentrantLock implements TLock, java.io.Serializable {
      * @throws InterruptedException if the current thread is interrupted
      */
     public void lockInterruptibly() throws InterruptedException {
-        // TeaVM: a preemption point, as in lock().
-        Thread.yield();
         sync.lockInterruptibly();
     }
 

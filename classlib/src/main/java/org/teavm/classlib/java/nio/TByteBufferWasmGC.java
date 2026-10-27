@@ -65,7 +65,7 @@ class TByteBufferWasmGC extends TByteBufferNative {
 
     @Override
     public TByteBuffer duplicate() {
-        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset + position, base, address, capacity, readOnly);
+        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset, base, address, capacity, readOnly);
         result.position = position;
         result.limit = limit;
         result.mark = mark;
@@ -75,7 +75,7 @@ class TByteBufferWasmGC extends TByteBufferNative {
 
     @Override
     public TByteBuffer asReadOnlyBuffer() {
-        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset + position, base, address, capacity, true);
+        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset, base, address, capacity, true);
         result.position = position;
         result.limit = limit;
         result.mark = mark;

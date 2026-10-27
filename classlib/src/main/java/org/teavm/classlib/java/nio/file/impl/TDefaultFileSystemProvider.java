@@ -153,24 +153,59 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
 
         var defaultPath = (TDefaultPath) path;
-        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        if (vfile == null || !vfile.exists()) {
-            if (!create) {
-                throw new NoSuchFileException(defaultPath.pathString);
+        if (checkThatDoesNotExist) {
+            // CREATE_NEW: "The check for the existence of the file and the creation of the file if it does not
+            // exist is atomic". Only the exclusive create decides, never an earlier existence check, and a failed
+            // create never falls through to opening whatever is at the path.
+            createFile(defaultPath, false);
+        } else {
+            var existing = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+            if (existing == null || !existing.exists()) {
+                if (!create) {
+                    throw new NoSuchFileException(defaultPath.pathString);
+                }
+                // CREATE: "Create a new file if it does not exist", else open it, so an entry that appeared since
+                // the check is opened.
+                createEntry(defaultPath, false);
+            } else if (existing.isDirectory()) {
+                throw new FileAlreadyExistsException(defaultPath.pathString);
             }
-            var parentPath = defaultPath.getParent();
-            var parentVfile = defaultPath.getFileSystem().vfs.getFile(
-                    parentPath != null ? parentPath.pathString : ".");
-            parentVfile.createFile(defaultPath.getFileName().toString());
-            vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-        } else if (vfile.isDirectory() || checkThatDoesNotExist) {
-            throw new FileAlreadyExistsException(defaultPath.pathString);
         }
+        var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
         var accessor = vfile.createAccessor(false, true, append || !truncate);
+        if (accessor == null) {
+            throw new FileSystemException(defaultPath.pathString);
+        }
         if (!append) {
             accessor.seek(0);
         }
         return new TFileOutputStream(accessor);
+    }
+
+    /**
+     * Creates a new, empty file, as {@code Files.createFile} does, and throws {@link FileAlreadyExistsException} if
+     * anything exists at the path. With {@code ownerOnly}, a file system with POSIX permissions gives the file mode
+     * 0600 (Files.createTempFile uses it).
+     */
+    public void createFile(TPath path, boolean ownerOnly) throws IOException {
+        var defaultPath = (TDefaultPath) path;
+        if (!createEntry(defaultPath, ownerOnly)) {
+            throw new FileAlreadyExistsException(defaultPath.pathString);
+        }
+    }
+
+    // Creates the file in one step that fails if the path exists (O_CREAT | O_EXCL on C), so that nothing created
+    // at the path between an earlier check and this call is reused. It also fails for a symbolic link, even one
+    // whose target does not exist, which an existence check that follows links misses.
+    private static boolean createEntry(TDefaultPath path, boolean ownerOnly) throws IOException {
+        var fileName = path.getFileName();
+        if (fileName == null) {
+            // a root, which always exists
+            return false;
+        }
+        var parentPath = path.getParent();
+        var parentVfile = path.getFileSystem().vfs.getFile(parentPath != null ? parentPath.pathString : ".");
+        return parentVfile.createFile(fileName.toString(), ownerOnly);
     }
 
     @Override
@@ -237,6 +272,26 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
 
     @Override
     public void createDirectory(TPath dir, TFileAttribute<?>... attrs) throws IOException {
+        checkNoAttributes(attrs);
+        createDirectory(dir, false);
+    }
+
+    /**
+     * Files.createFile, createDirectory, createDirectories, createTempFile and createTempDirectory throw
+     * UnsupportedOperationException "if the array contains an attribute that cannot be set atomically when creating
+     * the file". No attribute can be set here, so any attribute is rejected rather than ignored.
+     */
+    public static void checkNoAttributes(TFileAttribute<?>[] attrs) {
+        if (attrs.length > 0) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    /**
+     * As {@link #createDirectory(TPath, TFileAttribute[])}. With {@code ownerOnly}, a file system with POSIX
+     * permissions gives the directory mode 0700 (Files.createTempDirectory uses it).
+     */
+    public void createDirectory(TPath dir, boolean ownerOnly) throws IOException {
         var defaultPath = (TDefaultPath) dir;
         var parent = defaultPath.getParent();
         if (parent == null) {
@@ -250,7 +305,11 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         if (childVfile != null && childVfile.exists()) {
             throw new TFileAlreadyExistsException(defaultPath.pathString);
         }
-        if (!vfile.createDirectory(defaultPath.getFileName().pathString)) {
+        if (!vfile.createDirectory(defaultPath.getFileName().pathString, ownerOnly)) {
+            if (childVfile != null && childVfile.exists()) {
+                // created since the check above
+                throw new TFileAlreadyExistsException(defaultPath.pathString);
+            }
             throw new TFileSystemException("Failed to create directory " + defaultPath.pathString);
         }
     }
@@ -310,17 +369,18 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
                 throw new FileSystemException(defaultTarget.pathString);
             }
         } else {
-            var targetParent = defaultTarget.getParent();
-            if (targetParent == null) {
-                targetParent = defaultTarget.getFileSystem().getPath(".");
+            if (!createEntry(defaultTarget, false) && !replace) {
+                throw new FileAlreadyExistsException(defaultTarget.pathString);
             }
-            var parentVfile = defaultTarget.getFileSystem().vfs.getFile(targetParent.pathString);
-            parentVfile.createFile(defaultTarget.getFileName().toString());
             targetVfile = defaultTarget.getFileSystem().vfs.getFile(defaultTarget.pathString);
         }
 
+        var targetAccessor = targetVfile.createAccessor(false, true, false);
+        if (targetAccessor == null) {
+            throw new FileSystemException(defaultTarget.pathString);
+        }
         try (var input = new TFileInputStream(srcVfile.createAccessor(true, false, false));
-                var output = new TFileOutputStream(targetVfile.createAccessor(false, true, false))) {
+                var output = new TFileOutputStream(targetAccessor)) {
             input.transferTo(output);
         }
     }

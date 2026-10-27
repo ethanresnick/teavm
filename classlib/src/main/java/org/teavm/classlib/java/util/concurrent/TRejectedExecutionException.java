@@ -16,9 +16,9 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/RejectedExecutionException.java).
- * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of VarHandles, no memory
- * fences, and EmulSupport in place of Thread.onSpinWait and ForkJoinPool.managedBlock. Hand edits are marked
- * "TeaVM:". The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
+ * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
+ * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
+ * kept. See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -27,10 +27,6 @@
  */
 
 package org.teavm.classlib.java.util.concurrent;
-
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
-import java.util.concurrent.locks.*;
 
 /**
  * Exception thrown by an {@link Executor} when a task cannot be

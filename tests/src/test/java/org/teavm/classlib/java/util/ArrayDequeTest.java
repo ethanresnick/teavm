@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
@@ -396,5 +397,70 @@ public class ArrayDequeTest {
         assertEquals(22, clone.size());
         assertEquals("b", clone.peekFirst());
         assertEquals("x19", clone.peekLast());
+    }
+
+    // Iterator.remove(): "Removes from the underlying collection the last element returned by this iterator". The
+    // iteration then goes on with the element after it, so it sees every element exactly once. Every subset of the
+    // elements is removed, in both directions, at every head position and every size that fits without growing, so
+    // removals close to either end, next to each other and across the end of the array are covered.
+    @Test
+    public void iteratorRemoveEverySubsetAtEveryOffset() {
+        var failures = new ArrayList<String>();
+        for (var capacity = 1; capacity <= 5; ++capacity) {
+            for (var start = 0; start <= capacity; ++start) {
+                for (var count = 0; count <= capacity; ++count) {
+                    for (var mask = 0; mask < 1 << count; ++mask) {
+                        for (var descending : new boolean[] { false, true }) {
+                            var failure = removeSubset(capacity, start, count, mask, descending);
+                            if (failure != null) {
+                                failures.add("capacity=" + capacity + " start=" + start + " count=" + count
+                                        + " mask=" + mask + " descending=" + descending + ": " + failure);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertEquals(List.of(), failures);
+    }
+
+    private static String removeSubset(int capacity, int start, int count, int mask, boolean descending) {
+        var deque = new ArrayDeque<Integer>(capacity);
+        for (var i = 0; i < start; ++i) {
+            deque.addLast(-1);
+            deque.pollFirst();
+        }
+        var expectedSeen = new ArrayList<Integer>();
+        var expectedRest = new ArrayList<Integer>();
+        for (var i = 0; i < count; ++i) {
+            deque.addLast(i);
+            expectedSeen.add(descending ? count - 1 - i : i);
+            if ((mask & (1 << i)) == 0) {
+                expectedRest.add(i);
+            }
+        }
+        try {
+            var seen = new ArrayList<Integer>();
+            var it = descending ? deque.descendingIterator() : deque.iterator();
+            while (it.hasNext() && seen.size() <= count) {
+                var e = it.next();
+                seen.add(e);
+                if ((mask & (1 << e)) != 0) {
+                    it.remove();
+                }
+            }
+            deque.addLast(100);
+            deque.addFirst(-100);
+            expectedRest.add(100);
+            expectedRest.add(0, -100);
+            var rest = List.copyOf(deque);
+            if (!seen.equals(expectedSeen) || !rest.equals(expectedRest)) {
+                return "expected seen=" + expectedSeen + " rest=" + expectedRest + ", got seen=" + seen
+                        + " rest=" + rest;
+            }
+            return null;
+        } catch (RuntimeException e) {
+            return e instanceof NoSuchElementException ? "NoSuchElementException" : "RuntimeException";
+        }
     }
 }

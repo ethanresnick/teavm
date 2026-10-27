@@ -90,11 +90,11 @@ class TLongBufferOverArray extends TLongBufferImpl {
 
     @Override
     void putImpl(int index, TLongBuffer src, int offset, int length) {
-        if (src.hasArray()) {
-            System.arraycopy(src.array(), src.arrayOffset() + offset, array, start + index, length);
+        if (src.isArrayPresent()) {
+            System.arraycopy(src.getArray(), src.getArrayOffset() + offset, array, start + index, length);
         } else {
             while (length-- > 0) {
-                src.putElement(offset++, getElement(index++));
+                putElement(index++, src.getElement(offset++));
             }
         }
     }

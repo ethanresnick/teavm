@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.zip.Adler32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -47,6 +48,50 @@ public class DeflaterTest {
         assertArrayEquals(new byte[] { 0, 0, -1, -1 }, Arrays.copyOfRange(out, n - 4, n));
         assertEquals(0, deflater.deflate(out, 0, out.length, Deflater.SYNC_FLUSH));
         assertEquals(0, deflater.deflate(out));
+    }
+
+    // Deflater.deflate Javadoc: "In the case of FULL_FLUSH or SYNC_FLUSH, if the return value is len, the space
+    // available in output buffer b, this method should be invoked again with the same flush parameter and more
+    // output space." A caller that does so with the same small buffer must see the flush end. Jzlib resumed the flush
+    // with another empty block of up to 7 bytes, so with a buffer of 6 or 7 bytes it never ended. Below 6 bytes the
+    // JDK's own zlib never ends either (TeaVM does, see DeflateStreamTest.syncFlushWritesAllPendingOutput).
+    @Test
+    public void flushIntoSmallBuffersCompletes() throws DataFormatException {
+        var random = new Random(3);
+        var data = new byte[5000];
+        random.nextBytes(data);
+        for (int mode : new int[] { Deflater.SYNC_FLUSH, Deflater.FULL_FLUSH }) {
+            for (int size : new int[] { 6, 7, 8, 63, 64, 512 }) {
+                var context = "mode " + mode + ", buffer " + size;
+                var deflater = new Deflater(Deflater.DEFAULT_COMPRESSION, true);
+                var compressed = new ByteArrayOutputStream();
+                var buf = new byte[size];
+                // Flush once mid-way and once at the end of the data, with a cap on the calls.
+                for (int[] range : new int[][] { { 0, 1000 }, { 1000, data.length } }) {
+                    deflater.setInput(data, range[0], range[1] - range[0]);
+                    int calls = 0;
+                    int n;
+                    do {
+                        n = deflater.deflate(buf, 0, size, mode);
+                        compressed.write(buf, 0, n);
+                        assertTrue(++calls <= 10 * data.length, context + ": the flush did not end");
+                    } while (n == size);
+                    assertTrue(deflater.needsInput(), context);
+                    assertEquals(compressed.size(), deflater.getBytesWritten(), context);
+                    var inflater = new Inflater(true);
+                    var bytes = compressed.toByteArray();
+                    inflater.setInput(bytes);
+                    var result = new byte[range[1] + 1];
+                    int length = 0;
+                    int k;
+                    while ((k = inflater.inflate(result, length, result.length - length)) > 0) {
+                        length += k;
+                    }
+                    assertEquals(range[1], length, context);
+                    assertArrayEquals(Arrays.copyOf(data, range[1]), Arrays.copyOf(result, length), context);
+                }
+            }
+        }
     }
 
     @Test
