@@ -229,6 +229,15 @@ public class FloatTest {
     public void toStringOnRoundingIntervalEdge() {
         // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
         assertEquals("5.383987E7", Float.toString(53839872f));
+        // Above 10^9 the edge can be a whole number of tens, so it is found with a division by a power of 5
+        assertEquals("1.00000237E9", Float.toString(1.00000237E9f));
+        assertEquals("1.0940399E9", Float.toString(1.0940399E9f));
+        assertEquals("1.1611759E9", Float.toString(1.1611759E9f));
+        assertEquals("1.0000008E9", Float.toString(1.0000008E9f));
+        assertEquals("1.00000083E9", Float.toString(Math.nextUp(1.0000008E9f)));
+        assertEquals("1.0000007E9", Float.toString(Math.nextDown(1.0000008E9f)));
+        assertEquals("1.0083912E9", Float.toString(1.0083912E9f));
+        assertEquals("1.00839123E9", Float.toString(Math.nextUp(1.0083912E9f)));
     }
 
     // Float.toString: "Define d_m as the decimal in T that is closest to m. Or if there are two such decimals in
