@@ -175,17 +175,25 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
 
     @Override
     public final boolean hasArray() {
-        return isArrayPresent();
+        return isArrayPresent() && !isReadOnly();
     }
 
     @Override
     public final int[] array() {
+        checkArrayWritable();
         return getArray();
     }
 
     @Override
     public final int arrayOffset() {
+        checkArrayWritable();
         return getArrayOffset();
+    }
+
+    private void checkArrayWritable() {
+        if (isReadOnly() && isArrayPresent()) {
+            throw new TReadOnlyBufferException();
+        }
     }
 
     abstract boolean isArrayPresent();

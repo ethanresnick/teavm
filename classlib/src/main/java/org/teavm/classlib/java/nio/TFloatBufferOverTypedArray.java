@@ -98,7 +98,7 @@ class TFloatBufferOverTypedArray extends TFloatBufferImpl implements TArrayBuffe
     void putImpl(int index, TFloatBuffer src, int offset, int length) {
         if (src instanceof TFloatBufferOverTypedArray) {
             var srcImpl = (TFloatBufferOverTypedArray) src;
-            var slice = new Float32Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 4, length);
+            var slice = new Float32Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 4, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {

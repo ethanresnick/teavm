@@ -105,7 +105,7 @@ class TCharBufferOverTypedArray extends TCharBufferImpl implements TArrayBufferV
     void putImpl(int index, TCharBuffer src, int offset, int length) {
         if (src instanceof TCharBufferOverTypedArray) {
             var srcImpl = (TCharBufferOverTypedArray) src;
-            var slice = new Uint16Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + index * 2, length);
+            var slice = new Uint16Array(srcImpl.data.getBuffer(), srcImpl.data.getByteOffset() + offset * 2, length);
             data.set(slice, index);
         } else {
             while (length-- > 0) {
