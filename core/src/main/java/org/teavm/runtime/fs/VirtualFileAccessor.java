@@ -35,4 +35,9 @@ public interface VirtualFileAccessor {
     void close() throws IOException;
 
     void flush() throws IOException;
+
+    /** Flushes buffered data and synchronizes persistent storage, when the file system supports it. */
+    default void sync() throws IOException {
+        throw new UnsupportedOperationException("File synchronization is not supported");
+    }
 }

@@ -337,6 +337,18 @@ int32_t teavm_file_flush(int64_t file) {
     return fflush(handle) == 0;
 }
 
+int32_t teavm_file_sync(int64_t file) {
+    FILE* handle = (FILE*) file;
+    if (fflush(handle) != 0) {
+        return 0;
+    }
+    int result;
+    do {
+        result = fsync(fileno(handle));
+    } while (result < 0 && errno == EINTR);
+    return result == 0;
+}
+
 int32_t teavm_file_seek(int64_t file, int32_t where, int32_t offset) {
     FILE* handle = (FILE*) file;
     int whence;
@@ -662,6 +674,10 @@ int32_t teavm_file_close(int64_t file) {
 }
 
 int32_t teavm_file_flush(int64_t file) {
+    return FlushFileBuffers((HANDLE) file);
+}
+
+int32_t teavm_file_sync(int64_t file) {
     return FlushFileBuffers((HANDLE) file);
 }
 

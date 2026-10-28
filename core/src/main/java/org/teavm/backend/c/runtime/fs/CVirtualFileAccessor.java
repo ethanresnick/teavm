@@ -99,4 +99,12 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
             throw new IOException();
         }
     }
+
+    @Override
+    public void sync() throws IOException {
+        if (!CFileSystem.sync(file)) {
+            throw new IOException("Could not synchronize file");
+        }
+    }
+
 }

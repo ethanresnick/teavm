@@ -25,6 +25,8 @@ import java.io.UTFDataFormatException;
 import java.util.Objects;
 import org.teavm.classlib.java.lang.TIndexOutOfBoundsException;
 import org.teavm.classlib.java.lang.TNullPointerException;
+import org.teavm.classlib.java.nio.channels.TFileChannel;
+import org.teavm.classlib.java.nio.channels.impl.TAccessorFileChannel;
 import org.teavm.runtime.fs.VirtualFile;
 import org.teavm.runtime.fs.VirtualFileAccessor;
 
@@ -34,6 +36,7 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
     private boolean autoFlush;
     private VirtualFileAccessor accessor;
     private byte[] buff;
+    private TFileChannel channel;
 
     public TRandomAccessFile(String name, String mode) throws FileNotFoundException {
         this(new TFile(name), mode);
@@ -54,7 +57,20 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
                 throw new IllegalArgumentException("Invalid mode: " + mode);
         }
 
+        // A writable mode creates a missing file.
         VirtualFile virtualFile = file.findVirtualFile();
+        if ((virtualFile == null || !virtualFile.isFile() && !virtualFile.isDirectory()) && !readOnly
+                && !file.getName().isEmpty()) {
+            VirtualFile parent = file.findParentFile();
+            if (parent != null && parent.isDirectory()) {
+                try {
+                    parent.createFile(file.getName());
+                } catch (java.io.IOException e) {
+                    throw new FileNotFoundException();
+                }
+                virtualFile = file.findVirtualFile();
+            }
+        }
         if (virtualFile == null || !virtualFile.isFile()) {
             throw new FileNotFoundException();
         }
@@ -68,6 +84,11 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
 
     @Override
     public void close() throws IOException {
+        if (channel != null) {
+            channel.close();
+        } else if (accessor != null) {
+            accessor.close();
+        }
         accessor = null;
     }
 
@@ -403,7 +424,7 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
     }
 
     private void ensureOpened() throws IOException {
-        if (accessor == null) {
+        if (accessor == null || channel != null && !channel.isOpen()) {
             throw new IOException("This stream is already closed");
         }
     }
@@ -496,4 +517,13 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
         }
         return offset;
     }
+
+    // The channel shares the accessor, including its position and open state.
+    public TFileChannel getChannel() {
+        if (channel == null) {
+            channel = new TAccessorFileChannel(accessor, true, !readOnly, false, accessor != null);
+        }
+        return channel;
+    }
+
 }

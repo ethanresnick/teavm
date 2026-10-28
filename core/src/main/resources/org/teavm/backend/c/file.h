@@ -26,6 +26,7 @@ extern int32_t teavm_file_length(char16_t*, int32_t);
 extern int64_t teavm_file_open(char16_t*, int32_t, int32_t);
 extern int32_t teavm_file_close(int64_t);
 extern int32_t teavm_file_flush(int64_t);
+extern int32_t teavm_file_sync(int64_t);
 extern int32_t teavm_file_seek(int64_t, int32_t, int32_t);
 extern int32_t teavm_file_tell(int64_t);
 extern int32_t teavm_file_read(int64_t, int8_t*, int32_t, int32_t);
