@@ -338,6 +338,9 @@ int32_t teavm_file_flush(int64_t file) {
 }
 
 int32_t teavm_file_sync(int64_t file) {
+    if (file == 0) {
+        return 0;
+    }
     FILE* handle = (FILE*) file;
     if (fflush(handle) != 0) {
         return 0;
@@ -678,6 +681,9 @@ int32_t teavm_file_flush(int64_t file) {
 }
 
 int32_t teavm_file_sync(int64_t file) {
+    if (file == 0) {
+        return 0;
+    }
     return FlushFileBuffers((HANDLE) file);
 }
 

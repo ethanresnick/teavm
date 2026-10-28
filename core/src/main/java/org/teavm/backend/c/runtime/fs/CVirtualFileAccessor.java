@@ -20,6 +20,7 @@ import org.teavm.runtime.fs.VirtualFileAccessor;
 
 public class CVirtualFileAccessor implements VirtualFileAccessor {
     private long file;
+    private int operation;
 
     public CVirtualFileAccessor(long file) {
         this.file = file;
@@ -27,15 +28,25 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
 
     @Override
     public int read(byte[] buffer, int offset, int limit) throws IOException {
+        prepareOperation(1);
         return CFileSystem.read(file, buffer, offset, limit);
     }
 
     @Override
     public void write(byte[] buffer, int offset, int limit) throws IOException {
+        prepareOperation(2);
         int bytesWritten = CFileSystem.write(file, buffer, offset, limit);
         if (bytesWritten < limit) {
             throw new IOException();
         }
+    }
+
+    private void prepareOperation(int operation) throws IOException {
+        // C update streams require positioning between reads and writes, in either direction.
+        if (this.operation != 0 && this.operation != operation && !CFileSystem.seek(file, 1, 0)) {
+            throw new IOException();
+        }
+        this.operation = operation;
     }
 
     @Override
@@ -45,12 +56,16 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
 
     @Override
     public void skip(int amount) throws IOException {
-        CFileSystem.seek(file, 0, amount);
+        if (CFileSystem.seek(file, 0, amount)) {
+            operation = 0;
+        }
     }
 
     @Override
     public void seek(int target) throws IOException {
-        CFileSystem.seek(file, 0, target);
+        if (CFileSystem.seek(file, 0, target)) {
+            operation = 0;
+        }
     }
 
     @Override
@@ -59,6 +74,7 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
         if (!CFileSystem.seek(file, 2, 0)) {
             throw new IOException();
         }
+        operation = 0;
         int result = CFileSystem.tell(file);
         if (!CFileSystem.seek(file, 0, current)) {
             throw new IOException();
@@ -71,6 +87,7 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
         if (!CFileSystem.seek(file, 2, 0)) {
             throw new IOException();
         }
+        operation = 0;
         int position = CFileSystem.tell(file);
         if (position < size) {
             byte[] zeros = new byte[4096];
@@ -103,7 +120,7 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
     @Override
     public void sync() throws IOException {
         if (!CFileSystem.sync(file)) {
-            throw new IOException("Could not synchronize file");
+            throw new IOException();
         }
     }
 
