@@ -38,4 +38,12 @@ public final class EmulSupport {
             }
         }
     }
+
+    /**
+     * Replaces {@code Reference.reachabilityFence} in the ported classes. The ports call it only so that a finalizer
+     * cannot run while a call is in progress, and TeaVM does not run finalizers, so it does nothing. It is not a
+     * general reachability fence.
+     */
+    public static void reachabilityFence(Object ref) {
+    }
 }
