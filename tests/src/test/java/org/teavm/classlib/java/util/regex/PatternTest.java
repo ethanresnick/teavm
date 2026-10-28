@@ -40,11 +40,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -1731,5 +1733,148 @@ public class PatternTest {
         var matcher = Pattern.compile("(.){0,2}+c").matcher("abc");
         assertTrue(matcher.matches());
         assertEquals("b", matcher.group(1));
+    }
+
+    @Test
+    public void alternativeFollowedBySpecialToken() {
+        // Pattern's construct table defines X|Y as either X or Y, including every token in Y.
+        String[][] cases = {
+                { "\\S", "a" }, { "\\d", "2" }, { "\\D", "a" }, { "\\s", " " },
+                { "\\w", "a" }, { "\\W", "!" }, { "\\p{Lu}", "A" }, { "\\P{Lu}", "a" },
+                { "[ab]", "b" }, { "{2}", "1" }, { ".", "a" }
+        };
+        for (String[] entry : cases) {
+            String pattern = "x|1" + entry[0];
+            String input = "1" + entry[1];
+            assertTrue(Pattern.matches(pattern, input), pattern);
+            assertTrue(Pattern.matches(pattern, "x"), pattern);
+            assertFalse(Pattern.matches(pattern, "1"), pattern);
+            assertFalse(Pattern.matches(pattern, input + "!"), pattern);
+            assertTrue(Pattern.matches("(" + pattern + ")z", input + "z"), pattern);
+            assertTrue(Pattern.matches("q|" + pattern + "|y", input), pattern);
+        }
+        assertTrue(Pattern.matches("x|1", "1"));
+        assertTrue(Pattern.matches("(x|1)z", "1z"));
+    }
+
+    @Test
+    public void alternativeFollowedByNul() {
+        // NUL is an ordinary character, not the end of the regular expression.
+        String nul = new String(new char[] { 0 });
+        for (String token : new String[] { nul, "\\x00", "\\u0000", "\\000" }) {
+            for (String suffix : new String[] { "", "a", token }) {
+                String tail = suffix.equals(token) ? nul : suffix;
+                String pattern = "x|1" + token + suffix;
+                assertTrue(Pattern.matches(pattern, "1" + nul + tail), pattern);
+                assertTrue(Pattern.matches(pattern, "x"), pattern);
+                assertFalse(Pattern.matches(pattern, "1"), pattern);
+                assertFalse(Pattern.matches(pattern, nul + tail), pattern);
+                assertTrue(Pattern.matches("(" + pattern + ")z", "1" + nul + tail + "z"), pattern);
+            }
+        }
+        assertTrue(Pattern.matches("x|1", "1"));
+        assertTrue(Pattern.compile("x|1 # end", Pattern.COMMENTS).matcher("1").matches());
+    }
+
+    @Test
+    public void unicodeBlockNameAliases() {
+        // Pattern's Unicode support delegates block names to UnicodeBlock.forName, which accepts
+        // canonical names, names with spaces removed, and constant identifiers, ignoring case.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Character.UnicodeBlock.html
+        String[][] blocks = {
+                { "Basic Latin", "A" }, { "Latin-1 Supplement", "é" }, { "Latin Extended-A", "Ā" },
+                { "Greek and Coptic", "α", "Greek" }, { "Greek", "α" },
+                { "Cyrillic Supplement", "Ԁ", "Cyrillic Supplementary" },
+                { "Cyrillic Supplementary", "Ԁ" },
+                { "Combining Diacritical Marks for Symbols", "⃐", "Combining Marks for Symbols" },
+                { "Combining Marks for Symbols", "⃐" }, { "CJK Symbols and Punctuation", "。" },
+                { "Halfwidth and Fullwidth Forms", "！" }, { "Specials", "�" },
+                { "Unified Canadian Aboriginal Syllabics", "᐀" },
+                { "Combining Diacritical Marks Supplement", "᷀" },
+                { "Miscellaneous Mathematical Symbols-A", "⟀" },
+                { "Miscellaneous Mathematical Symbols-B", "⦀" },
+                { "Supplemental Mathematical Operators", "⨀" },
+                { "Miscellaneous Symbols and Arrows", "⬀" },
+                { "Ideographic Description Characters", "⿰" },
+                { "CJK Unified Ideographs Extension A", "㐀" }
+        };
+        for (String[] block : blocks) {
+            String canonical = block[0];
+            String member = block[1];
+            String identifier = block.length > 2 ? block[2] : canonical;
+            for (String form : new String[] { canonical, canonical.replace(" ", ""),
+                    identifier.replace(' ', '_').replace('-', '_') }) {
+                for (String name : new String[] { form, form.toLowerCase(Locale.ROOT),
+                        form.toUpperCase(Locale.ROOT) }) {
+                    String positive = "\\p{In" + name + "}";
+                    String negative = "\\P{In" + name + "}";
+                    assertTrue(Pattern.matches(positive, member), name);
+                    assertFalse(Pattern.matches(negative, member), name);
+                    assertTrue(Pattern.matches("[" + positive + "]", member), name);
+                    assertFalse(Pattern.matches(positive, "😀"), name);
+                    assertTrue(Pattern.matches(negative, "😀"), name);
+                }
+            }
+        }
+        assertTrue(Pattern.matches("\\p{InBasicLatin}", "\u0000"));
+        assertTrue(Pattern.matches("\\p{InBASIC_LATIN}", "\u007f"));
+        assertFalse(Pattern.matches("\\p{InBasic Latin}", new String(new char[] { 0x80 })));
+    }
+
+    @Test
+    public void unicodeBlockNameCaseMappings() {
+        // UnicodeBlock.forName specifies en_US case mapping, including full uppercase expansions.
+        String[][] blocks = {
+                { "CJK UNI\uFB01ED IDEOGRAPHS", "一" },
+                { "Miscellaneou\u00DFymbols", "☀" },
+                { "SpacingModi\uFB01erLetters", "ʰ" },
+                { "CJKRadical\u00DFupplement", "⺀" },
+                { "Bas\u0131cLat\u0131n", "A" },
+                { "Ba\u017FicLatin", "A" }
+        };
+        for (String[] block : blocks) {
+            assertTrue(Pattern.matches("\\p{In" + block[0] + "}", block[1]), block[0]);
+            assertFalse(Pattern.matches("\\P{In" + block[0] + "}", block[1]), block[0]);
+        }
+        for (String name : new String[] { "Ba\u00DFicLatin", "SpacingModi\uFB03erLetters", "CJK UNI\uFB02ED IDEOGRAPHS",
+                "CJKRadical\u00DFS upplement" }) {
+            assertThrows(PatternSyntaxException.class, () -> Pattern.compile("\\p{In" + name + "}"), name);
+        }
+    }
+
+    @Test
+    public void unicodeBlockAliasesRejectInvalidNames() {
+        // UnicodeBlock.forName specifies three forms, not arbitrary insertion/removal of separators.
+        for (String name : new String[] { "Basic-Latin", "B a s i c Latin", "Basic__Latin", " Basic Latin",
+                "Basic Latin ", "Basic\tLatin", "Basic_Latin_", "Latin1Supplement", "Latin_1 Supplement",
+                "Greek_and_Coptic", "Cyrillic_Supplement", "Combining_Diacritical_Marks_for_Symbols",
+                "DoesNotExist", "", "_" }) {
+            for (String property : new String[] { "p", "P" }) {
+                assertThrows(PatternSyntaxException.class, () -> Pattern.compile("\\" + property + "{In" + name + "}"),
+                        name);
+            }
+        }
+    }
+
+    @Test
+    public void unicodeBlockAliasesPreserveExactNonBlocks() {
+        for (String name : new String[] { "ALL", "a_l_l", "A-L-L", "a l l", "lu", "L_u", "ascii" }) {
+            for (String property : new String[] { "p", "P" }) {
+                assertThrows(PatternSyntaxException.class, () -> Pattern.compile("\\" + property + "{" + name + "}"),
+                        name);
+            }
+        }
+        assertTrue(Pattern.matches("\\p{Lu}", "A"));
+        assertTrue(Pattern.matches("\\p{ASCII}", "A"));
+    }
+
+    @Test
+    @SkipJVM
+    public void exactAllPropertyRemainsSupported() {
+        // Preserve TeaVM's existing non-block extension without adding aliases for it.
+        for (String input : new String[] { "A", "\u0000", "α", "😀" }) {
+            assertTrue(Pattern.matches("\\p{all}", input));
+            assertFalse(Pattern.matches("\\P{all}", input));
+        }
     }
 }
