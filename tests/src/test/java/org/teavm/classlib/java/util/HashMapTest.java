@@ -21,8 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-import org.junit.jupiter.api.Test;
-
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +34,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeMap;
+import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.MapTest2Support;
 import org.teavm.classlib.support.UnmodifiableCollectionTestSupport;
 import org.teavm.junit.TeaVMTest;
@@ -1013,7 +1012,8 @@ public class HashMapTest {
     @Test
     public void iterationOrderIsTheJdkOne() {
         var map = new HashMap<String, Integer>();
-        for (var key : List.of("zeta", "alpha", "kafka", "node-1", "node-2", "node-10", "topic", "b", "aa", "Ab", "BB")) {
+        for (var key : List.of("zeta", "alpha", "kafka", "node-1", "node-2", "node-10",
+                "topic", "b", "aa", "Ab", "BB")) {
             map.put(key, 1);
         }
         assertEquals(List.of("zeta", "aa", "BB", "Ab", "b", "node-1", "alpha", "kafka", "node-2", "topic", "node-10"),

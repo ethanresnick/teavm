@@ -16,6 +16,7 @@
 package org.teavm.runtime;
 
 import java.util.Arrays;
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.interop.StaticInit;
 import org.teavm.interop.Unmanaged;
@@ -249,7 +250,8 @@ public final class Fiber {
                     + "(perhaps, from native JS method). See https://teavm.org/docs/runtime/coroutines.html "
                     + "('Interaction with JavaScript' section)");
         }
-        if (isJspi()) {
+        // Keep the platform guard at each call site so dependency analysis can discard JSPI calls on C.
+        if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
             return suspendOnJspiStack(fiber, Thread.currentThread(), call);
         }
         if (fiber.isResuming()) {
@@ -301,7 +303,7 @@ public final class Fiber {
                 removePendingCall();
             } else {
                 // jspi: begin
-                if (isJspi()) {
+                if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
                     // The waiting fiber resumes in a microtask, after this code returns. It sets its own thread.
                     Fiber fiber = this.fiber;
                     this.fiber = null;
@@ -338,7 +340,7 @@ public final class Fiber {
                 removePendingCall();
             } else {
                 // jspi: begin
-                if (isJspi()) {
+                if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
                     Fiber fiber = this.fiber;
                     this.fiber = null;
                     javaThread = null;
@@ -381,7 +383,7 @@ public final class Fiber {
 
     public static void start(FiberRunner runner, boolean daemon) {
         // jspi: begin
-        if (isJspi()) {
+        if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
             // The host runs jspiRun on a new stack (WebAssembly.promising). The call returns when the new fiber parks
             // or ends; the caller's fiber is current again after it.
             Fiber fiber = new Fiber(runner, daemon);
@@ -458,10 +460,6 @@ public final class Fiber {
         } catch (Throwable ignored) {
             // The report must not replace the exception.
         }
-    }
-
-    private static boolean isJspi() {
-        return org.teavm.classlib.PlatformDetector.isWebAssemblyGC() && jspiEnabled();
     }
 
     /** kafka-wasm: true when the module is built for JSPI (WasmGCJspi). A build-time constant. */

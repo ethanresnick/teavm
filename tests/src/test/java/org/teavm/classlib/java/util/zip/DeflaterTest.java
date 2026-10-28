@@ -17,10 +17,8 @@ package org.teavm.classlib.java.util.zip;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -30,6 +28,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 // Deflater.deflate(byte[], int, int, int), Java SE 21 Javadoc: "A return value of 0 in this flush mode [NO_FLUSH]
