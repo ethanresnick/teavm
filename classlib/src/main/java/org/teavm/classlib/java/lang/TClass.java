@@ -739,9 +739,12 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     }
 
     public TPackage getPackage() {
+        if (isArray() || isPrimitive()) {
+            return null;
+        }
         String name = getName();
-        name = name.substring(0, name.lastIndexOf('.') + 1);
-        return TPackage.getPackage(name);
+        int dot = name.lastIndexOf('.');
+        return TPackage.getPackage(dot < 0 ? "" : name.substring(0, dot));
     }
 
     @SuppressWarnings("unchecked")
