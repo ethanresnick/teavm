@@ -15,18 +15,24 @@
  */
 package org.teavm.wasm;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.teavm.backend.c.CTarget;
 import org.teavm.backend.c.generate.CNameProvider;
 import org.teavm.backend.javascript.JavaScriptTarget;
 import org.teavm.backend.wasm.WasmGCTarget;
 import org.teavm.browserrunner.BrowserRunDescriptor;
 import org.teavm.browserrunner.BrowserRunner;
+import org.teavm.jso.JSObject;
 import org.teavm.tooling.ConsoleTeaVMToolLog;
 import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.vm.TeaVM;
@@ -159,9 +165,52 @@ public class MissingClassTypeTest {
         checkLinkError(LambdaOfMissingInterface.class, "extends " + MISSING_INTERFACE);
     }
 
+    @ParameterizedTest
+    @MethodSource("missingJSParents")
+    public void javaScriptInterfaceWithMissingParentDoesNotCrash(String backend, TeaVMOptimizationLevel level,
+            Class<?> entry) {
+        TeaVMTarget target;
+        String fileName;
+        switch (backend) {
+            case "js":
+                assumeTrue(jsNeeded);
+                target = new JavaScriptTarget();
+                fileName = "test.js";
+                break;
+            case "wasm-gc":
+                assumeTrue(wasmGCNeeded);
+                target = new WasmGCTarget();
+                fileName = "test.wasm";
+                break;
+            default:
+                assumeTrue(cNeeded);
+                target = new CTarget(new CNameProvider());
+                fileName = "";
+                break;
+        }
+        checkLinkError(buildVm(target, entry, level, "missing-js-parent-" + backend + "-" + level
+                + "-" + entry.getSimpleName(), fileName), MISSING_INTERFACE);
+    }
+
+    private static List<Arguments> missingJSParents() {
+        var cases = new ArrayList<Arguments>();
+        for (var backend : List.of("js", "wasm-gc", "c")) {
+            for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
+                for (var entry : List.of(ImplementJSInterface.class, ImplementTransitiveJSInterface.class)) {
+                    cases.add(Arguments.of(backend, level, entry));
+                }
+            }
+        }
+        return cases;
+    }
+
     private void checkLinkError(Class<?> entry, String expectedMessagePart) {
         var name = entry.getSimpleName() + "-link";
         var vm = buildVm(new WasmGCTarget(), entry, TeaVMOptimizationLevel.SIMPLE, name, "test.wasm");
+        checkLinkError(vm, expectedMessagePart);
+    }
+
+    private void checkLinkError(TeaVM vm, String expectedMessagePart) {
         var log = new StringBuilder();
         TeaVMProblemRenderer.describeProblems(vm, new ConsoleTeaVMToolLog(false) {
             @Override
@@ -342,6 +391,39 @@ public class MissingClassTypeTest {
 
     public interface MissingInterface {
         void run();
+    }
+
+    public interface JSInterfaceWithMissingParent extends JSObject, MissingInterface {
+    }
+
+    public static class JSImplementation implements JSInterfaceWithMissingParent {
+        @Override
+        public void run() {
+        }
+    }
+
+    public static class ImplementJSInterface {
+        public static void main(String[] args) {
+            Sinks.objectSink = new JSImplementation();
+        }
+    }
+
+    public interface MissingParentFirst extends MissingInterface, JSObject {
+    }
+
+    public interface TransitiveJSInterface extends MissingParentFirst {
+    }
+
+    public static class TransitiveJSImplementation implements TransitiveJSInterface {
+        @Override
+        public void run() {
+        }
+    }
+
+    public static class ImplementTransitiveJSInterface {
+        public static void main(String[] args) {
+            Sinks.objectSink = new TransitiveJSImplementation();
+        }
     }
 
     public static class SubOfMissing extends MissingException {

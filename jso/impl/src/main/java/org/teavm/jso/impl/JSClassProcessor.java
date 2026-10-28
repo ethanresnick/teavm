@@ -181,6 +181,9 @@ class JSClassProcessor {
 
     private void addPreservedMethods(String ifaceName, Set<MethodDescriptor> methods) {
         ClassReader iface = classSource.get(ifaceName);
+        if (iface == null) {
+            return;
+        }
         for (MethodReader method : iface.getMethods()) {
             methods.add(method.getDescriptor());
         }
