@@ -48,7 +48,6 @@ import org.teavm.model.transformation.DivisionCheckInsertion;
 
 class DependencyGraphBuilder {
     private static final MethodDescriptor GET_CLASS = new MethodDescriptor("getClass", Class.class);
-    private static final MethodDescriptor CLINIT = new MethodDescriptor("<clinit>", void.class);
     private DependencyAnalyzer dependencyAnalyzer;
     private DependencyNode[] nodes;
     private DependencyNode resultNode;
@@ -193,6 +192,7 @@ class DependencyGraphBuilder {
         private ClassReader[] exceptions;
         private DependencyNode[] vars;
         private MethodDependency method;
+        private DependencyConsumer initializerFailure;
 
         ExceptionConsumer(DependencyAnalyzer analyzer, ClassReader[] exceptions, DependencyNode[] vars,
                 MethodDependency method) {
@@ -200,6 +200,17 @@ class DependencyGraphBuilder {
             this.exceptions = exceptions;
             this.vars = vars;
             this.method = method;
+        }
+
+        // Delivers the errors of a failed initializer, which can occur only when the initializer throws something.
+        // One instance per block, so that a node that several of the block's instructions connect keeps one copy.
+        DependencyConsumer initializerFailure() {
+            if (initializerFailure == null) {
+                ClassHierarchy hierarchy = analyzer.getClassHierarchy();
+                initializerFailure = type -> ImplicitExceptions.readInitializerFailure(hierarchy,
+                        type.getValueType(), error -> consume(analyzer.getClassType(error)));
+            }
+            return initializerFailure;
         }
 
         @Override
@@ -222,28 +233,11 @@ class DependencyGraphBuilder {
     // exception handlers, as the thrown types of an invoked method do. Initializing a class also initializes its
     // superclasses, so their initializers can throw there too.
     private void connectInitializerExceptions(String className) {
-        ClassReaderSource classSource = dependencyAnalyzer.getClassSource();
-        for (ClassReader cls = classSource.get(className); cls != null;
-                cls = cls.getParent() != null ? classSource.get(cls.getParent()) : null) {
-            if (cls.getMethod(CLINIT) != null) {
-                MethodDependency clinit = dependencyAnalyzer.linkMethod(new MethodReference(cls.getName(), CLINIT));
-                clinit.getThrown().addConsumer(currentExceptionConsumer);
-                clinit.getThrown().addConsumer(initializerFailureConsumer(currentExceptionConsumer));
-            }
-        }
-    }
-
-    // A failed initializer throws ExceptionInInitializerError the first time, unless it threw an Error, and
-    // NoClassDefFoundError on every later use of the class. The backends create these errors, so no <clinit>
-    // declares them. They can occur only when the initializer throws something.
-    private DependencyConsumer initializerFailureConsumer(DependencyConsumer handlers) {
-        ClassHierarchy hierarchy = dependencyAnalyzer.getClassHierarchy();
-        return type -> {
-            if (!hierarchy.isSuperType(ValueType.object(Error.class.getName()), type.getValueType(), false)) {
-                handlers.consume(dependencyAnalyzer.getClassType(ExceptionInInitializerError.class.getName()));
-            }
-            handlers.consume(dependencyAnalyzer.getClassType(NoClassDefFoundError.class.getName()));
-        };
+        ImplicitExceptions.readInitializers(dependencyAnalyzer.getClassSource(), className, clinitRef -> {
+            MethodDependency clinit = dependencyAnalyzer.linkMethod(clinitRef);
+            clinit.getThrown().addConsumer(currentExceptionConsumer);
+            clinit.getThrown().addConsumer(currentExceptionConsumer.initializerFailure());
+        });
     }
 
     private AbstractInstructionAnalyzer reader = new AbstractInstructionAnalyzer() {
