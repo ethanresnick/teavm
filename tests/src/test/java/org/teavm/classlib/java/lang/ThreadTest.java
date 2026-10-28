@@ -19,15 +19,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
+import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -215,9 +216,7 @@ public class ThreadTest {
         assertFalse(failing.isAlive());
     }
 
-    // Accepted gap: start(): "IllegalThreadStateException - if the thread was already started."
     @Test
-    @Disabled("Thread.start() does not throw IllegalThreadStateException when the thread was already started")
     public void startTwiceThrows() throws InterruptedException {
         var thread = new Thread(() -> { });
         thread.start();
@@ -492,4 +491,99 @@ public class ThreadTest {
         watchdog.start();
         return watchdog;
     }
+
+    @Test
+    public void unnamedThreadsHaveDistinctStableNames() {
+        var first = new Thread();
+        var second = new Thread();
+        assertTrue(first.getName().startsWith("Thread-"));
+        assertTrue(second.getName().startsWith("Thread-"));
+        assertFalse(first.getName().equals(second.getName()));
+        assertEquals(first.getName(), first.getName());
+        first.setName("renamed");
+        assertEquals("renamed", first.getName());
+        assertThrows(NullPointerException.class, () -> first.setName(null));
+        assertThrows(NullPointerException.class, () -> new Thread((String) null));
+    }
+
+    @Test
+    public void liveThreadsAppearAtStartAndDisappearAtExit() throws InterruptedException {
+        var release = new boolean[1];
+        var worker = new Thread(() -> {
+            try {
+                while (!release[0]) {
+                    Thread.sleep(1);
+                }
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        });
+        assertFalse(Thread.getAllStackTraces().containsKey(worker));
+        worker.start();
+        try {
+            assertTrue(Thread.getAllStackTraces().containsKey(worker));
+            assertTrue(Thread.getAllStackTraces().containsKey(Thread.currentThread()));
+            var threads = new Thread[Thread.activeCount() + 10];
+            int count = Thread.enumerate(threads);
+            boolean found = false;
+            for (int i = 0; i < count; ++i) {
+                found |= threads[i] == worker;
+            }
+            assertTrue(found);
+            assertEquals(0, Thread.enumerate(new Thread[0]));
+            assertThrows(NullPointerException.class, () -> Thread.enumerate(null));
+            assertThrows(IllegalThreadStateException.class, worker::start);
+        } finally {
+            release[0] = true;
+            worker.join();
+        }
+        assertFalse(Thread.getAllStackTraces().containsKey(worker));
+        assertNull(worker.getThreadGroup());
+    }
+
+    @Test
+    public void secondInterruptReachesANewWait() throws InterruptedException {
+        var interrupted = new int[1];
+        var waiting = new int[1];
+        var worker = new Thread(() -> {
+            for (int i = 0; i < 2; ++i) {
+                waiting[0] = i + 1;
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    ++interrupted[0];
+                }
+            }
+        });
+        worker.start();
+        for (int i = 1; i <= 2; ++i) {
+            while (waiting[0] < i) {
+                Thread.sleep(1);
+            }
+            Thread.sleep(1);
+            worker.interrupt();
+        }
+        worker.join(2000);
+        assertEquals(2, interrupted[0]);
+        assertFalse(worker.isAlive());
+    }
+
+    @Test
+    @SkipJVM // finishedLock is TeaVM's internal join monitor.
+    public void missingFinishedLockDoesNotPreventThreadCleanup() throws Exception {
+        var ran = new boolean[1];
+        var worker = new Thread(() -> ran[0] = true);
+        var field = Thread.class.getDeclaredField("finishedLock");
+        field.setAccessible(true);
+        field.set(worker, null);
+        worker.start();
+        long deadline = System.nanoTime() + 2_000_000_000L;
+        while (worker.isAlive() && System.nanoTime() < deadline) {
+            Thread.sleep(1);
+        }
+        assertTrue(ran[0]);
+        assertFalse(worker.isAlive());
+        assertFalse(Thread.getAllStackTraces().containsKey(worker));
+    }
+
 }

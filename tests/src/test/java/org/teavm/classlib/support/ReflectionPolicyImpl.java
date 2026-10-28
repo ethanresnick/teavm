@@ -31,6 +31,8 @@ public class ReflectionPolicyImpl extends SimpleReflectionPolicy {
                 .reflectableMethods(withReturnType(SerializedLambda.class).and(named("writeReplace")));
 
         selectClass("org.teavm.classlib.java.lang.TestObject").foundByName();
+        // ThreadTest simulates constructor-free allocation without exposing these fields in production.
+        selectClass("java.lang.Thread").reflectableFields(named("finishedLock"));
 
         selectClasses(withAnnotation(Proxiable.class))
                 .proxyable()
