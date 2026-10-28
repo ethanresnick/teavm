@@ -18,7 +18,7 @@
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/locks/ReentrantLock.java).
  * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
  * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
- * kept. See classlib/PORTED-CLASSES.md.
+ * kept. Hand edits are marked "TeaVM:". See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -140,11 +140,14 @@ public class TReentrantLock implements TLock, java.io.Serializable {
         abstract boolean initialTryLock();
 
         final void lock() {
+            // TeaVM: initialTryLock() succeeds without AQS's acquire, so this path needs its own preemption point.
+            preemptionPoint();
             if (!initialTryLock())
                 acquire(1);
         }
 
         final void lockInterruptibly() throws InterruptedException {
+            preemptionPoint(); // TeaVM: see lock()
             if (Thread.interrupted())
                 throw new InterruptedException();
             if (!initialTryLock())
@@ -152,6 +155,7 @@ public class TReentrantLock implements TLock, java.io.Serializable {
         }
 
         final boolean tryLockNanos(long nanos) throws InterruptedException {
+            preemptionPoint(); // TeaVM: see lock()
             if (Thread.interrupted())
                 throw new InterruptedException();
             return initialTryLock() || tryAcquireNanos(1, nanos);

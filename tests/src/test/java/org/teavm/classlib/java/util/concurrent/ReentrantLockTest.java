@@ -1194,4 +1194,26 @@ public class ReentrantLockTest extends JSR166TestCase {
         lock.unlock();
         assertTrue(lock.toString().contains("Unlocked"));
     }
+
+    // TeaVM: green threads need a preemption point in each blocking acquire, also when it succeeds at once.
+    @Test
+    public void testLockLetsOtherThreadsRun() throws Throwable {
+        ReentrantLock lock = new ReentrantLock();
+        assertSpinningLetsOtherThreadsRun(() -> { lock.lock(); lock.unlock(); });
+    }
+
+    @Test
+    public void testLockInterruptiblyLetsOtherThreadsRun() throws Throwable {
+        ReentrantLock lock = new ReentrantLock();
+        assertSpinningLetsOtherThreadsRun(() -> { lock.lockInterruptibly(); lock.unlock(); });
+    }
+
+    @Test
+    public void testTimedTryLockLetsOtherThreadsRun() throws Throwable {
+        ReentrantLock lock = new ReentrantLock();
+        assertSpinningLetsOtherThreadsRun(() -> {
+            assertTrue(lock.tryLock(LONG_DELAY_MS, MILLISECONDS));
+            lock.unlock();
+        });
+    }
 }

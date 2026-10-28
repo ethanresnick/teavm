@@ -614,4 +614,40 @@ public class ArrayBlockingQueueTest {
         assertTrue(elapsedMillis >= expectedMillis - 1, call + " ended after " + elapsedMillis + " ms");
         assertTrue(elapsedMillis < expectedMillis + 2000, call + " ended after " + elapsedMillis + " ms");
     }
+
+    // put, take, and the timed offer and poll are blocking calls. When they do not block, they must still let
+    // other threads run, because green threads switch only when a thread blocks or yields.
+    @Test
+    public void putAndTakeLetOtherThreadsRun() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        assertSpinningLetsOtherThreadsRun(() -> {
+            queue.put(1);
+            queue.take();
+        });
+    }
+
+    @Test
+    public void timedOfferAndPollLetOtherThreadsRun() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        assertSpinningLetsOtherThreadsRun(() -> {
+            assertTrue(queue.offer(1, 10, TimeUnit.SECONDS));
+            assertEquals(1, queue.poll(10, TimeUnit.SECONDS));
+        });
+    }
+
+    interface BlockingAction {
+        void run() throws InterruptedException;
+    }
+
+    private static void assertSpinningLetsOtherThreadsRun(BlockingAction spin) throws InterruptedException {
+        var ran = new boolean[1];
+        var other = new Thread(() -> ran[0] = true);
+        other.start();
+        long start = System.nanoTime();
+        while (!ran[0] && System.nanoTime() - start < 5_000_000_000L) {
+            spin.run();
+        }
+        assertTrue(ran[0], "the other thread did not run");
+        other.join();
+    }
 }

@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
+import org.teavm.backend.javascript.spi.InjectedBy;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
@@ -232,10 +233,22 @@ public class TThread extends TObject implements TRunnable {
             return;
         }
         currentThread().yieldCount = 0;
-        if (currentThread.timeSliceStart + 100 < EventQueue.now()) {
+        if (currentThread.timeSliceStart + 100 < EventQueue.now() && inGreenThread()) {
             switchContext(currentThread);
         }
     }
+
+    // Code outside any green thread, such as a JS callback, cannot suspend, so yield() does not switch threads
+    // there. Blocking calls that do not block call yield(), and they must work in such code.
+    private static boolean inGreenThread() {
+        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
+            return Fiber.current() != null;
+        }
+        return inGreenThreadJs();
+    }
+
+    @InjectedBy(NativeThreadInjector.class)
+    private static native boolean inGreenThreadJs();
 
     @Async
     static native void switchContext(TThread thread);

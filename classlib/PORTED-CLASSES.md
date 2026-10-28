@@ -15,7 +15,11 @@ The port is mechanical:
 - `@ReservedStackAccess` annotations are removed;
 - `ForkJoinPool.managedBlock` becomes a call to `org.teavm.classlib.EmulSupport`.
 
-There are no other edits.
+There is one other edit, marked "TeaVM:" in the source. Each blocking acquire in `TAbstractQueuedSynchronizer`
+(`acquire`, `acquireInterruptibly`, `tryAcquireNanos`, `acquireShared`, `acquireSharedInterruptibly` and
+`tryAcquireSharedNanos`) and in `TReentrantLock` (`lock`, `lockInterruptibly` and the timed `tryLock`) first calls
+`Thread.yield()`, which switches threads only after the current thread has run for its time slice. Without it, a
+thread that loops on an acquire that succeeds at once never lets another thread run.
 
 Each file has the Apache-2.0 header of this port, then jsr166's public-domain notice
 (https://creativecommons.org/publicdomain/zero/1.0/).

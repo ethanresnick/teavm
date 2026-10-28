@@ -95,6 +95,10 @@ public class TObject {
     }
 
     static void monitorEnter(TObject o, int count) {
+        // A preemption point, as in the blocking acquires of java.util.concurrent.locks. Green threads switch only
+        // when a thread blocks or yields, so a thread that loops through an uncontended synchronized block would stop
+        // every other thread. Thread.yield() switches only after the thread has run for its time slice.
+        TThread.yield();
         if (o.monitor == null) {
            createMonitor(o);
         }
@@ -555,6 +559,11 @@ public class TObject {
             // onTimer()), so nothing else marks the listener expired. Without this, the listener stays in the
             // queue, and a later notify() takes it and wakes no thread.
             expired = true;
+            // The wait is over, so this listener is no longer the thread's interrupt handler. Left in place, it keeps
+            // the object and the callback reachable from the thread until the thread blocks again.
+            if (currentThread.interruptHandler == this) {
+                currentThread.interruptHandler = null;
+            }
             TThread.setCurrentThread(currentThread);
             monitorEnterWait(obj, lockCount, new AsyncCallback<Void>() {
                 @Override

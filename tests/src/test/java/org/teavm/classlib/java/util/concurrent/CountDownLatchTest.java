@@ -232,4 +232,17 @@ public class CountDownLatchTest extends JSR166TestCase {
         assertTrue(s.toString().contains("Count = 0"));
     }
 
+
+    // TeaVM: green threads need a preemption point in each blocking acquire, also when it succeeds at once.
+    @Test
+    public void testAwaitOfOpenLatchLetsOtherThreadsRun() throws Throwable {
+        CountDownLatch latch = new CountDownLatch(0);
+        assertSpinningLetsOtherThreadsRun(() -> latch.await());
+    }
+
+    @Test
+    public void testTimedAwaitOfOpenLatchLetsOtherThreadsRun() throws Throwable {
+        CountDownLatch latch = new CountDownLatch(0);
+        assertSpinningLetsOtherThreadsRun(() -> assertTrue(latch.await(LONG_DELAY_MS, MILLISECONDS)));
+    }
 }

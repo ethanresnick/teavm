@@ -90,6 +90,11 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
 
     @Override
     public void put(E e) throws InterruptedException {
+        // A blocking call that does not block is a preemption point, as in the blocking acquires of
+        // java.util.concurrent.locks. Green threads switch only when a thread blocks or yields, so a thread that loops
+        // on put and take without blocking would stop every other thread. Thread.yield() switches only after the
+        // thread has run for its time slice. offer(E) and poll() return at once, so they do not yield.
+        Thread.yield();
         Objects.requireNonNull(e);
         while (isFull()) {
             waitForChange(0);
@@ -99,6 +104,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
 
     @Override
     public boolean offer(E e, long timeout, TTimeUnit unit) throws InterruptedException {
+        Thread.yield(); // see put()
         Objects.requireNonNull(e);
         if (isFull()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
@@ -122,6 +128,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
 
     @Override
     public E take() throws InterruptedException {
+        Thread.yield(); // see put()
         while (isEmpty()) {
             waitForChange(0);
         }
@@ -130,6 +137,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
 
     @Override
     public E poll(long timeout, TTimeUnit unit) throws InterruptedException {
+        Thread.yield(); // see put()
         if (isEmpty()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isEmpty()) {

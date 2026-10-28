@@ -444,4 +444,31 @@ public class LockSupportTest extends JSR166TestCase {
 
         awaitTermination(t);
     }
+
+    // TeaVM: a park that returns at once must still let other threads run, because green threads switch only when
+    // a thread blocks or yields.
+    @Test
+    public void testParkWithPermitLetsOtherThreadsRun() throws Throwable {
+        Thread current = Thread.currentThread();
+        assertSpinningLetsOtherThreadsRun(() -> {
+            LockSupport.unpark(current);
+            LockSupport.park();
+        });
+    }
+
+    @Test
+    public void testParkOfInterruptedThreadLetsOtherThreadsRun() throws Throwable {
+        final boolean[] ran = new boolean[1];
+        Thread other = new Thread(() -> ran[0] = true);
+        other.start();
+        Thread.currentThread().interrupt();
+        long startTime = System.nanoTime();
+        while (!ran[0] && millisElapsedSince(startTime) < LONG_DELAY_MS) {
+            LockSupport.park();
+        }
+        // park leaves the interrupt status set; clear it before join().
+        assertTrue(Thread.interrupted());
+        assertTrue("the other thread did not run", ran[0]);
+        other.join();
+    }
 }

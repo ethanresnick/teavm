@@ -706,6 +706,23 @@ public abstract class JSR166TestCase {
         return NANOSECONDS.toMillis(System.nanoTime() - startNanoTime);
     }
 
+    /**
+     * TeaVM: checks that a thread which calls {@code spin} in a loop lets another thread run. Green threads switch
+     * only when a thread blocks or yields, so the call must yield even when it does not block. The loop gives up
+     * after LONG_DELAY_MS.
+     */
+    void assertSpinningLetsOtherThreadsRun(Action spin) throws Throwable {
+        final boolean[] ran = new boolean[1];
+        Thread other = new Thread(() -> ran[0] = true);
+        other.start();
+        long startTime = System.nanoTime();
+        while (!ran[0] && millisElapsedSince(startTime) < LONG_DELAY_MS) {
+            spin.run();
+        }
+        assertTrue("the other thread did not run", ran[0]);
+        other.join();
+    }
+
 //     void assertTerminatesPromptly(long timeoutMillis, Runnable r) {
 //         long startTime = System.nanoTime();
 //         try {

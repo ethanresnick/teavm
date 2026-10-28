@@ -18,7 +18,7 @@
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/locks/AbstractQueuedSynchronizer.java).
  * The port is mechanical: the package and the "T" prefix, plain-field helpers in place of Unsafe, no
  * @ReservedStackAccess annotations, and EmulSupport in place of ForkJoinPool.managedBlock. The jsr166 formatting is
- * kept. See classlib/PORTED-CLASSES.md.
+ * kept. Hand edits are marked "TeaVM:". See classlib/PORTED-CLASSES.md.
  */
 /*
  * Written by Doug Lea with assistance from members of JCP JSR-166
@@ -772,6 +772,15 @@ public abstract class TAbstractQueuedSynchronizer
         return 0;
     }
 
+    // TeaVM: green threads switch only when a thread blocks or yields. A blocking acquire that succeeds at once
+    // does neither, so a thread that loops on such an acquire would stop every other thread. Each blocking acquire
+    // calls this first, and TLockSupport.park calls it when it returns without blocking. Thread.yield() switches only
+    // after the thread has run for its time slice, so an uncontended acquire stays cheap. Methods that must return at
+    // once (tryAcquire, tryLock() and the like) do not call it.
+    static void preemptionPoint() {
+        Thread.yield();
+    }
+
     // Main exported methods
 
     /**
@@ -922,6 +931,7 @@ public abstract class TAbstractQueuedSynchronizer
      *        can represent anything you like.
      */
     public final void acquire(int arg) {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (!tryAcquire(arg))
             acquire(null, arg, false, false, false, 0L);
     }
@@ -942,6 +952,7 @@ public abstract class TAbstractQueuedSynchronizer
      */
     public final void acquireInterruptibly(int arg)
         throws InterruptedException {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (Thread.interrupted() ||
             (!tryAcquire(arg) && acquire(null, arg, false, true, false, 0L) < 0))
             throw new InterruptedException();
@@ -966,6 +977,7 @@ public abstract class TAbstractQueuedSynchronizer
      */
     public final boolean tryAcquireNanos(int arg, long nanosTimeout)
         throws InterruptedException {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (!Thread.interrupted()) {
             if (tryAcquire(arg))
                 return true;
@@ -1011,6 +1023,7 @@ public abstract class TAbstractQueuedSynchronizer
      *        and can represent anything you like.
      */
     public final void acquireShared(int arg) {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (tryAcquireShared(arg) < 0)
             acquire(null, arg, true, false, false, 0L);
     }
@@ -1030,6 +1043,7 @@ public abstract class TAbstractQueuedSynchronizer
      */
     public final void acquireSharedInterruptibly(int arg)
         throws InterruptedException {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (Thread.interrupted() ||
             (tryAcquireShared(arg) < 0 &&
              acquire(null, arg, true, true, false, 0L) < 0))
@@ -1054,6 +1068,7 @@ public abstract class TAbstractQueuedSynchronizer
      */
     public final boolean tryAcquireSharedNanos(int arg, long nanosTimeout)
             throws InterruptedException {
+        preemptionPoint(); // TeaVM: see preemptionPoint()
         if (!Thread.interrupted()) {
             if (tryAcquireShared(arg) >= 0)
                 return true;

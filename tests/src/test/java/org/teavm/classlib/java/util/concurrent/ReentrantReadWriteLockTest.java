@@ -1814,4 +1814,28 @@ public class ReentrantReadWriteLockTest extends JSR166TestCase {
         assertTrue(lock.writeLock().toString().contains("Unlocked"));
     }
 
+    // TeaVM: green threads need a preemption point in each blocking acquire, also when it succeeds at once.
+    // Both locks go through AbstractQueuedSynchronizer's acquire methods.
+    @Test
+    public void testReadLockLetsOtherThreadsRun() throws Throwable {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+        assertSpinningLetsOtherThreadsRun(() -> { lock.readLock().lock(); lock.readLock().unlock(); });
+    }
+
+    @Test
+    public void testWriteLockLetsOtherThreadsRun() throws Throwable {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+        assertSpinningLetsOtherThreadsRun(() -> { lock.writeLock().lock(); lock.writeLock().unlock(); });
+    }
+
+    @Test
+    public void testTimedTryLockLetsOtherThreadsRun() throws Throwable {
+        ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+        assertSpinningLetsOtherThreadsRun(() -> {
+            assertTrue(lock.readLock().tryLock(LONG_DELAY_MS, MILLISECONDS));
+            lock.readLock().unlock();
+            assertTrue(lock.writeLock().tryLock(LONG_DELAY_MS, MILLISECONDS));
+            lock.writeLock().unlock();
+        });
+    }
 }

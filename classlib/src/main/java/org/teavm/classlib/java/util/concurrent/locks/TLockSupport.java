@@ -127,12 +127,16 @@ public final class TLockSupport {
 
     /** Waits for the permit. {@code timeoutMillis} of 0 means no timeout. */
     private static void park0(ParkState s, long timeoutMillis) {
+        // A park that returns at once does not block, so it is a preemption point: see
+        // TAbstractQueuedSynchronizer.preemptionPoint().
         if (s.permit) {
             s.permit = false;
+            TAbstractQueuedSynchronizer.preemptionPoint();
             return;
         }
         // park returns at once for an interrupted thread, and leaves the interrupt status set.
         if (s.thread.isInterrupted()) {
+            TAbstractQueuedSynchronizer.preemptionPoint();
             return;
         }
         parkImpl(s, timeoutMillis);

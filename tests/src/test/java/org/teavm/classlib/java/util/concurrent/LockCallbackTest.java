@@ -16,7 +16,10 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.junit.jupiter.api.Test;
@@ -77,5 +80,47 @@ public class LockCallbackTest {
             Thread.sleep(50);
         }
         assertEquals("ok 1000 0", result);
+    }
+
+    @Test
+    public void blockingCallsThatDoNotBlockWorkInCallback() throws InterruptedException {
+        result = null;
+        ReentrantLock lock = new ReentrantLock();
+        ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
+        CountDownLatch open = new CountDownLatch(0);
+        ArrayBlockingQueue<Integer> queue = new ArrayBlockingQueue<>(1);
+        // These calls can block, but here none of them needs to wait. Each one is a preemption point, so after 30
+        // calls with the time slice spent, it would switch threads if it could suspend here.
+        Window.setTimeout(() -> {
+            try {
+                Thread current = Thread.currentThread();
+                int n = 0;
+                for (int i = 0; i < 1000; ++i) {
+                    if (lock.tryLock(1, TimeUnit.SECONDS)) {
+                        lock.unlock();
+                    }
+                    if (rw.readLock().tryLock(1, TimeUnit.SECONDS)) {
+                        rw.readLock().unlock();
+                    }
+                    open.await();
+                    open.await(1, TimeUnit.SECONDS);
+                    LockSupport.unpark(current);
+                    LockSupport.park();
+                    queue.put(i);
+                    queue.take();
+                    queue.offer(i, 1, TimeUnit.SECONDS);
+                    queue.poll(1, TimeUnit.SECONDS);
+                    n++;
+                }
+                result = "ok " + n;
+            } catch (Throwable e) {
+                result = "failed: " + e;
+            }
+        }, 300);
+        Thread.sleep(1000);
+        for (int i = 0; i < 100 && result == null; ++i) {
+            Thread.sleep(50);
+        }
+        assertEquals("ok 1000", result);
     }
 }
