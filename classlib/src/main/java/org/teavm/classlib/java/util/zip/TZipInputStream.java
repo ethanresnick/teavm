@@ -121,7 +121,7 @@ public class TZipInputStream extends TInflaterInputStream implements TZipConstan
 
     private void readAndVerifyDataDescriptor(int inB, int out) throws IOException {
         if (hasDD) {
-            in.read(hdrBuf, 0, EXTHDR);
+            readFully(hdrBuf, EXTHDR);
             if (getLong(hdrBuf, 0) != EXTSIG) {
                 throw new TZipException();
             }
@@ -162,14 +162,7 @@ public class TZipInputStream extends TInflaterInputStream implements TZipConstan
         }
 
         // Read the local header
-        count = 0;
-        while (count != LOCHDR - LOCVER) {
-            x = in.read(hdrBuf, count, (LOCHDR - LOCVER) - count);
-            count += x;
-            if (x == -1) {
-                throw new EOFException();
-            }
-        }
+        readFully(hdrBuf, LOCHDR - LOCVER);
         int version = getShort(hdrBuf, 0) & 0xff;
         if (version > ZIPLocalHeaderVersionNeeded) {
             throw new TZipException();
@@ -193,18 +186,11 @@ public class TZipInputStream extends TInflaterInputStream implements TZipConstan
         }
         int elen = getShort(hdrBuf, LOCEXT - LOCVER);
 
-        count = 0;
         if (flen > nameBuf.length) {
             nameBuf = new byte[flen];
             charBuf = new char[flen];
         }
-        while (count != flen) {
-            x = in.read(nameBuf, count, flen - count);
-            count += x;
-            if (x == -1) {
-                throw new EOFException();
-            }
-        }
+        readFully(nameBuf, flen);
         currentEntry = createZipEntry(new String(nameBuf, 0, flen, StandardCharsets.UTF_8));
         currentEntry.time = cetime;
         currentEntry.modDate = cemodDate;
@@ -215,15 +201,8 @@ public class TZipInputStream extends TInflaterInputStream implements TZipConstan
             currentEntry.setCompressedSize(cecompressedSize);
         }
         if (elen > 0) {
-            count = 0;
             byte[] e = new byte[elen];
-            while (count != elen) {
-                x = in.read(e, count, elen - count);
-                count += x;
-                if (x == -1) {
-                    throw new EOFException();
-                }
-            }
+            readFully(e, elen);
             currentEntry.setExtra(e);
         }
         return currentEntry;
@@ -316,6 +295,18 @@ public class TZipInputStream extends TInflaterInputStream implements TZipConstan
             throw new IOException();
         }
         return (currentEntry == null || inRead < currentEntry.size) ? 1 : 0;
+    }
+
+    // A read may return fewer bytes than asked for.
+    private void readFully(byte[] buffer, int length) throws IOException {
+        int count = 0;
+        while (count < length) {
+            int x = in.read(buffer, count, length - count);
+            if (x == -1) {
+                throw new EOFException();
+            }
+            count += x;
+        }
     }
 
     protected TZipEntry createZipEntry(String name) {

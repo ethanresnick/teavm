@@ -99,8 +99,10 @@ import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
 import org.teavm.model.instructions.StringConstantInstruction;
 import org.teavm.model.transformation.BoundCheckInsertion;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.transformation.NullCheckFilter;
 import org.teavm.model.transformation.NullCheckInsertion;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
 import org.teavm.model.util.VariableCategoryProvider;
 import org.teavm.reflection.AnnotationGenerationHelper;
@@ -136,6 +138,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     private boolean strict;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
     private NullCheckInsertion nullCheckInsertion = new NullCheckInsertion(NullCheckFilter.EMPTY);
+    private DivisionCheckInsertion divisionCheckInsertion = new DivisionCheckInsertion(method -> true);
     private final Map<String, String> importedModules = new LinkedHashMap<>();
     private JavaScriptTemplateFactory templateFactory;
     private JSModuleType moduleType = JSModuleType.UMD;
@@ -290,6 +293,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         exceptionCons.use();
 
         if (strict) {
+            DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
+
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     ArrayIndexOutOfBoundsException.class, "<init>", void.class));
             exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
@@ -323,6 +328,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
                 ExceptionInInitializerError.class.getName()));
         exceptionCons.getVariable(1).propagate(dependencyAnalyzer.getClassType(Throwable.class.getName()));
         exceptionCons.use();
+
+        dependencyAnalyzer.addDependencyListener(new ClassInitializationLockDependencyListener());
 
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getMessage", String.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(Throwable.class, "getCause", Throwable.class)).use();
@@ -378,6 +385,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     public void beforeInlining(Program program, MethodReader method) {
         if (strict) {
             nullCheckInsertion.transformProgram(program, method.getReference());
+            divisionCheckInsertion.transformProgram(program, method.getReference());
         }
     }
 

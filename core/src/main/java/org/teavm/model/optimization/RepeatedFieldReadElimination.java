@@ -49,6 +49,7 @@ import org.teavm.model.instructions.AssignInstruction;
 import org.teavm.model.instructions.GetFieldInstruction;
 import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.PutFieldInstruction;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.util.ProgramUtils;
 
 public class RepeatedFieldReadElimination implements MethodOptimization {
@@ -424,7 +425,10 @@ public class RepeatedFieldReadElimination implements MethodOptimization {
 
         @Override
         public void visit(InvokeInstruction insn) {
-            invalidatesAll = true;
+            // A divisor check writes nothing; it only throws.
+            if (!DivisionCheckInsertion.isCheck(insn.getMethod())) {
+                invalidatesAll = true;
+            }
         }
     }
 

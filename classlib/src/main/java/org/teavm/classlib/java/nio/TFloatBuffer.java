@@ -216,10 +216,9 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
 
     @Override
     public int hashCode() {
-        int hashCode = 0;
-        int pos = position;
-        for (int i = position; i < limit; ++i) {
-            hashCode = 31 * hashCode + Float.floatToIntBits(getElement(pos++));
+        int hashCode = 1;
+        for (int i = limit - 1; i >= position; --i) {
+            hashCode = 31 * hashCode + (int) getElement(i);
         }
         return hashCode;
     }

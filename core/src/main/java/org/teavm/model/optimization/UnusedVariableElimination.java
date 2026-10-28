@@ -65,7 +65,8 @@ public class UnusedVariableElimination implements MethodOptimization {
         KEEP_UNCHECKED,
         /**
          * Also keep reading an instance field and cloning an array, which throw NullPointerException until a target
-         * inserts null checks for them.
+         * inserts null checks for them, and an integer division or remainder by a divisor that may be zero, which
+         * throws ArithmeticException until a target inserts divisor checks.
          */
         KEEP_ALL
     }

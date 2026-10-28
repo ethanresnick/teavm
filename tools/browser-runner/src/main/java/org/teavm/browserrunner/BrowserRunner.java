@@ -73,6 +73,7 @@ public class BrowserRunner {
     private boolean devToolsEnabled;
     private int devToolsPort;
     private ChromeDevTools devTools;
+    private long testTimeoutMillis;
 
     public BrowserRunner(File baseDir, String type, Function<BrowserRunParams, Process> browserRunner,
             boolean decodeStack) {
@@ -106,12 +107,40 @@ public class BrowserRunner {
         devToolsEnabled = true;
     }
 
+    /**
+     * Limits how long a single {@link #runTest(BrowserRunDescriptor, BrowserOutputListener)} call may take,
+     * including waiting for the browser to connect. When the time runs out, the runner kills and restarts
+     * the browser (code that hangs may block the page, so it can't be stopped from within), and
+     * {@code runTest} throws {@link BrowserRunTimeoutException}. Zero or a negative value (the default)
+     * means no limit.
+     */
+    public void setTestTimeout(long millis) {
+        testTimeoutMillis = millis;
+    }
+
     public void start() {
         runServer();
+        // Browser logs are appended to, so that a browser restarted after a timeout doesn't overwrite
+        // the log of the one that hung; start from empty logs.
+        for (var stream : List.of("stdout", "stderr")) {
+            var file = logFile(stream);
+            if (file != null) {
+                file.delete();
+            }
+        }
+        launchBrowser();
+    }
+
+    private File logFile(String stream) {
+        return logBrowserOutput
+                ? new File(baseDir, "browser-" + stream + "-" + ProcessHandle.current().pid() + ".txt")
+                : null;
+    }
+
+    private void launchBrowser() {
         if (devToolsEnabled) {
             devToolsPort = findFreePort();
         }
-        var pid = ProcessHandle.current().pid();
         browserProcess = browserRunner.apply(
                 new BrowserRunParams() {
                     @Override
@@ -121,18 +150,12 @@ public class BrowserRunner {
 
                     @Override
                     public File stderrFile() {
-                        if (logBrowserOutput) {
-                            return new File(baseDir, "browser-stderr-" + pid + ".txt");
-                        }
-                        return null;
+                        return logFile("stderr");
                     }
 
                     @Override
                     public File stdoutFile() {
-                        if (logBrowserOutput) {
-                            return new File(baseDir, "browser-stdout-" + pid + ".txt");
-                        }
-                        return null;
+                        return logFile("stdout");
                     }
 
                     @Override
@@ -184,6 +207,25 @@ public class BrowserRunner {
         }
     }
 
+    private void restartBrowser() {
+        if (devTools != null) {
+            devTools.close();
+            devTools = null;
+        }
+        if (browserProcess == null) {
+            System.err.println("Can't restart the browser, since it wasn't started by the test runner. "
+                    + "Reload the page manually.");
+            return;
+        }
+        System.err.println("Restarting the browser");
+        // If some process survives, proceed anyway: the new browser instance uses its own profile directory
+        ProcessTree.kill(browserProcess, 10, TimeUnit.SECONDS);
+        for (var ws = wsSessionQueue.poll(); ws != null; ws = wsSessionQueue.poll()) {
+            ws.close();
+        }
+        launchBrowser();
+    }
+
     private void runServer() {
         server = new Server();
         var connector = new ServerConnector(server);
@@ -216,10 +258,12 @@ public class BrowserRunner {
         volatile Throwable error;
         volatile boolean shouldRepeat;
         final BrowserOutputListener outputListener;
+        final Session session;
 
-        CallbackWrapper(CountDownLatch latch, BrowserOutputListener outputListener) {
+        CallbackWrapper(CountDownLatch latch, BrowserOutputListener outputListener, Session session) {
             this.latch = latch;
             this.outputListener = outputListener;
+            this.session = session;
         }
 
         void complete() {
@@ -246,16 +290,29 @@ public class BrowserRunner {
      * instead of printing it to stdout/stderr of the current process.
      */
     public void runTest(BrowserRunDescriptor run, BrowserOutputListener outputListener) throws IOException {
-        while (!runTestOnce(run, outputListener)) {
+        long deadline = testTimeoutMillis > 0
+                ? System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(testTimeoutMillis)
+                : 0;
+        while (!runTestOnce(run, outputListener, deadline)) {
             // repeat
         }
     }
 
-    private boolean runTestOnce(BrowserRunDescriptor run, BrowserOutputListener outputListener) {
+    private long remainingNanos(long deadline) {
+        return deadline != 0 ? deadline - System.nanoTime() : Long.MAX_VALUE;
+    }
+
+    private boolean runTestOnce(BrowserRunDescriptor run, BrowserOutputListener outputListener, long deadline) {
         Session ws;
         try {
             do {
-                ws = wsSessionQueue.poll(1, TimeUnit.SECONDS);
+                long remaining = remainingNanos(deadline);
+                if (remaining <= 0) {
+                    restartBrowser();
+                    throw new BrowserRunTimeoutException("the browser did not connect within "
+                            + testTimeoutMillis + " ms, so it was restarted");
+                }
+                ws = wsSessionQueue.poll(Math.min(remaining, TimeUnit.SECONDS.toNanos(1)), TimeUnit.NANOSECONDS);
             } while (ws == null || !ws.isOpen());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -265,7 +322,7 @@ public class BrowserRunner {
         int id = idGenerator.incrementAndGet();
         var latch = new CountDownLatch(1);
 
-        var callbackWrapper = new CallbackWrapper(latch, outputListener);
+        var callbackWrapper = new CallbackWrapper(latch, outputListener, ws);
         awaitingRuns.put(id, callbackWrapper);
 
         var nf = objectMapper.getNodeFactory();
@@ -307,7 +364,15 @@ public class BrowserRunner {
         ws.sendText(message, Callback.NOOP);
 
         try {
-            latch.await();
+            if (!latch.await(remainingNanos(deadline), TimeUnit.NANOSECONDS)) {
+                if (awaitingRuns.remove(id) != null) {
+                    restartBrowser();
+                    throw new BrowserRunTimeoutException("the run did not finish within " + testTimeoutMillis
+                            + " ms, so the browser was restarted");
+                }
+                // The result arrived just as the time ran out, and is being processed right now
+                latch.await();
+            }
         } catch (InterruptedException e) {
             // do nothing
         }
@@ -459,15 +524,22 @@ public class BrowserRunner {
     }
 
     public class TestCodeSocket implements Session.Listener.AutoDemanding {
+        private volatile Session session;
+
         @Override
         public void onWebSocketOpen(Session sess) {
+            session = sess;
             wsSessionQueue.offer(sess);
         }
 
         @Override
         public void onWebSocketClose(int statusCode, String reason, Callback callback) {
+            // Only repeat runs sent over this connection: after a timeout, the connection to the killed
+            // browser may close while the next run is already waiting for the new browser.
             for (CallbackWrapper run : awaitingRuns.values()) {
-                run.repeat();
+                if (run.session == session) {
+                    run.repeat();
+                }
             }
             callback.succeed();
         }
@@ -632,7 +704,7 @@ public class BrowserRunner {
             } else {
                 file.getParentFile().mkdirs();
                 try (var reader = new BufferedReader(new InputStreamReader(stream));
-                        var writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file)))) {
+                        var writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file, true)))) {
                     while (true) {
                         String line = reader.readLine();
                         if (line == null) {

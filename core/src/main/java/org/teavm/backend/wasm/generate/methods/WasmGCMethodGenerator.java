@@ -43,10 +43,15 @@ import org.teavm.backend.wasm.model.WasmFunction;
 import org.teavm.backend.wasm.model.WasmLocal;
 import org.teavm.backend.wasm.model.WasmModule;
 import org.teavm.backend.wasm.model.WasmType;
+import org.teavm.backend.wasm.model.instruction.WasmBlock;
 import org.teavm.backend.wasm.model.instruction.WasmBreak;
 import org.teavm.backend.wasm.model.instruction.WasmCatchClause;
 import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
 import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
+import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmIntType;
+import org.teavm.backend.wasm.model.instruction.WasmIntUnaryOperation;
+import org.teavm.backend.wasm.model.instruction.WasmNullCondition;
 import org.teavm.backend.wasm.model.instruction.WasmUnreachable;
 import org.teavm.backend.wasm.runtime.WasmGCSupport;
 import org.teavm.backend.wasm.transformation.CoroutineTransformation;
@@ -73,10 +78,12 @@ import org.teavm.model.ValueType;
 import org.teavm.model.Variable;
 import org.teavm.model.analysis.ClassInitializerInfo;
 import org.teavm.model.instructions.NullConstantInstruction;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.model.util.InstructionVariableMapper;
 import org.teavm.model.util.RegisterAllocator;
 import org.teavm.model.util.UsageExtractor;
 import org.teavm.parsing.resource.ResourceProvider;
+import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.intrinsic.IntrinsicProvider;
 
 public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
@@ -84,6 +91,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             "failedInitializer", void.class);
     public static final MethodReference INITIALIZER_ERROR = new MethodReference(WasmGCSupport.class,
             "initializerError", Throwable.class, Throwable.class);
+    // Linked only when the program has an @Async method, which an async initializer implies
+    private static final MethodReference INITIALIZATION_ENTER = ClassInitializationLockDependencyListener.ENTER;
+    private static final MethodReference INITIALIZATION_EXIT = ClassInitializationLockDependencyListener.EXIT;
     private WasmModule module;
     private ClassHierarchy hierarchy;
     private ListableClassHolderSource classes;
@@ -412,11 +422,24 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             function.add(wasmLocal);
         }
 
-        addInitializerErase(method, function);
+        // Another thread can run while an initializer that can suspend runs, so such an initializer erases
+        // itself only when it ends (wrapAsyncInitializer)
+        var asyncInitializer = isSuspend && isDynamicInitializer(method);
+        if (!asyncInitializer) {
+            addInitializerErase(method, function);
+        }
         var visitor = new WasmGCInstructionGenerationVisitor(getGenerationContext(), method.getReference(),
                 function, firstVar, isSuspend, typeInference, asyncSplitMethods);
+        var asyncInitializerBody = asyncInitializer ? new WasmBlock(false) : null;
+        if (asyncInitializerBody != null) {
+            visitor.setReturnBlock(asyncInitializerBody.getBody());
+        }
         wrapSynchronizedMethod(method, visitor, function, ast);
-        wrapInitializerFailure(method, function);
+        if (asyncInitializerBody != null) {
+            wrapAsyncInitializer(method, function, asyncInitializerBody);
+        } else {
+            wrapInitializerFailure(method, function);
+        }
 
         if (isSuspend) {
             if (coroutineTransformation == null) {
@@ -622,6 +645,81 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
                     .structSet(classInfoStruct.structure(), classInfoStruct.initializerIndex());
         }
         body.call(forStaticMethod(INITIALIZER_ERROR)).throw_(exceptionTag);
+    }
+
+    // An initializer that can suspend follows JLS 12.4.2, steps 2 and 3: while it runs, another thread that uses
+    // the class waits until it ends, and then uses the class's initializer again, which is now the dummy one
+    // or the one that throws NoClassDefFoundError. A recursive use on the same thread returns at once. The body
+    // runs in asyncBody, the return target of the generated code. When it ends, the initializer pointer becomes
+    // the dummy one, or the failed one when the body threw, and then the waiting threads wake up.
+    private void wrapAsyncInitializer(MethodReader method, WasmFunction function, WasmBlock asyncBody) {
+        var classInfo = classInfoProvider.getClassInfo(method.getOwnerName());
+        // The class name identifies the class: a class info is not a Java object in Wasm GC
+        var className = strings.getStringConstant(method.getOwnerName()).global;
+        var throwableType = (WasmType.Reference) typeMapper.mapType(ValueType.object("java.lang.Throwable"));
+        var exceptionTag = getGenerationContext().getExceptionTag();
+        var state = new WasmLocal(WasmType.INT32, "initState");
+        function.add(state);
+        var error = new WasmLocal(throwableType, "initError");
+        function.add(error);
+
+        var originalBody = new WasmInstructionList();
+        originalBody.transferFrom(function.getBody());
+        var body = function.getBody().builder();
+
+        var run = body.block();
+        run
+                .getGlobal(className)
+                .call(forStaticMethod(INITIALIZATION_ENTER), asyncMethods.contains(INITIALIZATION_ENTER))
+                .teeLocal(state)
+                .intUnary(WasmIntType.INT32, WasmIntUnaryOperation.EQZ)
+                .branch(run.list);
+        var waited = run.block();
+        waited
+                .getLocal(state)
+                .i32Const(ClassInitializationLock.WAITED)
+                .intBinary(WasmIntType.INT32, WasmIntBinaryOperation.EQ)
+                .branch(waited.list);
+        waited.return_();
+        run
+                .getGlobal(classInfo.getInitializerPointer())
+                .callReference(functionTypes.of(null), true)
+                .return_();
+
+        var ended = body.block();
+        var catchBlock = ended.block(throwableType);
+        var tryCatch = catchBlock.try_();
+        asyncBody.getBody().transferFrom(originalBody);
+        tryCatch.getBody().add(asyncBody);
+        tryCatch.getCatches().add(new WasmCatchClause(exceptionTag, false, catchBlock.list));
+        setInitializerPointer(method, catchBlock, getDummyInitializer());
+        catchBlock.breakTo(ended);
+        ended.setLocal(error);
+        var failedInitializer = forStaticMethod(FAILED_INITIALIZER);
+        failedInitializer.setReferenced(true);
+        setInitializerPointer(method, ended, failedInitializer);
+
+        body
+                .getGlobal(className)
+                .call(forStaticMethod(INITIALIZATION_EXIT), asyncMethods.contains(INITIALIZATION_EXIT));
+        var normal = body.block();
+        normal
+                .getLocal(error)
+                .nullBranch(WasmNullCondition.NULL, normal)
+                .call(forStaticMethod(INITIALIZER_ERROR))
+                .throw_(exceptionTag);
+    }
+
+    private void setInitializerPointer(MethodReader method, WasmInstructionBuilder body, WasmFunction initializer) {
+        var classInfoStruct = classInfoProvider.reflectionTypes().classInfo();
+        var classInfo = classInfoProvider.getClassInfo(method.getOwnerName());
+        body.funcRef(initializer).setGlobal(classInfo.getInitializerPointer());
+        if (classInfoStruct.initializerIndex() >= 0) {
+            body
+                    .getGlobal(classInfo.getPointer())
+                    .funcRef(initializer)
+                    .structSet(classInfoStruct.structure(), classInfoStruct.initializerIndex());
+        }
     }
 
     private Decompiler getDecompiler() {

@@ -57,6 +57,7 @@ public class WasmIntegrationTest {
     @BeforeAll
     public static void start() {
         if (wasmGCNeeded) {
+            browserRunner.setTestTimeout(Long.getLong("teavm.junit.timeout", 300) * 1000);
             browserRunner.start();
         }
     }

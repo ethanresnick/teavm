@@ -650,8 +650,8 @@ public abstract class JSR166TestCase {
     }
 
     /**
-     * TeaVM port: TeaVM's Thread.getState() reports only NEW, RUNNABLE and TERMINATED, so a thread that blocks
-     * is never seen in a wait state. These waits give the thread time to block, then check that it is alive.
+     * TeaVM port: TeaVM has no Thread.getState(), so a thread that blocks cannot be seen in a wait state. These
+     * waits give the thread time to block, then check that it is alive.
      */
     void waitForThreadToEnterWaitState(Thread thread, long timeoutMillis) {
         sleep(Math.min(timeoutMillis, SHORT_DELAY_MS));

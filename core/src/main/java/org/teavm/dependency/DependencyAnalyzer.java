@@ -109,6 +109,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private ClassHierarchy classHierarchy;
     IncrementalCache incrementalCache = new IncrementalCache();
     boolean asyncSupported;
+    boolean integerDivisionChecked;
     private ReferenceCache referenceCache;
     private Set<String> generatedClassNames = new HashSet<>();
     DependencyType classType;
@@ -167,6 +168,14 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
 
     public void setAsyncSupported(boolean asyncSupported) {
         this.asyncSupported = asyncSupported;
+    }
+
+    /**
+     * Tells the analysis that the target makes an integer division by zero throw ArithmeticException, so that
+     * the exception type reaches the handlers.
+     */
+    public void setIntegerDivisionChecked(boolean integerDivisionChecked) {
+        this.integerDivisionChecked = integerDivisionChecked;
     }
 
     public DependencyAgent getAgent() {
