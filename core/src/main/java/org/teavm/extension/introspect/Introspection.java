@@ -152,6 +152,12 @@ public class Introspection implements IntrospectWorld {
         if (modifierSet.contains(ElementModifier.RECORD)) {
             modifiers |= RECORD;
         }
+        if (modifierSet.contains(ElementModifier.SYNTHETIC)) {
+            modifiers |= 0x1000;
+        }
+        if (modifierSet.contains(ElementModifier.BRIDGE)) {
+            modifiers |= 0x0040;
+        }
         return modifiers;
     }
 }

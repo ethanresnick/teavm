@@ -50,6 +50,38 @@ public class IntrospectionTest {
     }
 
     @Test
+    public void generatedMethodModifiersMatchReflection() {
+        var type = world.findClass(GeneratedMethods.class);
+        int bridges = 0;
+        int syntheticBodies = 0;
+        for (var method : GeneratedMethods.class.getDeclaredMethods()) {
+            var introspected = type.methods().stream()
+                    .filter(candidate -> candidate.name().equals(method.getName())
+                            && candidate.returnType().name().equals(method.getReturnType().getName()))
+                    .findFirst().orElseThrow();
+            assertEquals(method.getModifiers() & 0x1040, introspected.modifiers() & 0x1040);
+            if (method.isBridge()) {
+                bridges++;
+            } else if (method.isSynthetic()) {
+                syntheticBodies++;
+            }
+        }
+        assertEquals(1, bridges);
+        assertEquals(1, syntheticBodies);
+    }
+
+    public static class GeneratedMethods implements java.util.function.Supplier<String> {
+        @Override
+        public String get() {
+            return "value";
+        }
+
+        public Runnable action() {
+            return () -> get();
+        }
+    }
+
+    @Test
     public void classRead() {
         var a = world.findClass(A.class.getName());
         assertEquals(A.class.getName(), a.name());
