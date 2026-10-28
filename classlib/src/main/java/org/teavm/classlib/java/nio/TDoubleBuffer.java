@@ -216,11 +216,9 @@ public abstract class TDoubleBuffer extends TBuffer implements Comparable<TDoubl
 
     @Override
     public int hashCode() {
-        int hashCode = 0;
-        int pos = position;
-        for (int i = position; i < limit; ++i) {
-            long elem = Double.doubleToLongBits(getElement(pos++));
-            hashCode = 31 * hashCode + (int) elem + (int) (elem >>> 32);
+        int hashCode = 1;
+        for (int i = limit - 1; i >= position; --i) {
+            hashCode = 31 * hashCode + (int) getElement(i);
         }
         return hashCode;
     }

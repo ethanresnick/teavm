@@ -263,10 +263,9 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
 
     @Override
     public int hashCode() {
-        int hashCode = 0;
-        int pos = position;
-        for (int i = position; i < limit; ++i) {
-            hashCode = 31 * hashCode + getChar(pos++);
+        int hashCode = 1;
+        for (int i = limit - 1; i >= position; --i) {
+            hashCode = 31 * hashCode + getChar(i);
         }
         return hashCode;
     }

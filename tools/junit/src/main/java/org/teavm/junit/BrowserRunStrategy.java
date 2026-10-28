@@ -25,6 +25,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.teavm.browserrunner.BrowserRunDescriptor;
 import org.teavm.browserrunner.BrowserRunParams;
+import org.teavm.browserrunner.BrowserRunTimeoutException;
 import org.teavm.browserrunner.BrowserRunner;
 
 class BrowserRunStrategy implements TestRunStrategy {
@@ -35,6 +36,7 @@ class BrowserRunStrategy implements TestRunStrategy {
         this.baseDir = baseDir;
         runner = new BrowserRunner(baseDir, type, browserRunner,
                 Boolean.parseBoolean(System.getProperty(JS_DECODE_STACK, "true")));
+        runner.setTestTimeout(TestTimeout.millis());
     }
 
     @Override
@@ -60,7 +62,11 @@ class BrowserRunStrategy implements TestRunStrategy {
                 true
         );
 
-        runner.runTest(descriptor);
+        try {
+            runner.runTest(descriptor);
+        } catch (BrowserRunTimeoutException e) {
+            throw TestTimeout.exception(run, e.getMessage());
+        }
     }
 
     @Override

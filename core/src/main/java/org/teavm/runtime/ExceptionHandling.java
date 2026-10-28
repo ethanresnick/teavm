@@ -165,6 +165,12 @@ public final class ExceptionHandling {
     }
 
     @Unmanaged
+    @Export(name = "teavm_throwArithmeticException")
+    public static void throwArithmeticException() {
+        throwException(new ArithmeticException());
+    }
+
+    @Unmanaged
     public static void throwNegativeArraySizeException() {
         throwException(new NegativeArraySizeException());
     }

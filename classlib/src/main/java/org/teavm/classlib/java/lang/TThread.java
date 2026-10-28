@@ -41,8 +41,7 @@ public class TThread extends TObject implements TRunnable {
     public Object key;
 
     private String name;
-    // As in the JDK, isAlive() is false before start(). started and alive give the NEW, RUNNABLE and TERMINATED
-    // states.
+    // As in the JDK, isAlive() is false before start().
     private boolean alive;
     /**
      * The InheritableThreadLocal values this thread takes from its creator, as pairs (instance, value), or null.
@@ -50,7 +49,6 @@ public class TThread extends TObject implements TRunnable {
      * values by {@link #key}, which exists only then.
      */
     private Object[] inherited;
-    private boolean started;
     // The context class loader once set (null is a valid value); until then, the system loader. A new thread
     // copies both from the thread that creates it, as in the JDK.
     private TClassLoader contextClassLoader;
@@ -71,7 +69,6 @@ public class TThread extends TObject implements TRunnable {
         this.name = name;
         id = nextId++;
         alive = true;
-        started = true;
     }
 
     public TThread(String name) {
@@ -95,22 +92,6 @@ public class TThread extends TObject implements TRunnable {
         }
     }
 
-    public enum State {
-        NEW,
-        RUNNABLE,
-        BLOCKED,
-        WAITING,
-        TIMED_WAITING,
-        TERMINATED
-    }
-
-    public State getState() {
-        if (!started) {
-            return State.NEW;
-        }
-        return alive ? State.RUNNABLE : State.TERMINATED;
-    }
-
     public void setContextClassLoader(TClassLoader loader) {
         contextClassLoader = loader;
         contextClassLoaderSet = true;
@@ -124,7 +105,6 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public void start() {
-        started = true;
         alive = true;
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
             boolean daemon = this.daemon;
@@ -211,13 +191,13 @@ public class TThread extends TObject implements TRunnable {
         if (millis < 0 || nanos < 0 || nanos > 999999) {
             throw new IllegalArgumentException();
         }
-        // A thread that was never started has nothing to wait for.
-        if (currentThread() == this || !started) {
+        // A thread that was never started, or has ended, has nothing to wait for. alive goes back to false only when
+        // the thread ends, so this early return cannot race with it.
+        if (currentThread() == this || !alive) {
             return;
         }
         // Check and wait under the lock, in a loop. monitorEnter can switch threads, so a check outside the lock can
-        // miss the thread's end, and a wake with time left can come while the thread is still alive. started never
-        // goes back to false, so the early return above cannot race with the thread's end.
+        // miss the thread's end, and a wake with time left can come while the thread is still alive.
         synchronized (finishedLock) {
             // A timeout over about 292 years (Long.MAX_VALUE ns) waits without a deadline, because
             // millis * 1_000_000 overflows for it.

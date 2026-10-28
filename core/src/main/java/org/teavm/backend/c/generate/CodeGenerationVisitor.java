@@ -247,8 +247,21 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
                     writer.print(")");
                     return;
 
+                case DIVIDE:
+                    if (isIntOrLong(expr) && !isConstantOtherThanMinusOne(expr.getSecondOperand())) {
+                        writeIntDivision(expr);
+                        return;
+                    }
+                    break;
                 case MODULO: {
                     switch (expr.getType()) {
+                        case INT:
+                        case LONG:
+                            if (!isConstantOtherThanMinusOne(expr.getSecondOperand())) {
+                                writeIntDivision(expr);
+                                return;
+                            }
+                            break;
                         case FLOAT:
                             writer.print("fmodf(");
                             expr.getFirstOperand().acceptVisitor(this);
@@ -336,6 +349,31 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         } finally {
             popLocation(expr.getLocation());
         }
+    }
+
+    private static boolean isIntOrLong(BinaryExpr expr) {
+        return expr.getType() == OperationType.INT || expr.getType() == OperationType.LONG;
+    }
+
+    private static boolean isConstantOtherThanMinusOne(Expr expr) {
+        if (!(expr instanceof ConstantExpr)) {
+            return false;
+        }
+        var value = ((ConstantExpr) expr).getValue();
+        return value instanceof Integer && (Integer) value != -1 || value instanceof Long && (Long) value != -1;
+    }
+
+    /**
+     * In C, the minimum value divided by -1 overflows, which is undefined behaviour, and x86 traps on it, both for
+     * the quotient and the remainder. Java defines the quotient as the minimum value and the remainder as 0.
+     */
+    private void writeIntDivision(BinaryExpr expr) {
+        writer.print(expr.getOperation() == BinaryOperation.DIVIDE ? "teavm_div_" : "teavm_rem_");
+        writer.print(expr.getType() == OperationType.LONG ? "i64(" : "i32(");
+        expr.getFirstOperand().acceptVisitor(this);
+        writer.print(", ");
+        expr.getSecondOperand().acceptVisitor(this);
+        writer.print(")");
     }
 
     /**

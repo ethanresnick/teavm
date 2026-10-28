@@ -27,6 +27,7 @@ import org.teavm.interop.Address;
 import org.teavm.model.MethodReader;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 import org.teavm.runtime.heap.Heap;
@@ -144,6 +145,7 @@ public class WasmGCDependencies {
         analyzer.linkMethod(new MethodReference(WasmGCSupport.class, "nextCharArray", char[].class)).use();
         analyzer.linkMethod(WasmGCMethodGenerator.FAILED_INITIALIZER).use();
         analyzer.linkMethod(WasmGCMethodGenerator.INITIALIZER_ERROR).propagate(1, Throwable.class).use();
+        analyzer.addDependencyListener(new ClassInitializationLockDependencyListener());
     }
 
     private void contributeString() {

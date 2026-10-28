@@ -120,6 +120,7 @@ extern void* teavm_throwClassCastException();
 extern void teavm_throwNullPointerException();
 extern void teavm_throwNoClassDefFoundError();
 extern void teavm_throwArrayIndexOutOfBoundsException();
+extern void teavm_throwArithmeticException();
 
 static inline int32_t teavm_isSupertypeOf(TeaVM_Class* superclass, TeaVM_Class* subclass) {
     return superclass->isSupertypeOf(superclass, subclass);
@@ -190,6 +191,18 @@ static inline void teavm_initializeClass(TeaVM_Class* cls, void (*initializer)()
     ? (void*) (((uintptr_t) ((ref & 0x7FFFFFFF) * sizeof(int)) + (uintptr_t) teavm_gc_heapAddress)) \
     : NULL)
 
+static inline int32_t teavm_div_i32(int32_t a, int32_t b) {
+    return b == -1 ? (int32_t) (UINT32_C(0) - (uint32_t) a) : a / b;
+}
+static inline int32_t teavm_rem_i32(int32_t a, int32_t b) {
+    return b == -1 ? INT32_C(0) : a % b;
+}
+static inline int64_t teavm_div_i64(int64_t a, int64_t b) {
+    return b == -1 ? (int64_t) (UINT64_C(0) - (uint64_t) a) : a / b;
+}
+static inline int64_t teavm_rem_i64(int64_t a, int64_t b) {
+    return b == -1 ? INT64_C(0) : a % b;
+}
 static inline int32_t teavm_compare_i32(int32_t a, int32_t b) {
     return a > b ? INT32_C(1) : a < b ? INT32_C(-1) : INT32_C(0);
 }

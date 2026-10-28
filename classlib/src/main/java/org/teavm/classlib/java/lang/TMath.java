@@ -80,8 +80,18 @@ public final class TMath extends TObject {
     public static native double log(double a);
 
     public static double log10(double a) {
-        return log(a) / 2.302585092994046 /* log_e 10 */;
+        if (PlatformDetector.isWebAssemblyGC() || PlatformDetector.isC()) {
+            // V8 calls an imported Math.log10 much slower than Math.log, while fdlibm compiled to Wasm is fast.
+            // On C, glibc's log10 can be more than 1 ulp off.
+            return TStrictMath.log10(a);
+        }
+        return log10Impl(a);
     }
+
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(name = "log10")
+    @Unmanaged
+    private static native double log10Impl(double a);
 
     @InjectedBy(MathNativeGenerator.class)
     @Import(name = "sqrt")
@@ -89,9 +99,21 @@ public final class TMath extends TObject {
     @Unmanaged
     public static native double sqrt(double a);
 
+    // cbrt, expm1, log1p, sinh, cosh and tanh use StrictMath's fdlibm ports on Wasm GC, since V8 calls these Math
+    // imports 2-4 times slower than the ports run. On JS, the host's functions are faster than the ports (whose bit
+    // manipulation goes through BigInt), and C uses libm, except for cbrt: glibc's cbrt can be 1 ulp off, which the
+    // Javadoc's bound doesn't allow.
     public static double cbrt(double a) {
-        return a > 0 ? pow(a, 1.0 / 3) : -pow(-a, 1.0 / 3);
+        if (PlatformDetector.isWebAssemblyGC() || PlatformDetector.isC()) {
+            return TStrictMath.cbrt(a);
+        }
+        return cbrtImpl(a);
     }
+
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "cbrt")
+    @Unmanaged
+    private static native double cbrtImpl(double a);
 
     public static double IEEEremainder(double f1, double f2) {
         int n = (int) (f1 / f2);
@@ -832,47 +854,117 @@ public final class TMath extends TObject {
     }
 
     public static double sinh(double x) {
-        double e = exp(x);
-        return (e - 1 / e) / 2;
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.sinh(x);
+        }
+        return sinhImpl(x);
     }
+
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "sinh")
+    @Unmanaged
+    private static native double sinhImpl(double x);
 
     public static double cosh(double x) {
-        double e = exp(x);
-        return (e + 1 / e) / 2;
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.cosh(x);
+        }
+        return coshImpl(x);
     }
+
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "cosh")
+    @Unmanaged
+    private static native double coshImpl(double x);
 
     public static double tanh(double x) {
-        double e = exp(x);
-        return (e - 1 / e) / (e + 1 / e);
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.tanh(x);
+        }
+        return tanhImpl(x);
     }
 
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "tanh")
+    @Unmanaged
+    private static native double tanhImpl(double x);
+
     public static double hypot(double x, double y) {
-        if (TDouble.isInfinite(x) || TDouble.isInfinite(y)) {
-            return TDouble.POSITIVE_INFINITY;
-        }
+        // Not the host's hypot: V8's Math.hypot is more than 1 ulp off for a few percent of inputs, and so is
+        // macOS libm's hypot for some. Not StrictMath's fdlibm port either: on JS this is about twice as fast, and
+        // it's within about half an ulp.
         x = abs(x);
         y = abs(y);
-        double max = x > y ? x : y;
-        if (max > 0x1p500) {
+        if (x == TDouble.POSITIVE_INFINITY || y == TDouble.POSITIVE_INFINITY) {
+            return TDouble.POSITIVE_INFINITY;
+        }
+        if (x != x || y != y) {
+            return TDouble.NaN;
+        }
+        if (x < y) {
+            double t = x;
+            x = y;
+            y = t;
+        }
+        // Now x >= y >= 0. If y / x <= 2^-27, then sqrt(1 + (y / x)^2) < 1 + 2^-55 rounds to 1.
+        if (y <= x * 0x1p-27) {
+            return x;
+        }
+        // Scaling by a power of two is exact here, and keeps the squares below, along with their exact errors,
+        // free of overflow and underflow.
+        double scale = 1;
+        if (x > 0x1p500) {
             x *= 0x1p-600;
             y *= 0x1p-600;
-            return sqrt(x * x + y * y) * 0x1p600;
+            scale = 0x1p600;
+        } else if (x < 0x1p-500) {
+            x *= 0x1p700;
+            y *= 0x1p700;
+            scale = 0x1p-700;
         }
-        if (max < 0x1p-500) {
-            x *= 0x1p600;
-            y *= 0x1p600;
-            return sqrt(x * x + y * y) * 0x1p-600;
-        }
-        return sqrt(x * x + y * y);
+        double xx = x * x;
+        double yy = y * y;
+        double h = sqrt(xx + yy);
+        double hh = h * h;
+        // r = x^2 + y^2 - h^2, from exact squares. One Newton step h + r / (2h) then gives a result within
+        // about half an ulp. xx - hh is exact, since hh is within a factor of two of xx.
+        double r = ((xx - hh) + yy) + (squareError(x, xx) + squareError(y, yy) - squareError(h, hh));
+        return (h + r / (2 * h)) * scale;
+    }
+
+    /**
+     * Returns a * a - aa exactly, where aa is a * a rounded, by Dekker's product with Veltkamp's splitting.
+     */
+    private static double squareError(double a, double aa) {
+        double t = 134217729.0 * a;
+        double ah = t - (t - a);
+        double al = a - ah;
+        return ((ah * ah - aa) + 2 * ah * al) + al * al;
     }
 
     public static double expm1(double x) {
-        return exp(x) - 1;
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.expm1(x);
+        }
+        return expm1Impl(x);
     }
 
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "expm1")
+    @Unmanaged
+    private static native double expm1Impl(double x);
+
     public static double log1p(double x) {
-        return log(x + 1);
+        if (PlatformDetector.isWebAssemblyGC()) {
+            return TStrictMath.log1p(x);
+        }
+        return log1pImpl(x);
     }
+
+    @GeneratedBy(MathNativeGenerator.class)
+    @Import(module = "teavmMath", name = "log1p")
+    @Unmanaged
+    private static native double log1pImpl(double x);
 
     public static float copySign(float magnitude, float sign) {
         return Float.intBitsToFloat((Float.floatToRawIntBits(sign) & Integer.MIN_VALUE)

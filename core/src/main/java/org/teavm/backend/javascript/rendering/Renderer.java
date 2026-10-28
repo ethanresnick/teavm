@@ -66,10 +66,15 @@ import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 import org.teavm.model.analysis.ClassMetadataRequirements;
 import org.teavm.model.util.AsyncMethodFinder;
+import org.teavm.model.util.ClassInitializationLockDependencyListener;
+import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.RenderingException;
 import org.teavm.vm.TeaVMProgressFeedback;
 
 public class Renderer implements RenderingManager {
+    // Linked only when the program has an @Async method, which an async initializer implies
+    private static final MethodReference INITIALIZATION_ENTER = ClassInitializationLockDependencyListener.ENTER;
+    private static final MethodReference INITIALIZATION_EXIT = ClassInitializationLockDependencyListener.EXIT;
     public static final int SECTION_STRING_POOL = 0;
     public static final int SECTION_METADATA = 1;
 
@@ -415,41 +420,14 @@ public class Renderer implements RenderingManager {
     }
 
     private void renderCallClinit(MethodReader clinit, ClassReader cls) {
-        boolean isAsync = asyncMethods.contains(clinit.getReference());
-
-        var clinitCalledField = new FieldReference(cls.getName(), "$_teavm_clinitCalled_$");
-        if (isAsync) {
-            writer.startVariableDeclaration().appendStaticField(clinitCalledField).append("false").endDeclaration();
+        if (asyncMethods.contains(clinit.getReference())) {
+            renderAsyncCallClinit(clinit, cls);
+            return;
         }
 
         writer.startVariableDeclaration().appendClassInit(cls.getName());
         writer.append("()").sameLineWs().append("=>").ws().append("{").softNewLine().indent();
-
-        if (isAsync) {
-            writer.append("let ").append(context.pointerName()).ws().append("=").ws()
-                    .append("0").append(";").softNewLine();
-            writer.append("if").ws().append("(").appendFunction("$rt_resuming").append("())").ws().append("{")
-                    .indent().softNewLine();
-            writer.append(context.pointerName()).ws().append("=").ws().appendFunction("$rt_nativeThread")
-                    .append("().pop();").softNewLine();
-            writer.outdent().append("}").ws();
-            writer.append("else if").ws().append("(").appendStaticField(clinitCalledField).append(")").ws()
-                    .append("{").indent().softNewLine();
-            writer.append("return;").softNewLine();
-            writer.outdent().append("}").softNewLine();
-
-            renderAsyncPrologue(writer, context);
-
-            writer.append("case 0:").indent().softNewLine();
-            writer.appendStaticField(clinitCalledField).ws().append('=').ws().append("true;").softNewLine();
-        } else {
-            renderEraseClinit(cls);
-        }
-
-        if (isAsync) {
-            writer.append(context.pointerName()).ws().append("=").ws().append("1;").softNewLine();
-            writer.outdent().append("case 1:").indent().softNewLine();
-        }
+        renderEraseClinit(cls);
 
         writer.append("try").ws().append("{").indent().softNewLine();
         writer.appendMethod(new MethodReference(cls.getName(), clinit.getDescriptor()))
@@ -461,19 +439,95 @@ public class Renderer implements RenderingManager {
         writer.append("throw ").appendFunction("$rt_clinitError").append("($$e);").softNewLine();
         writer.outdent().append("}").softNewLine();
 
-        if (isAsync) {
-            writer.append("if").ws().append("(").appendFunction("$rt_suspending").append("())").ws().append("{")
-                    .indent().softNewLine();
-            writer.append("break " + context.mainLoopName() + ";").softNewLine();
-            writer.outdent().append("}").softNewLine();
-            renderEraseClinit(cls);
-            writer.append("return;").softNewLine().outdent();
+        writer.outdent().append("}").endDeclaration();
+    }
 
-            renderAsyncEpilogue(writer);
-            writer.appendFunction("$rt_nativeThread").append("().push(" + context.pointerName() + ");").softNewLine();
-        }
+    // An initializer that can suspend follows JLS 12.4.2, steps 2 and 3: while it runs, another thread that uses
+    // the class waits until it ends (ClassInitializationLock). A recursive use on the same thread returns at once.
+    // A waiting thread resumes through the same function, so this function is never replaced: a state field
+    // records whether the initializer ended (1) or failed (2).
+    private void renderAsyncCallClinit(MethodReader clinit, ClassReader cls) {
+        var ptr = context.pointerName();
+        var stateField = new FieldReference(cls.getName(), "$_teavm_clinitState_$");
+        writer.startVariableDeclaration().appendStaticField(stateField).append("0").endDeclaration();
+
+        writer.startVariableDeclaration().appendClassInit(cls.getName());
+        writer.append("()").sameLineWs().append("=>").ws().append("{").softNewLine().indent();
+
+        writer.append("let ").append(ptr).ws().append("=").ws().append("0,").ws().append("$initError")
+                .ws().append("=").ws().append("null,").ws().append("$initState;").softNewLine();
+        writer.append("if").ws().append("(").appendFunction("$rt_resuming").append("())").ws().append("{")
+                .indent().softNewLine();
+        writer.append("let $T").ws().append("=").ws().appendFunction("$rt_nativeThread").append("();")
+                .softNewLine();
+        writer.append("$initError").ws().append("=").ws().append("$T.pop();").softNewLine();
+        writer.append(ptr).ws().append("=").ws().append("$T.pop();").softNewLine();
+        // A space, not ws(): the minified output drops ws(), and "elseif" is not JavaScript
+        writer.outdent().append("}").ws().append("else ");
+        renderReturnIfInitialized(stateField);
+
+        renderAsyncPrologue(writer, context);
+
+        writer.append("case 0:").indent().softNewLine();
+        writer.append("$initState").ws().append("=").ws().appendMethod(INITIALIZATION_ENTER).append("(");
+        context.constantToString(writer, cls.getName());
+        writer.append(");").softNewLine();
+        renderBreakIfSuspending();
+        writer.append("if").ws().append("($initState").ws().append("===").ws()
+                .append(String.valueOf(ClassInitializationLock.WAITED)).append(")").ws();
+        renderReturnIfInitialized(stateField);
+        writer.append("if").ws().append("($initState").ws().append("===").ws()
+                .append(String.valueOf(ClassInitializationLock.RECURSIVE)).append(")").ws().append("return;")
+                .softNewLine();
+        writer.append(ptr).ws().append("=").ws().append("1;").softNewLine();
+
+        writer.outdent().append("case 1:").indent().softNewLine();
+        writer.append("try").ws().append("{").indent().softNewLine();
+        writer.appendMethod(new MethodReference(cls.getName(), clinit.getDescriptor()))
+                .append("();").softNewLine();
+        writer.outdent().append("}").ws().append("catch").ws().append("($$e)").ws().append("{").indent()
+                .softNewLine();
+        writer.appendStaticField(stateField).ws().append("=").ws().append("2;").softNewLine();
+        writer.append("$initError").ws().append("=").ws().append("$$e;").softNewLine();
+        writer.outdent().append("}").softNewLine();
+        renderBreakIfSuspending();
+        writer.append("if").ws().append("($initError").ws().append("===").ws().append("null)").ws();
+        writer.appendStaticField(stateField).ws().append("=").ws().append("1;").softNewLine();
+        writer.append(ptr).ws().append("=").ws().append("2;").softNewLine();
+
+        writer.outdent().append("case 2:").indent().softNewLine();
+        writer.appendMethod(INITIALIZATION_EXIT).append("(");
+        context.constantToString(writer, cls.getName());
+        writer.append(");").softNewLine();
+        renderBreakIfSuspending();
+        writer.append("if").ws().append("($initError").ws().append("!==").ws().append("null)").ws()
+                .append("throw ").appendFunction("$rt_clinitError").append("($initError);").softNewLine();
+        writer.append("return;").softNewLine().outdent();
+
+        renderAsyncEpilogue(writer);
+        writer.append("let $T").ws().append("=").ws().appendFunction("$rt_nativeThread").append("();")
+                .softNewLine();
+        writer.append("$T.push(").append(ptr).append(");").softNewLine();
+        writer.append("$T.push($initError);").softNewLine();
 
         writer.outdent().append("}").endDeclaration();
+    }
+
+    // Returns when the initializer ended, and throws NoClassDefFoundError when it failed
+    private void renderReturnIfInitialized(FieldReference stateField) {
+        writer.append("if").ws().append("(").appendStaticField(stateField).ws().append("!==").ws().append("0)")
+                .ws().append("{").indent().softNewLine();
+        writer.append("if").ws().append("(").appendStaticField(stateField).ws().append("===").ws().append("2)")
+                .ws().appendFunction("$rt_failedClinit").append("();").softNewLine();
+        writer.append("return;").softNewLine();
+        writer.outdent().append("}").softNewLine();
+    }
+
+    private void renderBreakIfSuspending() {
+        writer.append("if").ws().append("(").appendFunction("$rt_suspending").append("())").ws().append("{")
+                .indent().softNewLine();
+        writer.append("break ").append(context.mainLoopName()).append(";").softNewLine();
+        writer.outdent().append("}").softNewLine();
     }
 
     private void renderEraseClinit(ClassReader cls) {

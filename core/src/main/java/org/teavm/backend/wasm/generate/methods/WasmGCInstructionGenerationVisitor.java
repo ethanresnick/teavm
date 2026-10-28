@@ -89,6 +89,7 @@ import org.teavm.backend.wasm.model.instruction.WasmInstructionBuilder;
 import org.teavm.backend.wasm.model.instruction.WasmInstructionList;
 import org.teavm.backend.wasm.model.instruction.WasmInt32Constant;
 import org.teavm.backend.wasm.model.instruction.WasmInt32Subtype;
+import org.teavm.backend.wasm.model.instruction.WasmInt64Constant;
 import org.teavm.backend.wasm.model.instruction.WasmInt64Subtype;
 import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
 import org.teavm.backend.wasm.model.instruction.WasmIntType;
@@ -217,7 +218,11 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
                 generateBinary(WasmIntBinaryOperation.MUL, WasmFloatBinaryOperation.MUL, expr);
                 break;
             case DIVIDE:
-                generateBinary(WasmIntBinaryOperation.DIV_SIGNED, WasmFloatBinaryOperation.DIV, expr);
+                if (expr.getType() == OperationType.INT || expr.getType() == OperationType.LONG) {
+                    generateIntDivision(expr);
+                } else {
+                    generateBinary(WasmIntBinaryOperation.DIV_SIGNED, WasmFloatBinaryOperation.DIV, expr);
+                }
                 break;
             case MODULO: {
                 switch (expr.getType()) {
@@ -384,6 +389,53 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
                     break;
             }
         }
+        builder.popLocation();
+    }
+
+    /**
+     * div_s traps when it divides the minimum value by -1, but Java defines the quotient as the minimum value. So a
+     * divisor of -1 negates the dividend instead.
+     */
+    private void generateIntDivision(BinaryExpr expr) {
+        var isInt = expr.getType() == OperationType.INT;
+        var intType = isInt ? WasmIntType.INT32 : WasmIntType.INT64;
+        var type = isInt ? WasmType.INT32 : WasmType.INT64;
+        builder.pushLocation(expr.getLocation());
+        accept(expr.getFirstOperand());
+        accept(expr.getSecondOperand());
+        var last = builder.list.getLast();
+        if (last instanceof WasmInt32Constant constant && constant.getValue() != -1
+                || last instanceof WasmInt64Constant constant64 && constant64.getValue() != -1) {
+            builder.intBinary(intType, WasmIntBinaryOperation.DIV_SIGNED);
+            builder.popLocation();
+            return;
+        }
+
+        var divisor = valueCache.create(type, builder);
+        builder.drop();
+        var dividend = valueCache.create(type, builder);
+        builder.drop();
+        builder.append(divisor);
+        if (isInt) {
+            builder.i32Const(-1);
+        } else {
+            builder.i64Const(-1);
+        }
+        builder.intBinary(intType, WasmIntBinaryOperation.EQ);
+        var conditional = builder.conditional(type);
+        var negation = conditional.getThenBlock().builder();
+        if (isInt) {
+            negation.i32Const(0);
+        } else {
+            negation.i64Const(0);
+        }
+        negation.append(dividend).intBinary(intType, WasmIntBinaryOperation.SUB);
+        conditional.getElseBlock().builder()
+                .append(dividend)
+                .append(divisor)
+                .intBinary(intType, WasmIntBinaryOperation.DIV_SIGNED);
+        dividend.release();
+        divisor.release();
         builder.popLocation();
     }
 

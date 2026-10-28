@@ -215,10 +215,9 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
 
     @Override
     public int hashCode() {
-        int hashCode = 0;
-        int pos = position;
-        for (int i = position; i < limit; ++i) {
-            hashCode = 31 * hashCode + getElement(pos++);
+        int hashCode = 1;
+        for (int i = limit - 1; i >= position; --i) {
+            hashCode = 31 * hashCode + getElement(i);
         }
         return hashCode;
     }
