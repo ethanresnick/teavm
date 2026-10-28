@@ -30,14 +30,19 @@ import org.teavm.model.ElementModifier;
 import org.teavm.model.MethodHolder;
 import org.teavm.model.MethodReader;
 import org.teavm.model.MethodReference;
+import org.teavm.model.ValueType;
 
 public class CDependencyListener extends AbstractDependencyListener implements ClassHolderTransformer {
     @Override
     public void methodReached(DependencyAgent agent, MethodDependency method) {
         if (method.getReference().getClassName().equals(CResources.class.getName())
                 && method.getReference().getName().equals("acquireResources")) {
-            agent.linkMethod(new MethodReference(CResources.class, "create", String.class, int.class, int.class,
-                    CResources.Resource.class)).addLocation(new CallLocation(method.getReference())).use();
+            var create = agent.linkMethod(new MethodReference(CResources.class, "create", String.class,
+                    int.class, int.class, CResources.Resource.class));
+            create.addLocation(new CallLocation(method.getReference())).use();
+            create.propagate(1, String.class);
+            method.getResult().propagate(agent.getType(ValueType.parse(CResources.Resource[].class)));
+            create.getResult().connect(method.getResult().getArrayItem());
         }
         AnnotationReader delegateAnnot = method.getMethod().getAnnotations().get(DelegateTo.class.getName());
         if (delegateAnnot != null) {
