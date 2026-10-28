@@ -36,7 +36,7 @@ public class TThread extends TObject implements TRunnable {
     private static UncaughtExceptionHandler defaultUncaughtExceptionHandler = new TDefaultUncaughtExceptionHandler();
     private UncaughtExceptionHandler uncaughtExceptionHandler;
     private long id;
-    private int priority;
+    private int priority = Thread.NORM_PRIORITY;
     private boolean daemon;
     private long timeSliceStart;
     private int yieldCount;
@@ -102,16 +102,21 @@ public class TThread extends TObject implements TRunnable {
         TThread creator = currentThread;
         if (creator != null) {
             group = creator.group;
+            priority = creator.priority;
+            daemon = creator.daemon;
             contextClassLoader = creator.contextClassLoader;
             contextClassLoaderSet = creator.contextClassLoaderSet;
             inherited = TInheritableThreadLocal.snapshot();
         }
+        // Only public construction reaches the lazy group holder, never the main-thread initializer.
+        priority = Math.min(priority, getThreadGroup().getMaxPriority());
     }
 
     public TThread(TThreadGroup group, TRunnable target) {
         this(target, null, true);
         if (group != null) {
             this.group = group;
+            priority = Math.min(currentThread.priority, group.getMaxPriority());
         }
     }
 
@@ -123,6 +128,7 @@ public class TThread extends TObject implements TRunnable {
         this(target, name, false);
         if (group != null) {
             this.group = group;
+            priority = Math.min(currentThread.priority, group.getMaxPriority());
         }
     }
 
@@ -178,7 +184,11 @@ public class TThread extends TObject implements TRunnable {
             applyInherited();
             TThread.this.run();
         } catch (Throwable t) {
-            getUncaughtExceptionHandler().uncaughtException(this, t);
+            try {
+                getUncaughtExceptionHandler().uncaughtException(this, t);
+            } catch (Throwable ignored) {
+                // An exception thrown by an uncaught-exception handler is ignored by the VM.
+            }
         } finally {
             // Clear alive under finishedLock, before the notify, so join() sees both together.
             // Constructor-free instances, such as mocks, have no finishedLock.
@@ -192,6 +202,7 @@ public class TThread extends TObject implements TRunnable {
                 alive = false;
             }
             removeLive();
+            group = null;
             key = null;
             setCurrentThread(mainThread);
         }
@@ -247,6 +258,9 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void setDaemon(boolean daemon) {
+        if (alive) {
+            throw new IllegalThreadStateException();
+        }
         this.daemon = daemon;
     }
 
@@ -493,7 +507,13 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void setPriority(int newPriority) {
-        this.priority = newPriority;
+        if (newPriority < Thread.MIN_PRIORITY || newPriority > Thread.MAX_PRIORITY) {
+            throw new IllegalArgumentException();
+        }
+        var threadGroup = getThreadGroup();
+        if (threadGroup != null) {
+            priority = Math.min(newPriority, threadGroup.getMaxPriority());
+        }
     }
 
     public final int getPriority() {

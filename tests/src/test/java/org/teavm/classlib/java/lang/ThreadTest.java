@@ -586,4 +586,28 @@ public class ThreadTest {
         assertFalse(Thread.getAllStackTraces().containsKey(worker));
     }
 
+    // Thread.setDaemon: "IllegalThreadStateException - if this thread is alive".
+    @Test
+    public void liveThreadDaemonStatusCannotChange() throws InterruptedException {
+        for (boolean daemon : new boolean[] { false, true }) {
+            var worker = new Thread(() -> {
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    // Release the live thread after both invalid setters have been checked.
+                }
+            });
+            worker.setDaemon(daemon);
+            worker.start();
+            try {
+                assertThrows(IllegalThreadStateException.class, () -> worker.setDaemon(false));
+                assertThrows(IllegalThreadStateException.class, () -> worker.setDaemon(true));
+                assertEquals(daemon, worker.isDaemon());
+            } finally {
+                worker.interrupt();
+                worker.join();
+            }
+        }
+    }
+
 }

@@ -15,6 +15,8 @@
  */
 package org.teavm.classlib.java.lang;
 
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
 import java.util.Objects;
 
 /** Thread groups describe the hierarchy of TeaVM's cooperative threads. */
@@ -23,8 +25,8 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
     private final TThreadGroup parent;
     private int maxPriority = Thread.MAX_PRIORITY;
     private boolean daemon;
-    private TThreadGroup firstChild;
-    private TThreadGroup nextSibling;
+    private Child firstChild;
+    private ReferenceQueue<TThreadGroup> collectedChildren;
 
     static TThreadGroup createMainGroup() {
         return new TThreadGroup();
@@ -44,8 +46,16 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
         this.name = name;
         maxPriority = parent.maxPriority;
         daemon = parent.daemon;
-        nextSibling = parent.firstChild;
-        parent.firstChild = this;
+        if (parent.collectedChildren == null) {
+            parent.collectedChildren = new ReferenceQueue<>();
+        }
+        parent.pruneChildren();
+        var entry = new Child(this, parent.collectedChildren);
+        entry.next = parent.firstChild;
+        if (entry.next != null) {
+            entry.next.previous = entry;
+        }
+        parent.firstChild = entry;
     }
 
     public final String getName() {
@@ -65,8 +75,12 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
             return;
         }
         maxPriority = parent == null ? priority : Math.min(priority, parent.maxPriority);
-        for (var child = firstChild; child != null; child = child.nextSibling) {
-            child.setMaxPriority(priority);
+        pruneChildren();
+        for (var entry = firstChild; entry != null; entry = entry.next) {
+            var child = entry.get();
+            if (child != null) {
+                child.setMaxPriority(priority);
+            }
         }
     }
 
@@ -102,8 +116,12 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
 
     public int activeGroupCount() {
         int count = 0;
-        for (var child = firstChild; child != null; child = child.nextSibling) {
-            count += 1 + child.activeGroupCount();
+        pruneChildren();
+        for (var entry = firstChild; entry != null; entry = entry.next) {
+            var child = entry.get();
+            if (child != null) {
+                count += 1 + child.activeGroupCount();
+            }
         }
         return count;
     }
@@ -118,13 +136,46 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
     }
 
     private int enumerateGroups(TThreadGroup[] groups, int count, boolean recurse) {
-        for (var child = firstChild; child != null && count < groups.length; child = child.nextSibling) {
-            groups[count++] = child;
-            if (recurse) {
-                count = child.enumerateGroups(groups, count, true);
+        pruneChildren();
+        for (var entry = firstChild; entry != null && count < groups.length; entry = entry.next) {
+            var child = entry.get();
+            if (child != null) {
+                groups[count++] = child;
+                if (recurse) {
+                    count = child.enumerateGroups(groups, count, true);
+                }
             }
         }
         return count;
+    }
+
+    private void pruneChildren() {
+        if (collectedChildren == null) {
+            return;
+        }
+        Child entry;
+        while ((entry = (Child) collectedChildren.poll()) != null) {
+            if (entry.previous == null) {
+                firstChild = entry.next;
+            } else {
+                entry.previous.next = entry.next;
+            }
+            if (entry.next != null) {
+                entry.next.previous = entry.previous;
+            }
+            entry.previous = null;
+            entry.next = null;
+        }
+    }
+
+    // Queue-driven removal keeps insertion constant-time without retaining groups or their subclass fields.
+    private static class Child extends WeakReference<TThreadGroup> {
+        Child previous;
+        Child next;
+
+        Child(TThreadGroup group, ReferenceQueue<TThreadGroup> queue) {
+            super(group, queue);
+        }
     }
 
     public final void checkAccess() {
@@ -133,8 +184,8 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
 
     public final void interrupt() {
         // A resumed thread can alter the live list, so take the snapshot before invoking any handlers.
-        var threads = new TThread[activeCount()];
-        int count = enumerate(threads);
+        var threads = new TThread[TThread.enumerate(this, null, true)];
+        int count = TThread.enumerate(this, threads, true);
         for (int i = 0; i < count; ++i) {
             threads[i].interrupt();
         }
@@ -149,7 +200,8 @@ public class TThreadGroup implements TThread.UncaughtExceptionHandler {
         var handler = TThread.getDefaultUncaughtExceptionHandler();
         if (handler != null) {
             handler.uncaughtException(thread, error);
-        } else if (!(error instanceof ThreadDeath)) {
+        } else {
+            System.err.println(thread.getName());
             error.printStackTrace();
         }
     }
