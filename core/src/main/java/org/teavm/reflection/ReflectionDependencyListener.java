@@ -119,7 +119,7 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
     private MethodReference getClassAnnotations = new MethodReference(Class.class, "getDeclaredAnnotations",
             Annotation[].class);
     private final List<MethodDependency> reachedForNames = new ArrayList<>();
-    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, boolean.class,
+    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, Boolean.class,
             ClassLoader.class, Class.class);
     private MethodReference classNewInstance = new MethodReference(Class.class, "newInstance", Object.class);
     private MethodReference forNameShort = new MethodReference(Class.class, "forName", String.class, Class.class);
@@ -226,7 +226,6 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
             markFoundByName(className);
         }
     }
-
 
     private void markFoundByName(String className) {
         var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
@@ -410,9 +409,6 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
         } else if (method.getReference().equals(forName) || method.getReference().equals(forNameShort)) {
             reachedForNames.add(method);
             method.getResult().propagate(agent.getType(ValueType.object("java.lang.Class")));
-            // Runtime lookup can return every class whose name was retained, including Class.getName() values.
-            agent.linkMethod(new MethodReference(Class.class, "getName", String.class))
-                    .getVariable(0).getClassValueNode().connect(method.getResult().getClassValueNode());
             for (var className : classesFoundByName) {
                 method.getResult().getClassValueNode().propagate(agent.getType(ValueType.object(className)));
             }

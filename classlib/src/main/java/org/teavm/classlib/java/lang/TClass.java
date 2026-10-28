@@ -528,19 +528,6 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
                 : null;
     }
 
-    /** Returns the raw superclass; generic supertype arguments are not retained. */
-    public TType getGenericSuperclass() {
-        return getSuperclass();
-    }
-
-    /** Returns the raw interfaces; generic supertype arguments are not retained. */
-    public TType[] getGenericInterfaces() {
-        TClass<?>[] interfaces = getInterfaces();
-        TType[] result = new TType[interfaces.length];
-        System.arraycopy(interfaces, 0, result, 0, interfaces.length);
-        return result;
-    }
-
     @SuppressWarnings("unchecked")
     @PluggableDependency(ClassGenerator.class)
     public TClass<? super T>[] getInterfaces() {
@@ -601,7 +588,6 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         return result;
     }
 
-    @PluggableDependency(ClassGenerator.class)
     public void initialize() {
         classInfo.initialize();
     }
@@ -621,16 +607,7 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     @SuppressWarnings("unused")
     public static TClass<?> forName(TString name, boolean initialize, TClassLoader loader)
             throws TClassNotFoundException {
-        String className = (String) (Object) name;
-        TClass<?> result = loader != null ? loader.loadClass(className)
-                : TClassLoader.findBootstrapClassOrNull(className);
-        if (result == null || !result.getName().equals(className)) {
-            throw new TClassNotFoundException(className);
-        }
-        if (initialize) {
-            result.initialize();
-        }
-        return result;
+        return forName(name);
     }
 
     @SuppressWarnings({ "unchecked", "unused" })

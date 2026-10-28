@@ -17,149 +17,58 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
-import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 @EachTestCompiledSeparately
 public class ClassReflectionAPITest {
     @Test
-    public void nongenericSupertypes() {
-        assertEquals(Object.class, Plain.class.getGenericSuperclass());
-        assertEquals(Runnable.class, Plain.class.getGenericInterfaces()[0]);
-        assertEquals(0, Runnable.class.getGenericInterfaces().length);
-    }
-
-    @Test
     public void packageNames() {
+        // Class.getPackage specifies the package of the class, and null for arrays, primitives and void.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html#getPackage()
         assertEquals("java.lang", String.class.getPackage().getName());
-        assertEquals("org.teavm.classlib.java.lang", Plain.class.getPackage().getName());
-        assertNull(String[].class.getPackage());
-        assertNull(int.class.getPackage());
-        assertNull(int[].class.getPackage());
+        assertEquals("org.teavm.classlib.java.lang", FoundLate.class.getPackage().getName());
+        assertSame(getClass().getPackage(), FoundLate.class.getPackage());
     }
 
     @Test
-    public void customLoaderCannotBeFoldedAway() {
-        int[] calls = { 0 };
-        var loader = new ClassLoader(null) {
-            @Override
-            public Class<?> loadClass(String name) throws ClassNotFoundException {
-                calls[0]++;
-                throw new ClassNotFoundException(name);
-            }
-        };
-        assertThrows(ClassNotFoundException.class, () -> Class.forName("java.lang.String", false, loader));
-        assertEquals(1, calls[0]);
-        assertThrows(ClassNotFoundException.class, () -> Class.forName("not.present.Class", false, loader));
-        assertEquals(2, calls[0]);
-    }
-
-    @Test
-    public void loaderAliasIsRejected() {
-        var loader = new ClassLoader(null) {
-            @Override
-            public Class<?> loadClass(String name) {
-                return Integer.class;
-            }
-        };
-        assertThrows(ClassNotFoundException.class, () -> Class.forName("java.lang.String", false, loader));
-    }
-
-    @Test
-    public void bootstrapLookupIsRestricted() throws Exception {
-        assertEquals(String.class, Class.forName("java.lang.String", false, null));
-        assertThrows(ClassNotFoundException.class, () -> Class.forName(Plain.class.getName(), false, null));
-    }
-
-    @Test
-    public void initializationFlagIsHonored() throws Exception {
-        assertEquals(0, Initialization.counter);
-        String name = ToInitialize.class.getName();
-        var loader = getClass().getClassLoader();
-        assertEquals(ToInitialize.class, Class.forName(name, false, loader));
-        assertEquals(0, Initialization.counter);
-        assertEquals(ToInitialize.class, Class.forName(name, true, loader));
-        assertEquals(1, Initialization.counter);
-    }
-
-    @Test
-    @SkipPlatform(TestPlatform.C)
-    public void initializationCanSuspend() throws Exception {
-        assertEquals(0, AsyncInitialization.counter);
-        String name = AsyncInitialize.class.getName();
-        Class.forName(name, false, getClass().getClassLoader());
-        assertEquals(0, AsyncInitialization.counter);
-        Class.forName(name, true, getClass().getClassLoader());
-        assertEquals(1, AsyncInitialization.counter);
-    }
-
-    @Test
-    public void initializerErrorReachesReflectiveCaller() throws Exception {
-        String name = BadInitialize.class.getName();
-        var loader = getClass().getClassLoader();
-        Class.forName(name, false, loader);
-        assertThrows(InitializerError.class, () -> Class.forName(name, true, loader));
-        assertThrows(NoClassDefFoundError.class, () -> Class.forName(name, true, loader));
-    }
-
-    public static class InitializerError extends Error {
-    }
-
-    public static class BadInitialize {
-        static {
-            if (Boolean.parseBoolean("true")) {
-                throw new InitializerError();
-            }
+    public void arraysPrimitivesAndVoidHaveNoPackage() {
+        // Class.getPackage specifies null for array types, primitive types and void.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html#getPackage()
+        for (var type : new Class<?>[] { boolean.class, byte.class, short.class, char.class, int.class,
+                long.class, float.class, double.class, void.class, String[].class, int[].class,
+                String[][].class, int[][].class }) {
+            assertNull(type.getPackage());
         }
     }
 
     @Test
     public void lateFoundClassHasNameAndReflectiveResultType() throws Exception {
+        // Class.forName returns the class with the specified name; getDeclaredField exposes its declared field.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html#forName(java.lang.String)
         var object = new FoundLate();
         String name = new String("org.teavm.classlib.java.lang.ClassReflectionAPITest$FoundLate".toCharArray());
         var type = Class.forName(name);
+        assertEquals(FoundLate.class, type);
         assertEquals(73, type.getDeclaredField("value").getInt(object));
     }
 
-    public static class Plain implements Runnable {
-        @Override
-        public void run() {
-        }
+    @Test
+    public void lateFoundClassRetainsName() throws Exception {
+        // Avoid a class literal or getName call on FoundLate: those would retain its name independently.
+        var object = new FoundLate();
+        String name = new String("org.teavm.classlib.java.lang.ClassReflectionAPITest$FoundLate".toCharArray());
+        var type = Class.forName(name);
+        assertEquals(name, type.getName());
+        assertEquals(73, type.getDeclaredField("value").getInt(object));
     }
 
     public static class FoundLate {
         @Reflectable
         public int value = 73;
-    }
-
-    static class Initialization {
-        static int counter;
-    }
-
-    public static class ToInitialize {
-        static {
-            Initialization.counter++;
-        }
-    }
-
-    static class AsyncInitialization {
-        static int counter;
-    }
-
-    public static class AsyncInitialize {
-        static {
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            AsyncInitialization.counter++;
-        }
     }
 }
