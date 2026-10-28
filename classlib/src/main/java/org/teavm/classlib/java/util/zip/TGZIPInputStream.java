@@ -28,6 +28,10 @@ public class TGZIPInputStream extends TInflaterInputStream {
     public final static int GZIP_MAGIC = 0x8b1f;
     protected TCRC32 crc = new TCRC32();
     protected boolean eos;
+    // Bytes of buf that follow a member's deflate data and that neither the inflater nor the trailer took:
+    // buf[bufPos..bufEnd). The next member's header starts there.
+    private int bufPos;
+    private int bufEnd;
 
     public TGZIPInputStream(InputStream is) throws IOException {
         this(is, BUF_SIZE);
@@ -35,6 +39,10 @@ public class TGZIPInputStream extends TInflaterInputStream {
 
     public TGZIPInputStream(InputStream is, int size) throws IOException {
         super(is, new TInflater(true), size);
+        readHeader();
+    }
+
+    private void readHeader() throws IOException {
         byte[] header = new byte[10];
         readFully(header, 0, header.length);
         if (getShort(header, 0) != GZIP_MAGIC) {
@@ -52,15 +60,11 @@ public class TGZIPInputStream extends TInflaterInputStream {
             }
             int length = getShort(header, 0);
             while (length > 0) {
-                int max = length > buf.length ? buf.length : length;
-                int result = in.read(buf, 0, max);
-                if (result == -1) {
-                    throw new EOFException();
-                }
+                int b = readByte();
                 if (hcrc) {
-                    crc.update(buf, 0, result);
+                    crc.update(b);
                 }
-                length -= result;
+                length--;
             }
         }
         if ((flags & FNAME) != 0) {
@@ -111,49 +115,86 @@ public class TGZIPInputStream extends TInflaterInputStream {
             throw new ArrayIndexOutOfBoundsException();
         }
 
-        int bytesRead;
-        try {
-            bytesRead = super.read(buffer, off, nbytes);
-        } finally {
-            eos = eof; // update eos after every read(), even when it throws
-        }
+        while (true) {
+            int bytesRead;
+            try {
+                bytesRead = super.read(buffer, off, nbytes);
+            } finally {
+                eos = eof; // update eos after every read(), even when it throws
+            }
 
-        if (bytesRead != -1) {
-            crc.update(buffer, off, bytesRead);
-        }
+            if (bytesRead != -1) {
+                crc.update(buffer, off, bytesRead);
+            }
 
-        if (eos) {
-            verifyCrc();
+            if (eos) {
+                readTrailer();
+                if (!eos && bytesRead == -1) {
+                    // Another member follows. Read from it.
+                    continue;
+                }
+            }
+            return bytesRead;
         }
-
-        return bytesRead;
     }
 
-    private void verifyCrc() throws IOException {
-        // Get non-compressed bytes read by fill
-        int size = inf.getRemaining();
-        final int trailerSize = 8; // crc (4 bytes) + total out (4 bytes)
-        byte[] b = new byte[trailerSize];
-        int copySize = (size > trailerSize) ? trailerSize : size;
+    private void readTrailer() throws IOException {
+        // The bytes the inflater did not consume start the trailer.
+        int remaining = inf.getRemaining();
+        bufPos = len - remaining;
+        bufEnd = len;
 
-        // When the deflate data ends exactly at the end of the input, len is -1 and buf holds nothing of the trailer.
-        if (copySize > 0) {
-            System.arraycopy(buf, len - size, b, 0, copySize);
-        }
-        readFully(b, copySize, trailerSize - copySize);
-
+        byte[] b = new byte[8]; // crc (4 bytes) + total out (4 bytes)
+        readFully(b, 0, b.length);
         if (getLong(b, 0) != crc.getValue()) {
             throw new IOException();
         }
         if ((int) getLong(b, 4) != inf.getTotalOut()) {
             throw new IOException();
         }
+
+        // RFC 1952, 2.2: "A gzip file consists of a series of "members"". As in the JDK, another member is read only
+        // when more bytes are available without blocking, and bytes that do not form a member header end the stream.
+        if (bufPos == bufEnd && in.available() <= 0) {
+            return;
+        }
+        crc.reset();
+        try {
+            readHeader();
+        } catch (IOException e) {
+            return;
+        }
+        inf.reset();
+        if (bufPos < bufEnd) {
+            inf.setInput(buf, bufPos, bufEnd - bufPos);
+        }
+        bufPos = 0;
+        bufEnd = 0;
+        eof = false;
+        eos = false;
+    }
+
+    private int readByte() throws IOException {
+        if (bufPos < bufEnd) {
+            return buf[bufPos++] & 0xFF;
+        }
+        int result = in.read();
+        if (result == -1) {
+            throw new EOFException();
+        }
+        return result;
     }
 
     private void readFully(byte[] buffer, int offset, int length) throws IOException {
-        int result;
+        int fromBuf = Math.min(length, bufEnd - bufPos);
+        if (fromBuf > 0) {
+            System.arraycopy(buf, bufPos, buffer, offset, fromBuf);
+            bufPos += fromBuf;
+            offset += fromBuf;
+            length -= fromBuf;
+        }
         while (length > 0) {
-            result = in.read(buffer, offset, length);
+            int result = in.read(buffer, offset, length);
             if (result == -1) {
                 throw new EOFException();
             }
@@ -164,17 +205,11 @@ public class TGZIPInputStream extends TInflaterInputStream {
 
     private void readZeroTerminated(boolean hcrc) throws IOException {
         int result;
-        while ((result = in.read()) > 0) {
+        do {
+            result = readByte();
             if (hcrc) {
                 crc.update(result);
             }
-        }
-        if (result == -1) {
-            throw new EOFException();
-        }
-        // Add the zero
-        if (hcrc) {
-            crc.update(result);
-        }
+        } while (result != 0);
     }
 }

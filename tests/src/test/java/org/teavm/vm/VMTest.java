@@ -1606,4 +1606,224 @@ public class VMTest {
             valid = false;
         }
     }
+
+
+    // The C backend does not support a class initializer that suspends, so asyncClinit, asyncClinitField,
+    // asyncClinitInstance and failedAsyncClassInitializerIsNotRunAgain also skip it
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void otherThreadWaitsForAsyncClassInitializer() throws InterruptedException {
+        var result = new String[1];
+        var thread = new Thread(() -> result[0] = SlowInitializer.value());
+        thread.start();
+        // The other thread is now suspended in the initializer of SlowInitializer
+        Thread.sleep(10);
+        assertEquals("initialized", SlowInitializer.value());
+        thread.join();
+        assertEquals("initialized", result[0]);
+    }
+
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void otherThreadSeesFailureOfAsyncClassInitializer() throws InterruptedException {
+        var result = new Throwable[1];
+        var thread = new Thread(() -> {
+            try {
+                SlowFailingInitializer.value();
+            } catch (Throwable e) {
+                result[0] = e;
+            }
+        });
+        thread.start();
+        Thread.sleep(10);
+        try {
+            SlowFailingInitializer.value();
+            fail("Class was initialized after its initializer threw");
+        } catch (NoClassDefFoundError e) {
+            // expected
+        }
+        thread.join();
+        assertTrue(result[0] instanceof ExceptionInInitializerError);
+    }
+
+    static class SlowInitializer {
+        static final String VALUE;
+
+        static {
+            sleepInInitializer();
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    static class SlowFailingInitializer {
+        static final String VALUE;
+
+        static {
+            sleepInInitializer();
+            failIf(true);
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    // JLS 12.4.2 steps 2-3: a thread that uses a class whose initializer another thread runs waits until the
+    // initializer ends. The initializer of LoggingSlowInitializer writes to the log before and after it suspends.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void otherThreadWaitsUntilAsyncClassInitializerEnds() throws InterruptedException {
+        var thread = new Thread(LoggingSlowInitializer::value);
+        thread.start();
+        // The other thread is now suspended in the initializer of LoggingSlowInitializer
+        Thread.sleep(10);
+        var value = LoggingSlowInitializer.value();
+        AsyncInitializerLog.LOG.append("used;");
+        thread.join();
+        assertEquals("init-start;init-end;used;", AsyncInitializerLog.LOG.toString());
+        assertEquals("initialized", value);
+    }
+
+    // JLS 12.4.2 step 5: after an initializer fails, every later use of the class throws NoClassDefFoundError, on
+    // any thread, and the initializer does not run again.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void laterUsesOfFailedAsyncClassInitializerAlsoThrow() throws InterruptedException {
+        var thread = new Thread(() -> {
+            try {
+                CountingSlowFailingInitializer.value();
+            } catch (Throwable e) {
+                // ExceptionInInitializerError, checked by otherThreadSeesFailureOfAsyncClassInitializer
+            }
+        });
+        thread.start();
+        Thread.sleep(10);
+        assertThrows(NoClassDefFoundError.class, CountingSlowFailingInitializer::value);
+        thread.join();
+        assertThrows(NoClassDefFoundError.class, CountingSlowFailingInitializer::value);
+        var result = new Throwable[1];
+        var other = new Thread(() -> {
+            try {
+                CountingSlowFailingInitializer.value();
+            } catch (Throwable e) {
+                result[0] = e;
+            }
+        });
+        other.start();
+        other.join();
+        assertTrue(result[0] instanceof NoClassDefFoundError, "new thread got " + result[0]);
+        assertEquals(1, AsyncInitializerLog.failingInitializerRuns);
+    }
+
+    static class AsyncInitializerLog {
+        static final StringBuilder LOG = new StringBuilder();
+        static int failingInitializerRuns;
+    }
+
+    static class LoggingSlowInitializer {
+        static final String VALUE;
+
+        static {
+            AsyncInitializerLog.LOG.append("init-start;");
+            sleepInInitializer();
+            AsyncInitializerLog.LOG.append("init-end;");
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    static class CountingSlowFailingInitializer {
+        static final String VALUE;
+
+        static {
+            AsyncInitializerLog.failingInitializerRuns++;
+            sleepInInitializer();
+            failIf(true);
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    // JLS 12.4.2 step 3: a recursive use on the thread that runs the initializer returns at once, also after the
+    // initializer has suspended. RecursiveSlowInitializer uses itself through RecursiveSlowInitializerUser.
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void recursiveUseOfAsyncClassInitializerReturnsAtOnce() {
+        assertEquals("initialized", RecursiveSlowInitializer.value());
+        assertEquals("seen:null", RecursiveSlowInitializer.SEEN);
+        assertEquals("seen:null", RecursiveSlowInitializerUser.SEEN);
+    }
+
+    static class RecursiveSlowInitializer {
+        static final String VALUE;
+        static final String SEEN;
+
+        static {
+            sleepInInitializer();
+            SEEN = RecursiveSlowInitializerUser.SEEN;
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    static class RecursiveSlowInitializerUser {
+        static final String SEEN = "seen:" + RecursiveSlowInitializer.value();
+    }
+
+    // Several threads wait for the same initializer, and all of them see it ended
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void severalThreadsWaitForAsyncClassInitializer() throws InterruptedException {
+        var results = new String[4];
+        var threads = new Thread[results.length];
+        for (var i = 0; i < threads.length; ++i) {
+            var index = i;
+            threads[i] = new Thread(() -> results[index] = SharedSlowInitializer.value());
+            threads[i].start();
+        }
+        Thread.sleep(10);
+        assertEquals("initialized", SharedSlowInitializer.value());
+        for (var thread : threads) {
+            thread.join();
+        }
+        assertEquals("[initialized, initialized, initialized, initialized]", Arrays.toString(results));
+        assertEquals(1, SharedSlowInitializer.runs);
+    }
+
+    static class SharedSlowInitializer {
+        static final String VALUE;
+        static int runs;
+
+        static {
+            runs++;
+            sleepInInitializer();
+            VALUE = "initialized";
+        }
+
+        static String value() {
+            return VALUE;
+        }
+    }
+
+    private static void sleepInInitializer() {
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

@@ -171,6 +171,10 @@ public class TInflater implements TAutoCloseable {
         inLength = 0;
         inRead = 0;
         impl.init(nowrap);
+        // init keeps the old input. The next inflate would take its unread bytes as the start of the new stream.
+        impl.next_in = null;
+        impl.next_in_index = 0;
+        impl.avail_in = 0;
     }
 
     private native void resetImpl(long handle);
