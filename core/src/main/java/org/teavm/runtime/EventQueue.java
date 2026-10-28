@@ -45,14 +45,38 @@ public final class EventQueue {
     /** Returns {@code now() + millis}, saturated, so that a very long timeout does not wrap to the past. */
     public static long deadlineAfter(long millis) {
         long now = now();
-        return millis > Long.MAX_VALUE - now ? Long.MAX_VALUE : now + Math.max(0, millis);
+        long delay = Math.max(0, millis);
+        return now > Long.MAX_VALUE - delay ? Long.MAX_VALUE : now + delay;
+    }
+
+    /** Milliseconds until a deadline on this queue's clock, without wrapping for distant or expired deadlines. */
+    public static long remainingMillis(long deadline) {
+        long now = now();
+        if (deadline <= now) {
+            return 0;
+        }
+        long remaining = deadline - now;
+        return remaining < 0 ? Long.MAX_VALUE : remaining;
     }
 
     /** Runs {@code action} after {@code millis} milliseconds of elapsed time. */
     public static int offerAfter(Event action, long millis) {
-        // On Wasm GC this must go through offer(Event, long): WasmGCDependencies links run() for the event types that
-        // reach that method's parameter.
         return offer(action, deadlineAfter(millis));
+    }
+
+    /** Schedules a cancellable timeout, re-arming host timers that fire before the elapsed-time deadline. */
+    public static Timer scheduleAfter(Event action, long millis) {
+        long delay = Math.max(0, millis);
+        Timer timer = new Timer(action, deadlineAfter(delay));
+        timer.schedule(delay);
+        return timer;
+    }
+
+    /** Like {@link #scheduleAfter}, with an absolute deadline on the {@link #now()} clock. */
+    public static Timer scheduleAt(Event action, long deadline) {
+        Timer timer = new Timer(action, deadline);
+        timer.schedule(remainingMillis(deadline));
+        return timer;
     }
 
     public static void offer(Event action) {
@@ -62,11 +86,7 @@ public final class EventQueue {
     /** Runs {@code action} at {@code time} on the {@link #now()} clock. */
     public static int offer(Event action, long time) {
         if (PlatformDetector.isWebAssemblyGC()) {
-            // The host takes a wall-clock time and subtracts the wall clock at once to get a timer delay. So pass the
-            // remaining time added to a wall-clock time read now. A host timer delay is at most 2^31 - 1 ms: Node
-            // runs a longer setTimeout after 1 ms.
-            double delay = Math.min((double) (time - now()), Integer.MAX_VALUE);
-            return offerWasmGC(action, (double) System.currentTimeMillis() + delay);
+            return offerWasmGC(action, Math.min(remainingMillis(time), Integer.MAX_VALUE));
         }
         ensureCapacity(size + 1);
         int current = size;
@@ -89,7 +109,7 @@ public final class EventQueue {
     }
 
     @Intrinsified
-    private static native int offerWasmGC(Event action, double time);
+    private static native int offerWasmGC(Event action, double delay);
 
     private static void run(Event action) {
         action.run();
@@ -230,5 +250,53 @@ public final class EventQueue {
 
     public interface Event {
         void run();
+    }
+
+    /** A stable cancellation handle, even when an early host callback replaces the underlying timer. */
+    public static class Timer implements Event {
+        private Event action;
+        private final long deadline;
+        protected int id;
+
+        protected Timer(Event action, long deadline) {
+            this.action = action;
+            this.deadline = deadline;
+        }
+
+        protected void schedule(long delay) {
+            id = PlatformDetector.isWebAssemblyGC()
+                    ? offerWasmGC(this, Math.min(delay, Integer.MAX_VALUE))
+                    : offer(this, deadline);
+        }
+
+        public void kill() {
+            if (action != null) {
+                action = null;
+                cancel(id);
+            }
+        }
+
+        protected void cancel(int id) {
+            EventQueue.kill(id);
+        }
+
+        @Override
+        public final void run() {
+            if (action == null) {
+                return;
+            }
+            // The C event queue checks the deadline before dispatching. Host timers can fire early, including
+            // after the host's maximum delay (2^31 - 1 ms). Read the clock once and reuse the remaining delay.
+            if (!PlatformDetector.isLowLevel()) {
+                long remaining = remainingMillis(deadline);
+                if (remaining > 0) {
+                    schedule(remaining);
+                    return;
+                }
+            }
+            Event action = this.action;
+            this.action = null;
+            action.run();
+        }
     }
 }

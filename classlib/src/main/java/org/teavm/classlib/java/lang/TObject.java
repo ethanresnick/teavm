@@ -478,10 +478,10 @@ public class TObject {
         monitor.notifyListeners.add(listener);
         TThread.currentThread().interruptHandler = listener;
         if (timeout > 0 || nanos > 0) {
-            int timeoutToSchedule = timeout >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeout;
-            listener.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.offerAfter(listener, timeoutToSchedule)
-                    : Platform.schedule(listener, timeoutToSchedule);
+            long delay = nanos > 0 && timeout < Long.MAX_VALUE ? timeout + 1 : timeout;
+            listener.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
+                    ? EventQueue.scheduleAfter(listener, delay)
+                    : Platform.scheduleAfter(listener, delay);
         }
         monitorExit(this, monitor.count);
     }
@@ -506,7 +506,7 @@ public class TObject {
         final TObject obj;
         final AsyncCallback<Void> callback;
         final TThread currentThread = TThread.currentThread();
-        int timerId = -1;
+        EventQueue.Timer timer;
         boolean expired;
         boolean performed;
         int lockCount;
@@ -547,15 +547,11 @@ public class TObject {
                 return;
             }
             performed = true;
-            if (timerId >= 0) {
-                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                    EventQueue.kill(timerId);
-                } else {
-                    Platform.killSchedule(timerId);
-                }
-                timerId = -1;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
             }
-            // A timed-out wait reaches here directly (EventQueue.offer and Platform.schedule call run(), not
+            // A timed-out wait reaches here directly (the timer helpers call run(), not
             // onTimer()), so nothing else marks the listener expired. Without this, the listener stays in the
             // queue, and a later notify() takes it and wakes no thread.
             expired = true;
@@ -580,13 +576,9 @@ public class TObject {
                 return;
             }
             performed = true;
-            if (timerId >= 0) {
-                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                    EventQueue.kill(timerId);
-                } else {
-                    Platform.killSchedule(timerId);
-                }
-                timerId = -1;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
             }
             // Like a timed-out wait, an interrupted wait must not stay in the queue as a listener that a later
             // notify() could take.

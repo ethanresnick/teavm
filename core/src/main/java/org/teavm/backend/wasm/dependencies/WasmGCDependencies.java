@@ -168,8 +168,8 @@ public class WasmGCDependencies {
         analyzer.linkMethod(new MethodReference(Thread.class, "setCurrentThread", Thread.class,
                 void.class)).use();
 
-        var offerMethod = analyzer.linkMethod(new MethodReference(EventQueue.class, "offer", EventQueue.Event.class,
-                long.class, int.class));
+        var offerMethod = analyzer.linkMethod(new MethodReference(EventQueue.class, "offerWasmGC",
+                EventQueue.Event.class, double.class, int.class));
         var runEventMethod = analyzer.linkMethod(new MethodReference(EventQueue.class, "run", EventQueue.Event.class,
                 void.class));
 

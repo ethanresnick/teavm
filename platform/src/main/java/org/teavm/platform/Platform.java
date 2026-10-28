@@ -25,6 +25,7 @@ import org.teavm.interop.UnsupportedOn;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.browser.Window;
 import org.teavm.platform.plugin.PlatformGenerator;
+import org.teavm.runtime.EventQueue;
 
 @UnsupportedOn(Platforms.WEBASSEMBLY_GC)
 public final class Platform {
@@ -61,7 +62,36 @@ public final class Platform {
     @PluggableDependency(PlatformGenerator.class)
     public static native int schedule(PlatformRunnable runnable, int timeout);
 
+    public static EventQueue.Timer scheduleAfter(EventQueue.Event action, long millis) {
+        long delay = Math.max(0, millis);
+        Timer timer = new Timer(action, EventQueue.deadlineAfter(delay));
+        timer.schedule(delay);
+        return timer;
+    }
+
+    public static EventQueue.Timer scheduleAt(EventQueue.Event action, long deadline) {
+        Timer timer = new Timer(action, deadline);
+        timer.schedule(EventQueue.remainingMillis(deadline));
+        return timer;
+    }
+
     public static void killSchedule(int id) {
         Window.clearTimeout(id);
+    }
+
+    private static class Timer extends EventQueue.Timer implements PlatformRunnable {
+        Timer(EventQueue.Event action, long deadline) {
+            super(action, deadline);
+        }
+
+        @Override
+        protected void schedule(long delay) {
+            id = Platform.schedule(this, (int) Math.min(delay, Integer.MAX_VALUE));
+        }
+
+        @Override
+        protected void cancel(int id) {
+            Platform.killSchedule(id);
+        }
     }
 }

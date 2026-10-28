@@ -506,9 +506,8 @@ function coreImports(imports: Record<string, unknown>, context: Context): void {
 
 function asyncImports(imports: Record<string, unknown>): void {
     imports.teavmAsync = {
-        offer(instance: unknown, fn: (instance: unknown) => void, time: number) {
-            const dt = Math.max(0, time - Date.now());
-            return setTimeout(() => { fn(instance); }, dt);
+        offerAfter(instance: unknown, fn: (instance: unknown) => void, delayMs: number) {
+            return setTimeout(() => { fn(instance); }, Math.max(0, Math.min(delayMs, 0x7FFFFFFF)));
         },
         kill(id: ReturnType<typeof setTimeout>) {
             clearTimeout(id);

@@ -103,7 +103,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         if (isFull()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isFull()) {
-                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
+                if (!waitForChange(timeLimit)) {
                     return false;
                 }
             }
@@ -133,7 +133,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         if (isEmpty()) {
             long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isEmpty()) {
-                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
+                if (!waitForChange(timeLimit)) {
                     return null;
                 }
             }
@@ -427,12 +427,6 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         return Math.max(1, EventQueue.deadlineAfter(millis));
     }
 
-    // A host timer takes an int delay, so a wait longer than Integer.MAX_VALUE ms (about 24.8 days) times out
-    // before its limit. offer and poll then wait again for the time that is left.
-    private static boolean timeLimitReached(long timeLimit) {
-        return EventQueue.now() >= timeLimit;
-    }
-
     @Async
     private native Boolean waitForChangeImpl(long timeLimit) throws InterruptedException;
 
@@ -445,12 +439,9 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         handler.queue = this;
         waitHandlers.add(handler);
         if (timeLimit > 0) {
-            int timeout = (int) Math.max(0, Math.min(Integer.MAX_VALUE, timeLimit - EventQueue.now()));
-            handler.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.offer(handler, timeLimit)
-                    : Platform.schedule(handler, timeout);
-        } else {
-            handler.timerId = -1;
+            handler.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
+                    ? EventQueue.scheduleAt(handler, timeLimit)
+                    : Platform.scheduleAt(handler, timeLimit);
         }
 
         TThread.currentThread().interruptHandler = handler;
@@ -471,7 +462,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         TArrayBlockingQueue<?> queue;
         AsyncCallback<Boolean> callback;
         boolean complete;
-        int timerId;
+        EventQueue.Timer timer;
 
         // The waiting thread. complete() can run on another thread (interrupt) or at the top of the JS stack
         // (timeout), where TThread.currentThread() is not the waiter.
@@ -513,13 +504,9 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
                 return true;
             }
             complete = true;
-            if (timerId >= 0) {
-                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                    EventQueue.kill(timerId);
-                } else {
-                    Platform.killSchedule(timerId);
-                }
-                timerId = -1;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
             }
             if (thread.interruptHandler == this) {
                 thread.interruptHandler = null;

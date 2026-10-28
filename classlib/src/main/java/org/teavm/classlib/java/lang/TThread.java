@@ -327,13 +327,10 @@ public class TThread extends TObject implements TRunnable {
             handler.interrupted();
             return;
         }
-        // Host timers take an int delay (a larger one fires at once), so a longer sleep wakes after
-        // Integer.MAX_VALUE ms, about 24.8 days. This also keeps the deadline below from overflowing.
-        int intMillis = millis < Integer.MAX_VALUE ? (int) millis : Integer.MAX_VALUE;
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-            handler.scheduleId = EventQueue.offerAfter(handler, intMillis);
+            handler.timer = EventQueue.scheduleAfter(handler, millis);
         } else {
-            handler.scheduleId = Platform.schedule(handler, intMillis);
+            handler.timer = Platform.scheduleAfter(handler, millis);
         }
         current.interruptHandler = handler;
     }
@@ -342,9 +339,7 @@ public class TThread extends TObject implements TRunnable {
         private TThread thread;
         private AsyncCallback<Void> callback;
         private boolean isInterrupted;
-        // -1 until the timer is scheduled. An interrupt before that must not kill another event: on C, event ids
-        // start at 0.
-        int scheduleId = -1;
+        EventQueue.Timer timer;
 
         SleepHandler(TThread thread, AsyncCallback<Void> callback) {
             this.thread = thread;
@@ -355,15 +350,13 @@ public class TThread extends TObject implements TRunnable {
         public void interrupted() {
             thread.interruptedFlag = false;
             isInterrupted = true;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
+            }
             if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                if (scheduleId >= 0) {
-                    EventQueue.kill(scheduleId);
-                }
                 EventQueue.offer(() -> callback.error(new TInterruptedException()));
             } else {
-                if (scheduleId >= 0) {
-                    Platform.killSchedule(scheduleId);
-                }
                 Platform.postpone(() -> callback.error(new TInterruptedException()));
             }
         }

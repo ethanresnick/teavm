@@ -55,7 +55,7 @@ function startThread(runnable) {
 }
 
 function schedule(runnable, timeout) {
-    teavm_globals.setTimeout(() => {
+    return teavm_globals.setTimeout(() => {
         teavm_javaMethod("org.teavm.platform.Platform",
                 "launchThread(Lorg/teavm/platform/PlatformRunnable;)V")(runnable);
     }, timeout);

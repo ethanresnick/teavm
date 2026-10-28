@@ -42,7 +42,7 @@ public final class TLockSupport {
 
     /**
      * A thread's permit and blocker, and, while it is parked, the callback that resumes it. It is also the timer
-     * event and the interrupt handler of the park, so a park allocates nothing once the thread has this object.
+     * action and the interrupt handler of the park. A timed park additionally keeps a cancellable timer handle.
      */
     private static final class ParkState implements EventQueue.Event, PlatformRunnable, TThreadInterruptHandler {
         final TThread thread;
@@ -52,8 +52,7 @@ public final class TLockSupport {
         AsyncCallback<Void> callback;
         // A wake that unpark or an interrupt posted, to run from the event loop.
         AsyncCallback<Void> posted;
-        // -1 while no timer is scheduled. On C, event ids start at 0.
-        int timerId = -1;
+        EventQueue.Timer timer;
 
         ParkState(TThread thread) {
             this.thread = thread;
@@ -103,13 +102,9 @@ public final class TLockSupport {
                 return null;
             }
             this.callback = null;
-            if (timerId >= 0) {
-                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                    EventQueue.kill(timerId);
-                } else {
-                    Platform.killSchedule(timerId);
-                }
-                timerId = -1;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
             }
             if (thread.interruptHandler == this) {
                 thread.interruptHandler = null;
@@ -149,12 +144,9 @@ public final class TLockSupport {
     private static void parkImpl(ParkState s, long timeoutMillis, AsyncCallback<Void> callback) {
         s.callback = callback;
         if (timeoutMillis > 0) {
-            // Host timers take an int delay, and the clamp keeps the deadline from overflowing. A longer park wakes
-            // early, which park allows.
-            int delay = timeoutMillis < Integer.MAX_VALUE ? (int) timeoutMillis : Integer.MAX_VALUE;
-            s.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.offerAfter(s, delay)
-                    : Platform.schedule(s, delay);
+            s.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
+                    ? EventQueue.scheduleAfter(s, timeoutMillis)
+                    : Platform.scheduleAfter(s, timeoutMillis);
         }
         s.thread.interruptHandler = s;
     }
@@ -198,7 +190,7 @@ public final class TLockSupport {
     }
 
     public static void parkUntil(Object blocker, long deadline) {
-        long millis = deadline - System.currentTimeMillis();
+        long millis = millisUntil(deadline);
         if (millis > 0) {
             parkWith(blocker, millis);
         }
@@ -223,7 +215,7 @@ public final class TLockSupport {
     }
 
     public static void parkUntil(long deadline) {
-        long millis = deadline - System.currentTimeMillis();
+        long millis = millisUntil(deadline);
         if (millis > 0) {
             park0(state(Thread.currentThread()), millis);
         }
@@ -231,6 +223,15 @@ public final class TLockSupport {
 
     static long getThreadId(Thread thread) {
         return thread.getId();
+    }
+
+    private static long millisUntil(long deadline) {
+        long now = System.currentTimeMillis();
+        if (deadline <= now) {
+            return 0;
+        }
+        long delay = deadline - now;
+        return delay < 0 ? Long.MAX_VALUE : delay;
     }
 
     /** Rounds up, so a positive timeout never becomes 0 (which would mean "wait forever"). */
