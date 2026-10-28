@@ -126,6 +126,9 @@ public abstract class TDoubleBuffer extends TBuffer implements Comparable<TDoubl
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
+        if (src == this) {
+            throw new IllegalArgumentException();
+        }
         var elementsToTransfer = src.remaining();
         if (remaining() < elementsToTransfer) {
             throw new TBufferOverflowException();

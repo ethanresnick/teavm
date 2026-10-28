@@ -130,6 +130,9 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
+        if (src == this) {
+            throw new IllegalArgumentException();
+        }
         var elementsToTransfer = src.remaining();
         if (remaining() < elementsToTransfer) {
             throw new TBufferOverflowException();

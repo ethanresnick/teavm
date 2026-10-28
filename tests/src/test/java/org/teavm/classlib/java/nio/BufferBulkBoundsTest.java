@@ -571,4 +571,123 @@ public class BufferBulkBoundsTest {
             assertEquals(0, source.position());
         }
     }
+
+    @Test
+    public void byteRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new ByteBuffer[] {
+                ByteBuffer.allocateDirect(16), ByteBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (byte) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((byte) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void charRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new CharBuffer[] {
+                ByteBuffer.allocateDirect(32).asCharBuffer(), CharBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (char) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((char) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void shortRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new ShortBuffer[] {
+                ByteBuffer.allocateDirect(32).asShortBuffer(), ShortBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (short) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((short) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void intRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new IntBuffer[] {
+                ByteBuffer.allocateDirect(64).asIntBuffer(), IntBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (int) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((int) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void longRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new LongBuffer[] {
+                ByteBuffer.allocateDirect(128).asLongBuffer(), LongBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (long) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((long) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void floatRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new FloatBuffer[] {
+                ByteBuffer.allocateDirect(64).asFloatBuffer(), FloatBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (float) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((float) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
+
+    @Test
+    public void doubleRelativeSelfCopy() {
+        // Relative put(buffer) rejects identity; absolute put(index, buffer, offset, length) permits it.
+        for (var buffer : new DoubleBuffer[] {
+                ByteBuffer.allocateDirect(128).asDoubleBuffer(), DoubleBuffer.allocate(16) }) {
+            for (int position : new int[] { 0, 8, 16 }) {
+                buffer.position(position);
+                assertThrows(IllegalArgumentException.class, () -> buffer.put(buffer));
+                assertEquals(position, buffer.position());
+            }
+            buffer.put(1, (double) 42);
+            buffer.put(0, buffer, 1, 1);
+            assertEquals((double) 42, buffer.get(0));
+            assertEquals(16, buffer.position());
+        }
+    }
 }

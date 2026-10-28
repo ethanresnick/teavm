@@ -140,6 +140,9 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
+        if (src == this) {
+            throw new IllegalArgumentException();
+        }
         var elementsToTransfer = src.remaining();
         if (remaining() < elementsToTransfer) {
             throw new TBufferOverflowException();
