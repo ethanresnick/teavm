@@ -116,7 +116,8 @@ class DependencyGraphBuilder {
             var exceptionConsumer = createExceptionConsumer(dep, block);
             currentExceptionConsumer = exceptionConsumer;
             block.readAllInstructions(reader);
-            ImplicitExceptions.read(block, type -> exceptionConsumer.consume(dependencyAnalyzer.getClassType(type)));
+            ImplicitExceptions.read(block, !method.hasModifier(ElementModifier.STATIC),
+                    type -> exceptionConsumer.consume(dependencyAnalyzer.getClassType(type)));
 
             for (PhiReader phi : block.readPhis()) {
                 DependencyNode receiverNode = nodes[phi.getReceiver().getIndex()];

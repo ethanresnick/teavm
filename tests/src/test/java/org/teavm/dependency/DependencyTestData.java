@@ -36,10 +36,10 @@ public class DependencyTestData {
         } catch (IndexOutOfBoundsException e) {
             MetaAssertions.assertTypes(e, IndexOutOfBoundsException.class);
         } catch (RuntimeException e) {
-            // The code that creates and throws the exception dereferences values and allocates arrays, so the
-            // backends' checks can throw there too.
+            // The returned exception is unknown locally, so throwing it can also produce a null check failure.
+            // Constant-sized constructor arrays cannot produce NegativeArraySizeException.
             MetaAssertions.assertTypes(e, UnsupportedOperationException.class, IllegalArgumentException.class,
-                    NullPointerException.class, NegativeArraySizeException.class);
+                    NullPointerException.class);
         }
     }
 
@@ -47,8 +47,9 @@ public class DependencyTestData {
         try {
             catchException();
         } catch (Throwable e) {
-            MetaAssertions.assertTypes(e, Exception.class, NullPointerException.class,
-                    ArrayIndexOutOfBoundsException.class, NegativeArraySizeException.class);
+            // The catch handlers construct fixed-length Class[] argument arrays: allocation and dereference
+            // cannot fail with negative size or null, but bounds checks remain conservative.
+            MetaAssertions.assertTypes(e, Exception.class, ArrayIndexOutOfBoundsException.class);
         }
     }
 
@@ -137,6 +138,38 @@ public class DependencyTestData {
             objectField = new int[2][size];
         } catch (RuntimeException e) {
             MetaAssertions.assertTypes(e, NegativeArraySizeException.class);
+        }
+    }
+
+    // Explicit throws retain their types; fixed-sized allocations and fresh field accesses do not invent
+    // RuntimeException inputs. Allocation failure is an Error, distinct from NegativeArraySizeException.
+    public static void localImplicitExceptionPrecision() {
+        try {
+            throw new NegativeArraySizeException();
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NegativeArraySizeException.class);
+        }
+        try {
+            throw new NullPointerException();
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e, NullPointerException.class);
+        }
+        try {
+            intArrayField = new int[0];
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e);
+        }
+        try {
+            objectField = new int[1][0];
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e);
+        }
+        try {
+            var holder = new Holder();
+            holder.field = 1;
+            intField = holder.field;
+        } catch (RuntimeException e) {
+            MetaAssertions.assertTypes(e);
         }
     }
 

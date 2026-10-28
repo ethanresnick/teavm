@@ -15,6 +15,7 @@
  */
 package org.teavm.model.analysis;
 
+import java.util.BitSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -53,7 +54,18 @@ public final class ImplicitExceptions {
      * Passes each exception class that the block's instructions can throw implicitly to the consumer, once.
      */
     public static void read(BasicBlockReader block, Consumer<String> consumer) {
+        read(block, false, consumer);
+    }
+
+    /**
+     * Reads an SSA block, using only facts established earlier in this block. Phi inputs and facts from other
+     * blocks are deliberately not inferred. In an instance method, SSA variable zero is the non-null receiver.
+     */
+    public static void read(BasicBlockReader block, boolean instanceMethod, Consumer<String> consumer) {
         var reader = new Reader();
+        if (instanceMethod) {
+            reader.nonNull.set(0);
+        }
         block.readAllInstructions(reader);
         if (reader.nullPointer) {
             consumer.accept(NULL_POINTER);
@@ -144,6 +156,34 @@ public final class ImplicitExceptions {
         boolean arrayIndexOutOfBounds;
         boolean classCast;
         boolean negativeArraySize;
+        final BitSet nonNegative = new BitSet();
+        final BitSet nonNull = new BitSet();
+
+        @Override
+        public void create(VariableReader receiver, String type) {
+            nonNull.set(receiver.getIndex());
+        }
+
+        @Override
+        public void stringConstant(VariableReader receiver, String value) {
+            nonNull.set(receiver.getIndex());
+        }
+
+        @Override
+        public void classConstant(VariableReader receiver, ValueType value) {
+            nonNull.set(receiver.getIndex());
+        }
+
+        @Override
+        public void integerConstant(VariableReader receiver, int cst) {
+            nonNegative.set(receiver.getIndex(), cst >= 0);
+        }
+
+        @Override
+        public void assign(VariableReader receiver, VariableReader assignee) {
+            nonNegative.set(receiver.getIndex(), nonNegative.get(assignee.getIndex()));
+            nonNull.set(receiver.getIndex(), nonNull.get(assignee.getIndex()));
+        }
 
         @Override
         public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
@@ -152,45 +192,49 @@ public final class ImplicitExceptions {
 
         @Override
         public void raise(VariableReader exception) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(exception.getIndex());
         }
 
         @Override
         public void createArray(VariableReader receiver, ValueType itemType, VariableReader size) {
-            negativeArraySize = true;
+            negativeArraySize |= !nonNegative.get(size.getIndex());
+            nonNull.set(receiver.getIndex());
         }
 
         @Override
         public void createArray(VariableReader receiver, ValueType itemType,
                 List<? extends VariableReader> dimensions) {
-            negativeArraySize = true;
+            nonNull.set(receiver.getIndex());
+            for (var dimension : dimensions) {
+                negativeArraySize |= !nonNegative.get(dimension.getIndex());
+            }
         }
 
         @Override
         public void getField(VariableReader receiver, VariableReader instance, FieldReference field,
                 ValueType fieldType) {
-            nullPointer |= instance != null;
+            nullPointer |= instance != null && !nonNull.get(instance.getIndex());
         }
 
         @Override
         public void putField(VariableReader instance, FieldReference field, VariableReader value,
                 ValueType fieldType) {
-            nullPointer |= instance != null;
+            nullPointer |= instance != null && !nonNull.get(instance.getIndex());
         }
 
         @Override
         public void arrayLength(VariableReader receiver, VariableReader array) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
         public void cloneArray(VariableReader receiver, VariableReader array) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
         public void unwrapArray(VariableReader receiver, VariableReader array, ArrayElementType elementType) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
@@ -209,22 +253,23 @@ public final class ImplicitExceptions {
         public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
                 List<? extends VariableReader> arguments, InvocationType type) {
             // A constructor's receiver is the object just created.
-            nullPointer |= instance != null && !method.getName().equals("<init>");
+            nullPointer |= instance != null && !method.getName().equals("<init>")
+                    && !nonNull.get(instance.getIndex());
         }
 
         @Override
         public void nullCheck(VariableReader receiver, VariableReader value) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(value.getIndex());
         }
 
         @Override
         public void monitorEnter(VariableReader objectRef) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(objectRef.getIndex());
         }
 
         @Override
         public void monitorExit(VariableReader objectRef) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(objectRef.getIndex());
         }
 
         @Override
