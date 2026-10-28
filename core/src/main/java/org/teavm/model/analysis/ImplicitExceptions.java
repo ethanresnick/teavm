@@ -224,17 +224,17 @@ public final class ImplicitExceptions {
 
         @Override
         public void arrayLength(VariableReader receiver, VariableReader array) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
         public void cloneArray(VariableReader receiver, VariableReader array) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
         public void unwrapArray(VariableReader receiver, VariableReader array, ArrayElementType elementType) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(array.getIndex());
         }
 
         @Override
@@ -259,17 +259,17 @@ public final class ImplicitExceptions {
 
         @Override
         public void nullCheck(VariableReader receiver, VariableReader value) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(value.getIndex());
         }
 
         @Override
         public void monitorEnter(VariableReader objectRef) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(objectRef.getIndex());
         }
 
         @Override
         public void monitorExit(VariableReader objectRef) {
-            nullPointer = true;
+            nullPointer |= !nonNull.get(objectRef.getIndex());
         }
 
         @Override
