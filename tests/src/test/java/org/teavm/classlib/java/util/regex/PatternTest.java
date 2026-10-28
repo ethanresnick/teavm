@@ -1758,6 +1758,25 @@ public class PatternTest {
     }
 
     @Test
+    public void alternativeFollowedByNul() {
+        // NUL is an ordinary character, not the end of the regular expression.
+        String nul = new String(new char[] { 0 });
+        for (String token : new String[] { nul, "\\x00", "\\u0000", "\\000" }) {
+            for (String suffix : new String[] { "", "a", token }) {
+                String tail = suffix.equals(token) ? nul : suffix;
+                String pattern = "x|1" + token + suffix;
+                assertTrue(Pattern.matches(pattern, "1" + nul + tail), pattern);
+                assertTrue(Pattern.matches(pattern, "x"), pattern);
+                assertFalse(Pattern.matches(pattern, "1"), pattern);
+                assertFalse(Pattern.matches(pattern, nul + tail), pattern);
+                assertTrue(Pattern.matches("(" + pattern + ")z", "1" + nul + tail + "z"), pattern);
+            }
+        }
+        assertTrue(Pattern.matches("x|1", "1"));
+        assertTrue(Pattern.compile("x|1 # end", Pattern.COMMENTS).matcher("1").matches());
+    }
+
+    @Test
     public void unicodeBlockNameAliases() {
         // Pattern's Unicode support delegates block names to UnicodeBlock.forName, which accepts
         // canonical names, names with spaces removed, and constant identifiers, ignoring case.

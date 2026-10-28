@@ -301,6 +301,11 @@ class TLexer {
         return lookAheadST != null;
     }
 
+    public boolean isNextEmpty() {
+        // Two sentinel zeros follow the input; consuming a literal final NUL is not enough.
+        return lookAhead == 0 && index >= patternFullLength - 1 && !isNextSpecial();
+    }
+
     public int next() {
         movePointer();
         return lookBack;
