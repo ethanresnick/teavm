@@ -534,4 +534,84 @@ public class ArrayBlockingQueueTest {
         watchdog.start();
         return watchdog;
     }
+
+    // poll(timeout, unit): "waiting up to the specified wait time if necessary for an element to become available".
+    // offer(e, timeout, unit): "waiting up to the specified wait time if necessary for space to become available".
+    // A timeout longer than a host timer can hold (2^31 - 1 ms), or too long to add to the current time, must not
+    // end the wait at once.
+    @Test
+    public void timedPollAndOfferWithLongTimeoutsWait() throws InterruptedException {
+        long[] timeouts = { 3_000_000_000L, Long.MAX_VALUE - 1, Long.MAX_VALUE };
+        TimeUnit[] units = { TimeUnit.MILLISECONDS, TimeUnit.NANOSECONDS, TimeUnit.DAYS };
+        for (long timeout : timeouts) {
+            for (TimeUnit unit : units) {
+                if (unit == TimeUnit.NANOSECONDS && timeout < Long.MAX_VALUE - 1) {
+                    // 3 s, not a long timeout
+                    continue;
+                }
+                timedWaitWaits(true, timeout, unit);
+                timedWaitWaits(false, timeout, unit);
+            }
+        }
+    }
+
+    private static void timedWaitWaits(boolean poll, long timeout, TimeUnit unit) throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        if (!poll) {
+            queue.add(0);
+        }
+        String call = (poll ? "poll(" : "offer(1, ") + timeout + " " + unit + ")";
+        var result = new Object[] { "not ended" };
+        var waiter = new Thread(() -> {
+            try {
+                result[0] = poll ? queue.poll(timeout, unit) : queue.offer(1, timeout, unit);
+            } catch (InterruptedException e) {
+                result[0] = e;
+            }
+        });
+        waiter.start();
+        Thread.sleep(100);
+        assertTrue(waiter.isAlive(), call + " ended at once with " + result[0]);
+        if (poll) {
+            queue.add(1);
+        } else {
+            assertEquals(0, queue.take());
+        }
+        waiter.join(2000);
+        assertFalse(waiter.isAlive(), call + " did not end when the queue changed");
+        assertEquals(poll ? (Object) 1 : (Object) Boolean.TRUE, result[0], call);
+        if (!poll) {
+            assertEquals(1, queue.poll());
+        }
+    }
+
+    // A timeout "less than or equal to zero" does not wait, and a short one ends after about that time.
+    @Test
+    public void timedPollAndOfferTimeOut() throws InterruptedException {
+        long[] timeouts = { 0, -1, Long.MIN_VALUE, 1, 30 };
+        TimeUnit[] units = { TimeUnit.MILLISECONDS, TimeUnit.NANOSECONDS };
+        for (long timeout : timeouts) {
+            for (TimeUnit unit : units) {
+                long millis = Math.max(0, unit.toMillis(timeout));
+                var empty = new ArrayBlockingQueue<Integer>(1);
+                long start = System.nanoTime();
+                assertNull(empty.poll(timeout, unit));
+                checkElapsed("poll(" + timeout + " " + unit + ")", start, millis);
+
+                var full = new ArrayBlockingQueue<Integer>(1);
+                full.add(0);
+                start = System.nanoTime();
+                assertFalse(full.offer(1, timeout, unit));
+                checkElapsed("offer(1, " + timeout + " " + unit + ")", start, millis);
+                assertEquals(1, full.size());
+            }
+        }
+    }
+
+    private static void checkElapsed(String call, long startNanos, long expectedMillis) {
+        long elapsedMillis = (System.nanoTime() - startNanos) / 1_000_000;
+        // The queue's clock counts whole milliseconds, so a wait can end up to 1 ms short of its timeout.
+        assertTrue(elapsedMillis >= expectedMillis - 1, call + " ended after " + elapsedMillis + " ms");
+        assertTrue(elapsedMillis < expectedMillis + 2000, call + " ended after " + elapsedMillis + " ms");
+    }
 }

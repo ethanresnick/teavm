@@ -169,4 +169,50 @@ public class ReferenceQueueTest {
         watchdog.start();
         return watchdog;
     }
+
+    // remove(timeout): "If positive, block for up to timeout milliseconds". A timeout too long to add to the current
+    // time must not wrap to the past and end the wait at once.
+    @Test
+    public void removeWithLongMaxValueTimeoutWaits() throws InterruptedException {
+        removeWaits(Long.MAX_VALUE);
+    }
+
+    // A timeout longer than a host timer can hold (2^31 - 1 ms) must not end the wait at once either.
+    @Test
+    public void removeWithTimeoutBeyondIntRangeWaits() throws InterruptedException {
+        removeWaits(3_000_000_000L);
+    }
+
+    // "IllegalArgumentException - If the value of the timeout argument is negative"
+    @Test
+    public void removeWithNegativeTimeoutThrows() throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        for (long timeout : new long[] { -1, Long.MIN_VALUE }) {
+            try {
+                queue.remove(timeout);
+                fail("remove(" + timeout + ") did not throw");
+            } catch (IllegalArgumentException e) {
+                // expected
+            }
+        }
+    }
+
+    private static void removeWaits(long timeout) throws InterruptedException {
+        var queue = new ReferenceQueue<Object>();
+        var result = new Object[] { "not ended" };
+        var waiter = new Thread(() -> {
+            try {
+                result[0] = queue.remove(timeout);
+            } catch (InterruptedException e) {
+                result[0] = e;
+            }
+        });
+        waiter.start();
+        Thread.sleep(100);
+        assertTrue(waiter.isAlive(), "remove(" + timeout + ") ended at once with " + result[0]);
+        waiter.interrupt();
+        waiter.join(2000);
+        assertFalse(waiter.isAlive(), "the interrupted waiter did not end");
+        assertTrue(result[0] instanceof InterruptedException, "remove(" + timeout + ") ended with " + result[0]);
+    }
 }

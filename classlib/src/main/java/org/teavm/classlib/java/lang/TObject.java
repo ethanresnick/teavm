@@ -480,7 +480,7 @@ public class TObject {
         if (timeout > 0 || nanos > 0) {
             int timeoutToSchedule = timeout >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) timeout;
             listener.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.offer(listener, timeoutToSchedule + System.currentTimeMillis())
+                    ? EventQueue.offerAfter(listener, timeoutToSchedule)
                     : Platform.schedule(listener, timeoutToSchedule);
         }
         monitorExit(this, monitor.count);

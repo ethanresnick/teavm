@@ -36,10 +36,18 @@ public class TReferenceQueue<T> {
         return remove(0);
     }
 
-    @Async
-    public native TReference<T> remove(long timeout) throws InterruptedException;
+    public TReference<T> remove(long timeout) throws InterruptedException {
+        // "IllegalArgumentException - If the value of the timeout argument is negative"
+        if (timeout < 0) {
+            throw new IllegalArgumentException();
+        }
+        return removeImpl(timeout);
+    }
 
-    public void remove(long timeout, AsyncCallback<TReference<T>> callback) {
+    @Async
+    private native TReference<T> removeImpl(long timeout) throws InterruptedException;
+
+    private void removeImpl(long timeout, AsyncCallback<TReference<T>> callback) {
         var ref = poll();
         if (ref != null) {
             callback.complete(ref);
@@ -52,8 +60,10 @@ public class TReferenceQueue<T> {
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
                 callbackWrapper.id = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                        ? EventQueue.offer(callbackWrapper, timeout + System.currentTimeMillis())
-                        : Platform.schedule(callbackWrapper, (int) timeout);
+                        ? EventQueue.offerAfter(callbackWrapper, timeout)
+                        // A host timer takes an int delay, so a timeout over Integer.MAX_VALUE ms (about 24.8 days)
+                        // ends after that delay, as in Thread.sleep.
+                        : Platform.schedule(callbackWrapper, (int) Math.min(timeout, Integer.MAX_VALUE));
             }
             TThread.currentThread().interruptHandler = callbackWrapper;
             registerCallback(callbackWrapper);
