@@ -1732,4 +1732,25 @@ public class PatternTest {
         assertTrue(matcher.matches());
         assertEquals("b", matcher.group(1));
     }
+
+    @Test
+    public void alternativeFollowedBySpecialToken() {
+        assertTrue(Pattern.matches("x|1\\S", "1a"));
+        assertFalse(Pattern.matches("x|1\\S", "1"));
+        assertTrue(Pattern.matches("x|1\\d", "12"));
+        assertTrue(Pattern.matches("x|1[ab]", "1b"));
+        assertTrue(Pattern.matches("(x|1\\S)z", "1az"));
+    }
+
+    @Test
+    public void unicodeBlockNameAliases() {
+        for (String name : new String[] { "BasicLatin", "BASIC_LATIN", "Basic Latin", "basiclatin" }) {
+            assertTrue(Pattern.matches("\\p{In" + name + "}", "A"));
+            assertFalse(Pattern.matches("\\p{In" + name + "}", "α"));
+            assertTrue(Pattern.matches("\\P{In" + name + "}", "α"));
+        }
+        assertTrue(Pattern.matches("\\p{InLATIN_1_SUPPLEMENT}", "é"));
+        assertTrue(Pattern.matches("\\p{InLatin-1 Supplement}", "é"));
+        assertThrows(PatternSyntaxException.class, () -> Pattern.compile("\\p{lu}"));
+    }
 }

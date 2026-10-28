@@ -916,7 +916,26 @@ abstract class TAbstractCharClass extends TSpecialToken {
                     return row[1];
                 }
             }
+            // Block names have canonical, constant and compact spellings. Preserve exact category lookup above.
+            String key = blockKey(name);
+            for (Object[] row : contents) {
+                boolean block = row[1] instanceof LazyRange || row[1] instanceof LazySpecialsBlock;
+                if (block && key.equals(blockKey((String) row[0]))) {
+                    return row[1];
+                }
+            }
             throw new MissingResourceException("", "", name);
         }
+        private static String blockKey(String name) {
+            StringBuilder sb = new StringBuilder(name.length());
+            for (int i = 0; i < name.length(); ++i) {
+                char c = name.charAt(i);
+                if (c != ' ' && c != '_' && c != '-') {
+                    sb.append(Character.toUpperCase(c));
+                }
+            }
+            return sb.toString();
+        }
+
     }
 }

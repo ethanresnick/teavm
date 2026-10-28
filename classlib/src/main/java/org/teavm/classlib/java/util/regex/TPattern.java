@@ -338,7 +338,8 @@ public final class TPattern implements Serializable {
         TCharClass auxRange = new TCharClass(hasFlag(TPattern.CASE_INSENSITIVE), hasFlag(TPattern.UNICODE_CASE));
         while (!lexemes.isEmpty()
                 && lexemes.isLetter()
-                && (lexemes.lookAhead() == 0 || lexemes.lookAhead() == TLexer.CHAR_VERTICAL_BAR
+                && ((!lexemes.isNextSpecial() && lexemes.lookAhead() == 0)
+                || lexemes.lookAhead() == TLexer.CHAR_VERTICAL_BAR
                 || lexemes.lookAhead() == TLexer.CHAR_RIGHT_PARENTHESIS)) {
             auxRange.add(lexemes.next());
             if (lexemes.peek() == TLexer.CHAR_VERTICAL_BAR) {
