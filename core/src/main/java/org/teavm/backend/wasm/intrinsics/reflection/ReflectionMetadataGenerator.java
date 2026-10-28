@@ -289,8 +289,12 @@ public class ReflectionMetadataGenerator {
             generateAnnotations(builder, annotations);
         }
         if (fieldReflectionStruct.genericTypeIndex() >= 0) {
-            var cls = classes.get(field.getOwnerName());
-            generateGenericType(builder, cls, null, genericType);
+            if (genericType != null) {
+                var cls = classes.get(field.getOwnerName());
+                generateGenericType(builder, cls, null, genericType);
+            } else {
+                builder.nullConst(WasmType.STRUCT);
+            }
         }
 
         builder.structNew(fieldReflectionStruct.structure());
