@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -26,7 +28,6 @@ import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -115,5 +116,28 @@ public class SpliteratorsTest {
 
         assertArrayEquals(new Object[] { 1, 2, 9, 4 }, collected.toArray());
         assertEquals(0, spliterator.estimateSize());
+    }
+
+    @Test
+    public void abstractSpliteratorSplitsInBatches() {
+        var source = new Spliterators.AbstractSpliterator<Integer>(5, 0) {
+            int next;
+
+            @Override
+            public boolean tryAdvance(Consumer<? super Integer> action) {
+                if (next >= 5) {
+                    return false;
+                }
+                action.accept(next++);
+                return true;
+            }
+        };
+        var prefix = source.trySplit();
+        var first = new ArrayList<Integer>();
+        prefix.forEachRemaining(first::add);
+        var rest = new ArrayList<Integer>();
+        source.forEachRemaining(rest::add);
+        assertEquals(List.of(0, 1, 2, 3, 4), first);
+        assertEquals(List.of(), rest);
     }
 }

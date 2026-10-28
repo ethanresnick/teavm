@@ -49,6 +49,7 @@ import org.teavm.classlib.java.nio.file.attribute.TBasicFileAttributes;
 import org.teavm.classlib.java.nio.file.attribute.TFileAttribute;
 import org.teavm.classlib.java.nio.file.attribute.TFileTime;
 import org.teavm.classlib.java.nio.file.spi.TFileSystemProvider;
+import org.teavm.runtime.fs.VirtualFile;
 
 public class TDefaultFileSystemProvider extends TFileSystemProvider {
     public static final TDefaultFileSystemProvider INSTANCE = new TDefaultFileSystemProvider();
@@ -89,6 +90,17 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         throw new UnsupportedOperationException();
     }
 
+    // kafka-wasm: for FileChannel.open, which lives in another package.
+    public static VirtualFile virtualFile(TPath path) {
+        var defaultPath = (TDefaultPath) path;
+        return defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
+    }
+
+    public static VirtualFile createFileIfMissing(TPath path) throws IOException {
+        createEntry((TDefaultPath) path, false);
+        return virtualFile(path);
+    }
+
     @Override
     public InputStream newInputStream(TPath path, TOpenOption... options) throws IOException {
         for (var option : options) {
@@ -103,7 +115,7 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         }
         var accessor = vfile.createAccessor(true, false, false);
         if (accessor == null) {
-            throw new NoSuchFileException(defaultPath.pathString);
+            throw openFailure(vfile, defaultPath.pathString, true, false);
         }
         return new TFileInputStream(accessor);
     }
@@ -175,7 +187,7 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         var vfile = defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
         var accessor = vfile.createAccessor(false, true, append || !truncate);
         if (accessor == null) {
-            throw new FileSystemException(defaultPath.pathString);
+            throw openFailure(vfile, defaultPath.pathString, false, true);
         }
         if (!append) {
             accessor.seek(0);
@@ -462,6 +474,18 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
     @Override
     public boolean isHidden(TPath path) throws IOException {
         return false;
+    }
+
+    /**
+     * kafka-wasm: the exception for a file that exists but did not open. As in the JDK, a missing permission is an
+     * AccessDeniedException (Kafka's ConfigurationUtilsTest reads a file made unreadable). Upstream reported
+     * NoSuchFileException for a read, and failed with a NullPointerException for a write.
+     */
+    public static IOException openFailure(VirtualFile vfile, String path, boolean read, boolean write) {
+        if (read && !vfile.canRead() || write && !vfile.canWrite()) {
+            return new AccessDeniedException(path);
+        }
+        return vfile.exists() ? new IOException() : new NoSuchFileException(path);
     }
 
     @Override

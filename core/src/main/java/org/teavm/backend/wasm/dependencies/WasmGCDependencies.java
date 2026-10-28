@@ -165,6 +165,12 @@ public class WasmGCDependencies {
                 .propagate(1, Fiber.class)
                 .use();
         analyzer.linkMethod(new MethodReference(Fiber.class, "current", Fiber.class)).use();
+        // JSPI mode: FiberJspiIntrinsic passes Fiber.jspiRun to the host, which runs each fiber with it. Linked in
+        // both modes: TeaVM analyzes dependencies before WasmGCTarget.setController, so WasmGCJspi does not know
+        // this build's mode yet (it may still hold the previous build's mode).
+        analyzer.linkMethod(new MethodReference(Fiber.class, "jspiRun", Fiber.class, void.class))
+                .propagate(1, Fiber.class)
+                .use();
         analyzer.linkMethod(new MethodReference(Thread.class, "setCurrentThread", Thread.class,
                 void.class)).use();
 

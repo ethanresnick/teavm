@@ -28,6 +28,7 @@ import org.teavm.classlib.java.net.THttpURLConnection;
 import org.teavm.classlib.java.net.TURL;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
+import org.teavm.jso.JSClass;
 import org.teavm.jso.ajax.XMLHttpRequest;
 import org.teavm.jso.typedarrays.ArrayBuffer;
 import org.teavm.jso.typedarrays.Int8Array;
@@ -65,7 +66,7 @@ public class TXHRURLConnection extends THttpURLConnection {
             return;
         }
 
-        xhr = new XMLHttpRequest();
+        xhr = new HostXhr();
         xhr.open(method, url.toString());
         for (Map.Entry<String, List<String>> entry : getRequestProperties().entrySet()) {
             for (String value : entry.getValue()) {
@@ -236,5 +237,14 @@ public class TXHRURLConnection extends THttpURLConnection {
             outputStream = new ByteArrayOutputStream();
         }
         return outputStream;
+    }
+
+    /**
+     * kafka-wasm patch: the XMLHttpRequest that the host provides for TeaVM alone, as
+     * globalThis.__kafkaWasmXMLHttpRequest (js/xhr-fetch.mjs sets it). Node.js has no XMLHttpRequest, and a global
+     * one would change how other libraries in the same process make HTTP requests.
+     */
+    @JSClass(name = "__kafkaWasmXMLHttpRequest")
+    static class HostXhr extends XMLHttpRequest {
     }
 }

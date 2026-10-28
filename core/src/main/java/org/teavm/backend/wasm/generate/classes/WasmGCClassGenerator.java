@@ -1931,6 +1931,10 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
         body.getLocal(param).cast(classInfo.getType()).setLocal(localVar);
         var suspend = asyncSplitMethods.contains(method.getReference());
         body.getLocal(localVar).call(functionProvider.forInstanceMethod(method.getReference()), suspend);
+        // JSPI mode (WasmGCJspi): no coroutine transformation.
+        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+            return instantiator;
+        }
         if (suspend) {
             var transformation = new CoroutineTransformation(
                     functionTypes,

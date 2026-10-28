@@ -24,10 +24,11 @@ import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 
 public class TThread extends TObject implements TRunnable {
-    private static TThread mainThread = new TThread("main", true);
+    private static TThread liveHead;
+    private static TThread liveTail;
+    private static TThread mainThread = createMainThread();
     private static TThread currentThread = mainThread;
     private static int nextId = 1;
-    private static int activeCount = 1;
     private static UncaughtExceptionHandler defaultUncaughtExceptionHandler = new TDefaultUncaughtExceptionHandler();
     private UncaughtExceptionHandler uncaughtExceptionHandler;
     private long id;
@@ -49,14 +50,26 @@ public class TThread extends TObject implements TRunnable {
      * values by {@link #key}, which exists only then.
      */
     private Object[] inherited;
+    private boolean started;
+    private java.lang.ThreadGroup group;
+    private TThread livePrev;
+    private TThread liveNext;
     // The context class loader once set (null is a valid value); until then, the system loader. A new thread
     // copies both from the thread that creates it, as in the JDK.
     private TClassLoader contextClassLoader;
     private boolean contextClassLoaderSet;
     TRunnable target;
 
+    private static TThread createMainThread() {
+        TThread main = new TThread("main", true);
+        main.alive = true;
+        main.started = true;
+        main.addLive();
+        return main;
+    }
+
     public TThread() {
-        this(null, null);
+        this((TRunnable) null, (String) null);
     }
 
     /**
@@ -72,11 +85,11 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public TThread(String name) {
-        this(null, name);
+        this((TRunnable) null, name);
     }
 
     public TThread(TRunnable target) {
-        this(target, null);
+        this(target, (String) null);
     }
 
     public TThread(TRunnable target, String name) {
@@ -86,10 +99,61 @@ public class TThread extends TObject implements TRunnable {
         // As in the JDK, a new thread takes its creator's context class loader and inheritable thread locals.
         TThread creator = currentThread;
         if (creator != null) {
+            group = creator.group;
             contextClassLoader = creator.contextClassLoader;
             contextClassLoaderSet = creator.contextClassLoaderSet;
             inherited = TInheritableThreadLocal.snapshot();
         }
+    }
+
+    // kafka-wasm patch: ThreadGroup constructors (Netty, Pulsar, and jsr166 thread factories use them).
+    public TThread(java.lang.ThreadGroup group, TRunnable target) {
+        this(target, (String) null);
+        this.group = group;
+    }
+
+    public TThread(java.lang.ThreadGroup group, String name) {
+        this((TRunnable) null, name);
+        this.group = group;
+    }
+
+    public TThread(java.lang.ThreadGroup group, TRunnable target, String name) {
+        this(target, name);
+        this.group = group;
+    }
+
+    public TThread(java.lang.ThreadGroup group, TRunnable target, String name, long stackSize) {
+        this(target, name);
+        this.group = group;
+    }
+
+    public final java.lang.ThreadGroup getThreadGroup() {
+        if (alive || !started) {
+            // kafka-wasm: the constructor copies the creator's group; a thread without one is in the main group.
+            return group != null ? group : ThreadGroupHolder.MAIN;
+        }
+        return null;
+    }
+
+    private static final class ThreadGroupHolder {
+        // The root group: an explicit null parent, because ThreadGroup(String) takes the current thread's group.
+        static final java.lang.ThreadGroup MAIN = new java.lang.ThreadGroup((java.lang.ThreadGroup) null, "main");
+    }
+
+    public enum State {
+        NEW,
+        RUNNABLE,
+        BLOCKED,
+        WAITING,
+        TIMED_WAITING,
+        TERMINATED
+    }
+
+    public State getState() {
+        if (!started) {
+            return State.NEW;
+        }
+        return alive ? State.RUNNABLE : State.TERMINATED;
     }
 
     public void setContextClassLoader(TClassLoader loader) {
@@ -105,7 +169,12 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public void start() {
+        if (started) {
+            throw new IllegalStateException();
+        }
+        started = true;
         alive = true;
+        addLive();
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
             boolean daemon = this.daemon;
             if (!daemon) {
@@ -119,7 +188,6 @@ public class TThread extends TObject implements TRunnable {
 
     private void runThread() {
         try {
-            activeCount++;
             setCurrentThread(TThread.this);
             key = new Object();
             applyInherited();
@@ -127,12 +195,19 @@ public class TThread extends TObject implements TRunnable {
         } catch (Throwable t) {
             getUncaughtExceptionHandler().uncaughtException(this, t);
         } finally {
-            // Clear alive under finishedLock, before the notify, so join() sees both together.
-            synchronized (finishedLock) {
+            // kafka-wasm patch: clear alive under finishedLock, before the notify, so join() sees both together.
+            // An object that was made without a constructor (a mock of a Thread subclass whose start() ran the real
+            // code) has no finishedLock. A NullPointerException here left the runner and ended the process.
+            Object lock = finishedLock;
+            if (lock != null) {
+                synchronized (lock) {
+                    alive = false;
+                    lock.notifyAll();
+                }
+            } else {
                 alive = false;
-                finishedLock.notifyAll();
             }
-            activeCount--;
+            removeLive();
             key = null;
             setCurrentThread(mainThread);
         }
@@ -172,6 +247,9 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public String getName() {
+        if (name == null) {
+            name = "Thread-" + id;
+        }
         return name;
     }
 
@@ -256,9 +334,13 @@ public class TThread extends TObject implements TRunnable {
 
     public void interrupt() {
         interruptedFlag = true;
-        if (interruptHandler != null) {
-            interruptHandler.interrupted();
+        // kafka-wasm patch: clear the field before the handler runs. In coroutine mode the handler can resume
+        // the waiter
+        // synchronously, and the waiter can block again and set a new handler, which a later clear would erase.
+        TThreadInterruptHandler handler = interruptHandler;
+        if (handler != null) {
             interruptHandler = null;
+            handler.interrupted();
         }
     }
 
@@ -284,7 +366,62 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public static int activeCount() {
-        return activeCount;
+        return enumerate(null);
+    }
+
+    /** As in the JDK: copies the live threads in the current thread's group and its subgroups into tarray. */
+    public static int enumerate(TThread[] tarray) {
+        java.lang.ThreadGroup scope = currentThread().getThreadGroup();
+        int n = 0;
+        for (TThread t = liveHead; t != null; t = t.liveNext) {
+            if (tarray != null && n >= tarray.length) {
+                break;
+            }
+            if (scope.parentOf(t.getThreadGroup())) {
+                if (tarray != null) {
+                    tarray[n] = t;
+                }
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /**
+     * As in the JDK, a map from each live thread to its stack. Only the current thread's stack is known, so the
+     * others are empty arrays, which the JDK allows when a stack is not available.
+     */
+    public static java.util.Map<TThread, TStackTraceElement[]> getAllStackTraces() {
+        java.util.Map<TThread, TStackTraceElement[]> result = new java.util.HashMap<>();
+        for (TThread t = liveHead; t != null; t = t.liveNext) {
+            result.put(t, t.getStackTrace());
+        }
+        return result;
+    }
+
+    private void addLive() {
+        livePrev = liveTail;
+        if (liveTail != null) {
+            liveTail.liveNext = this;
+        } else {
+            liveHead = this;
+        }
+        liveTail = this;
+    }
+
+    private void removeLive() {
+        if (livePrev != null) {
+            livePrev.liveNext = liveNext;
+        } else {
+            liveHead = liveNext;
+        }
+        if (liveNext != null) {
+            liveNext.livePrev = livePrev;
+        } else {
+            liveTail = livePrev;
+        }
+        livePrev = null;
+        liveNext = null;
     }
 
     public long getId() {

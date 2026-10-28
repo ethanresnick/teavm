@@ -607,7 +607,30 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     @SuppressWarnings("unused")
     public static TClass<?> forName(TString name, boolean initialize, TClassLoader loader)
             throws TClassNotFoundException {
-        return forName(name);
+        TClass<?> c = loader == null ? TClassLoader.findBootstrapClassOrNull((String) (Object) name)
+                : loader.loadClass((String) (Object) name);
+        // A loader may return a class under another name (an alias); forName rejects it.
+        if (c == null || !c.getName().equals((String) (Object) name)) {
+            throw new TClassNotFoundException();
+        }
+        if (initialize) {
+            c.initialize();
+        }
+        return c;
+    }
+
+    // Used by ReflectionTransformer for a constant name: preserve loader behavior and class-value flow.
+    public static TClass<?> forNameWithClass(TClass<?> cls, boolean initialize, TClassLoader loader)
+            throws TClassNotFoundException {
+        String name = cls.getName();
+        TClass<?> loaded = loader == null ? TClassLoader.findBootstrapClassOrNull(name) : loader.loadClass(name);
+        if (loaded != cls) {
+            throw new TClassNotFoundException();
+        }
+        if (initialize) {
+            cls.initialize();
+        }
+        return cls;
     }
 
     @SuppressWarnings({ "unchecked", "unused" })
@@ -738,10 +761,32 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         return getClassLoader().getResourceAsStream(resolveResourceName(name));
     }
 
+    /**
+     * kafka-wasm patch: TeaVM keeps no generic signature for supertypes, so this returns the raw superclass. That
+     * is exact for a non-generic superclass. For a generic one, the JDK returns a ParameterizedType instead.
+     * Jackson calls this when it resolves a type, for example in {@code JsonNode.toString()}.
+     */
+    public TType getGenericSuperclass() {
+        return getSuperclass();
+    }
+
+    /** kafka-wasm patch: the raw interfaces; see {@link #getGenericSuperclass()}. */
+    public TType[] getGenericInterfaces() {
+        TClass<?>[] interfaces = getInterfaces();
+        TType[] result = new TType[interfaces.length];
+        System.arraycopy(interfaces, 0, result, 0, interfaces.length);
+        return result;
+    }
+
     public TPackage getPackage() {
+        // kafka-wasm patch: upstream kept the last dot, so the name was "a.b." where the JDK gives "a.b". As in the
+        // JDK, an array or a primitive type has no package, and a class in the unnamed package has the package "".
+        if (isArray() || isPrimitive()) {
+            return null;
+        }
         String name = getName();
-        name = name.substring(0, name.lastIndexOf('.') + 1);
-        return TPackage.getPackage(name);
+        int dot = name.lastIndexOf('.');
+        return TPackage.getPackage(dot < 0 ? "" : name.substring(0, dot));
     }
 
     @SuppressWarnings("unchecked")

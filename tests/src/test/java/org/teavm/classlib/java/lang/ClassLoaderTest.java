@@ -17,12 +17,14 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -34,7 +36,6 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -469,5 +470,11 @@ public class ClassLoaderTest {
         Class<?> loaded(String name) {
             return findLoadedClass(name);
         }
+    }
+
+    @Test
+    public void getResourceOfMissingResourceIsNull() {
+        assertNull(ClassLoader.getSystemClassLoader().getResource("non-existent-resource.txt"));
+        assertNull(ClassLoader.getSystemResource("non-existent-resource.txt"));
     }
 }

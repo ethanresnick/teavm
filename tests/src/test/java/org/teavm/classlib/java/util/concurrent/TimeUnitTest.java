@@ -16,8 +16,11 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.math.BigInteger;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
@@ -25,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -204,5 +206,33 @@ public class TimeUnitTest {
             }
         }
         assertThrows(NullPointerException.class, () -> TimeUnit.of(null));
+    }
+
+    @Test
+    public void timedJoinWithZeroTimeoutReturns() throws InterruptedException {
+        Thread target = new Thread(() -> {
+            try {
+                Thread.sleep(60000);
+            } catch (InterruptedException e) {
+                // The test has ended.
+            }
+        });
+        target.start();
+        AtomicBoolean returned = new AtomicBoolean();
+        Thread joiner = new Thread(() -> {
+            try {
+                TimeUnit.SECONDS.timedJoin(target, 0);
+            } catch (InterruptedException e) {
+                return;
+            }
+            returned.set(true);
+        });
+        joiner.start();
+        // Thread.sleep uses no monitor, so a timedJoin that waits forever makes the test fail, not hang.
+        Thread.sleep(1000);
+        boolean done = returned.get();
+        joiner.interrupt();
+        target.interrupt();
+        assertTrue(done, "timedJoin(0) did not return within 1 s");
     }
 }

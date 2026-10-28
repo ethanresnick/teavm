@@ -17,16 +17,17 @@ package org.teavm.classlib.java.lang;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -491,5 +492,33 @@ public class ThreadTest {
         });
         watchdog.start();
         return watchdog;
+    }
+
+    @Test
+    public void threadStates() throws InterruptedException {
+        var thread = new Thread(() -> { });
+        assertEquals(Thread.State.NEW, thread.getState());
+        thread.start();
+        thread.join();
+        assertEquals(Thread.State.TERMINATED, thread.getState());
+        assertEquals(Thread.State.RUNNABLE, Thread.currentThread().getState());
+    }
+
+    @Test
+    public void sleepWithLongMaxValueWaits() throws InterruptedException {
+        var interrupted = new boolean[1];
+        var thread = new Thread(() -> {
+            try {
+                Thread.sleep(Long.MAX_VALUE);
+            } catch (InterruptedException e) {
+                interrupted[0] = true;
+            }
+        });
+        thread.start();
+        Thread.sleep(100);
+        assertTrue(thread.isAlive());
+        thread.interrupt();
+        thread.join(2000);
+        assertTrue(interrupted[0]);
     }
 }

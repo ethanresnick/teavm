@@ -39,12 +39,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -1731,5 +1732,26 @@ public class PatternTest {
         var matcher = Pattern.compile("(.){0,2}+c").matcher("abc");
         assertTrue(matcher.matches());
         assertEquals("b", matcher.group(1));
+    }
+
+    @Test
+    public void countedQuantifierInsideLoop() {
+        assertTrue(Pattern.matches("(?:[a-z]{4})*", "abcdabcd"));
+        assertTrue(Pattern.matches("(?:[a-zA-Z0-9/+]{4})*", "QUJDQUJDQUJD"));
+        assertFalse(Pattern.matches("(?:[a-z]{4})*", "abcdabc"));
+    }
+
+    @Test
+    public void starOverSupplementaryClassDoesNotRecurse() {
+        assertTrue(Pattern.matches("[^-]*", "x".repeat(20000)));
+        assertTrue(Pattern.matches("[\\s\\S]*", "y".repeat(20000)));
+    }
+
+    @Test
+    public void quantifierBeforeDotBacktracks() {
+        var matcher = Pattern.compile(" *.").matcher(" bc");
+        assertTrue(matcher.find());
+        assertEquals(0, matcher.start());
+        assertEquals(2, matcher.end());
     }
 }

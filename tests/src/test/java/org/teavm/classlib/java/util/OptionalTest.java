@@ -16,12 +16,13 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 /*
@@ -93,5 +94,17 @@ public class OptionalTest {
         assertNotEquals(OptionalLong.empty().toString(), OptionalLong.of(0).toString());
         assertNotEquals(OptionalDouble.empty().toString(), OptionalDouble.of(0).toString());
         assertNotEquals(OptionalDouble.empty().toString(), OptionalDouble.of(Double.NaN).toString());
+    }
+
+    @Test
+    public void toStringIsTheJdkOne() {
+        assertEquals("Optional[42]", Optional.of(42).toString());
+        assertEquals("Optional.empty", Optional.empty().toString());
+        assertEquals("OptionalInt[5]", OptionalInt.of(5).toString());
+        assertEquals("OptionalInt.empty", OptionalInt.empty().toString());
+        assertEquals("OptionalLong[6]", OptionalLong.of(6).toString());
+        assertEquals("OptionalLong.empty", OptionalLong.empty().toString());
+        assertEquals("OptionalDouble[1.5]", OptionalDouble.of(1.5).toString());
+        assertEquals("OptionalDouble.empty", OptionalDouble.empty().toString());
     }
 }

@@ -688,4 +688,19 @@ public class ConcurrentHashMapTest {
         view.clear();
         assertTrue(map.isEmpty());
     }
+    @Test
+    public void replaceAllWritesThroughResizeInCallback() {
+        var map = new ConcurrentHashMap<Integer, Integer>();
+        map.put(1, 10);
+        map.replaceAll((key, value) -> {
+            if (key == 1) {
+                for (var i = 2; i < 200; ++i) {
+                    map.put(i, i);
+                }
+                return 99;
+            }
+            return value;
+        });
+        assertEquals((Object) 99, map.get(1));
+    }
 }

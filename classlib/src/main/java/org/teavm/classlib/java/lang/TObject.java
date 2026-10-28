@@ -95,6 +95,10 @@ public class TObject {
     }
 
     static void monitorEnter(TObject o, int count) {
+        // Give other green threads a turn even when this monitor is uncontended.
+        if (TThread.currentThread() != null) {
+            TThread.yield();
+        }
         if (o.monitor == null) {
            createMonitor(o);
         }
@@ -555,6 +559,9 @@ public class TObject {
             // onTimer()), so nothing else marks the listener expired. Without this, the listener stays in the
             // queue, and a later notify() takes it and wakes no thread.
             expired = true;
+            if (currentThread.interruptHandler == this) {
+                currentThread.interruptHandler = null;
+            }
             TThread.setCurrentThread(currentThread);
             monitorEnterWait(obj, lockCount, new AsyncCallback<Void>() {
                 @Override

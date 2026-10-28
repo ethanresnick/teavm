@@ -101,6 +101,18 @@ public class AsyncMethodFinder {
                 }
             }
         }
+        // kafka-wasm guard: TeaVM's Fiber calls these while it suspends or resumes a thread. If one of them
+        // becomes suspendable, resuming pops state that was never saved and the program crashes far from the
+        // cause. Fail the build here instead, with the call chain that made it suspendable.
+        for (String critical : new String[] { "java.lang.Thread.currentThread()Ljava/lang/Thread;" }) {
+            for (MethodReference method : asyncMethods) {
+                if (method.toString().equals(critical)) {
+                    throw new IllegalStateException("[kafka-wasm] " + critical + " became suspendable. Rebuild with "
+                            + "-Dkafkawasm.traceAsync=" + method.getClassName() + "." + method.getName()
+                            + " to see why.");
+                }
+            }
+        }
         for (MethodReference method : asyncMethods) {
             addOverriddenToFamily(method);
         }
@@ -191,6 +203,11 @@ public class AsyncMethodFinder {
 
         if (!asyncMethods.add(methodRef)) {
             return;
+        }
+        // kafka-wasm debugging aid: -Dkafkawasm.traceAsync=<substring> prints why matching methods are async.
+        String trace = System.getProperty("kafkawasm.traceAsync");
+        if (trace != null && methodRef.toString().contains(trace)) {
+            System.err.println("[async] " + methodRef + stack);
         }
         CallGraphNode node = callGraph.getNode(methodRef);
         if (node == null) {

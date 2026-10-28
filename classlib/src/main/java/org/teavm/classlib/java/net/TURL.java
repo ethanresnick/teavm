@@ -145,7 +145,10 @@ public final class TURL implements Serializable {
         try {
             strmHandler.parseURL(this, spec, ++index, spec.length());
         } catch (Exception e) {
-            throw new TMalformedURLException(e.toString());
+            // Preserve the handler failure as the cause.
+            TMalformedURLException malformed = new TMalformedURLException(e.toString());
+            malformed.initCause(e);
+            throw malformed;
         }
 
         if (port < -1) {

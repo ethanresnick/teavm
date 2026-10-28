@@ -19,10 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -30,7 +32,6 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
@@ -613,5 +614,13 @@ public class ArrayBlockingQueueTest {
         // The queue's clock counts whole milliseconds, so a wait can end up to 1 ms short of its timeout.
         assertTrue(elapsedMillis >= expectedMillis - 1, call + " ended after " + elapsedMillis + " ms");
         assertTrue(elapsedMillis < expectedMillis + 2000, call + " ended after " + elapsedMillis + " ms");
+    }
+
+    @Test
+    public void pollWithTimeoutWaits() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        var start = System.nanoTime();
+        assertNull(queue.poll(100, TimeUnit.MILLISECONDS));
+        assertTrue(System.nanoTime() - start >= 100_000_000L);
     }
 }

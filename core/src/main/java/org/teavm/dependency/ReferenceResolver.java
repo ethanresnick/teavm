@@ -389,7 +389,28 @@ public class ReferenceResolver {
         instruction.delete();
     }
 
+    // kafka-wasm patch: when the program has this class (kafka-wasm's emul module), each link error that the
+    // program reaches is also reported to the host before it is thrown, so that a test can fail on one that code
+    // caught and never printed (docs/plans/2026-10-08-test-coverage.md, item B6.1).
+    private static final String LINK_ERROR_REPORTER = "kafkawasm.emul.LinkErrors";
+
     private void emitExceptionThrow(TextLocation location, String exceptionName, String text) {
+        var reporter = classSource.get(LINK_ERROR_REPORTER);
+        if (reporter != null && currentMethod != null && !currentMethod.getClassName().equals(LINK_ERROR_REPORTER)) {
+            var reportVar = program.createVariable();
+            var reportConst = new StringConstantInstruction();
+            reportConst.setConstant(exceptionName + ": " + text + " | in " + currentMethod);
+            reportConst.setReceiver(reportVar);
+            reportConst.setLocation(location);
+            instructionsToAdd.add(reportConst);
+            var reportInsn = new InvokeInstruction();
+            reportInsn.setMethod(new MethodReference(LINK_ERROR_REPORTER, "reached",
+                    ValueType.object("java.lang.String"), ValueType.VOID));
+            reportInsn.setType(InvocationType.SPECIAL);
+            reportInsn.setArguments(reportVar);
+            reportInsn.setLocation(location);
+            instructionsToAdd.add(reportInsn);
+        }
         var exceptionVar = program.createVariable();
         var newExceptionInsn = new ConstructInstruction();
         newExceptionInsn.setType(exceptionName);
@@ -419,13 +440,23 @@ public class ReferenceResolver {
         instructionsToAdd.add(raiseInsn);
     }
 
+    private static final boolean LAZY_LINKING = Boolean.getBoolean("kafkawasm.lazyLinking");
+
     private void reportError(TextLocation location, String message, Object param) {
         var method = currentMethod;
+        boolean warning = LAZY_LINKING && message.endsWith(" was not found");
+        Runnable report = () -> {
+            var callLocation = new CallLocation(method, location);
+            if (warning) {
+                diagnostics.warning(callLocation, message, param);
+            } else {
+                diagnostics.error(callLocation, message, param);
+            }
+        };
         if (usedMethods.contains(method)) {
-            diagnostics.error(new CallLocation(method, location), message, param);
+            report.run();
         } else {
-            pendingErrors.computeIfAbsent(method, k -> new ArrayList<>()).add(() ->
-                    diagnostics.error(new CallLocation(method, location), message, param));
+            pendingErrors.computeIfAbsent(method, k -> new ArrayList<>()).add(report);
         }
     }
 

@@ -181,6 +181,9 @@ class JSClassProcessor {
 
     private void addPreservedMethods(String ifaceName, Set<MethodDescriptor> methods) {
         ClassReader iface = classSource.get(ifaceName);
+        if (iface == null) {
+            return;
+        }
         for (MethodReader method : iface.getMethods()) {
             methods.add(method.getDescriptor());
         }
@@ -712,6 +715,10 @@ class JSClassProcessor {
         cast.setValue(unwrapJavaToJs(cast, cast.getValue()));
 
         ClassReader targetClass = classSource.get(targetClassName);
+        if (targetClass == null) {
+            System.err.println("[kafka-wasm] JSO cast to unresolvable class " + targetClassName);
+            return false;
+        }
         if (targetClass.getAnnotations().get(JSFunctor.class.getName()) == null) {
             if (!strict || isTransparent(targetClassName)) {
                 var assign = new AssignInstruction();

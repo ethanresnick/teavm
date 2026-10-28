@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
+import org.teavm.classlib.PlatformDetector;
 
 @TeaVMTest
 @SuppressWarnings("removal")
@@ -51,7 +52,12 @@ public class AccessControllerTest {
     // is checked based on the security policy currently in effect"; since Java 24 nothing is checked).
     @Test
     public void checkPermissionDeniesNull() {
-        assertThrows(AccessControlException.class, () -> AccessController.checkPermission(null));
+        // kafka-wasm targets Java 21; the test JVM is Java 25, which removed the security policy APIs.
+        if (PlatformDetector.isTeaVM()) {
+            assertThrows(NullPointerException.class, () -> AccessController.checkPermission(null));
+        } else {
+            assertThrows(AccessControlException.class, () -> AccessController.checkPermission(null));
+        }
     }
 
     // Java 21 Javadoc for doPrivileged(PrivilegedExceptionAction): "PrivilegedActionException - if the specified

@@ -916,7 +916,30 @@ abstract class TAbstractCharClass extends TSpecialToken {
                     return row[1];
                 }
             }
+            // kafka-wasm: the JDK finds a block (\p{InX}) with Character.UnicodeBlock.forName, which accepts the
+            // canonical name ("Basic Latin"), the constant name ("BASIC_LATIN"), and the form without spaces
+            // ("BasicLatin"), in any case. This table has only the form without spaces, so log4j's
+            // \P{InBasic_Latin} failed to compile. Blocks therefore also match ignoring case, spaces, underscores,
+            // and hyphens. This accepts a few spellings that the JDK rejects (for example "Basic-Latin").
+            String key = blockKey(name);
+            for (int i = 0; i < contents.length; ++i) {
+                Object[] row = contents[i];
+                boolean block = row[1] instanceof LazyRange || row[1] instanceof LazySpecialsBlock;
+                if (block && key.equals(blockKey((String) row[0]))) {
+                    return row[1];
+                }
+            }
             throw new MissingResourceException("", "", name);
+        }
+        private static String blockKey(String name) {
+            StringBuilder sb = new StringBuilder(name.length());
+            for (int i = 0; i < name.length(); ++i) {
+                char c = name.charAt(i);
+                if (c != ' ' && c != '_' && c != '-') {
+                    sb.append(Character.toUpperCase(c));
+                }
+            }
+            return sb.toString();
         }
     }
 }

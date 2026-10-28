@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -53,7 +55,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -1135,6 +1136,20 @@ public class FilesTest {
             assertEquals("héllo", Files.readString(path));
         } finally {
             Files.deleteIfExists(path);
+        }
+    }
+
+    @Test
+    public void createDirectoriesWithAbsolutePath() throws IOException {
+        var dir = Path.of("test-abs-dirs").toAbsolutePath();
+        var leaf = dir.resolve("a").resolve("b");
+        try {
+            Files.createDirectories(leaf);
+            assertTrue(Files.isDirectory(leaf));
+        } finally {
+            Files.deleteIfExists(leaf);
+            Files.deleteIfExists(dir.resolve("a"));
+            Files.deleteIfExists(dir);
         }
     }
 }

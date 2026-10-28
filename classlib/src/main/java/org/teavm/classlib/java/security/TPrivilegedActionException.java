@@ -29,4 +29,10 @@ public class TPrivilegedActionException extends TException {
     public TException getException() {
         return exception;
     }
+
+    @Override
+    public String toString() {
+        String s = getClass().getName();
+        return exception != null ? s + ": " + exception.toString() : s;
+    }
 }

@@ -19,16 +19,18 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -699,5 +701,19 @@ public class StringTest {
             }
         }
         return sb.append('"').toString();
+    }
+
+    @Test
+    public void utf8DecodingOfTruncatedSequences() {
+        assertEquals("��", new String(new byte[] { (byte) 0xF5, (byte) 0xB0 }, StandardCharsets.UTF_8));
+        assertEquals("�", new String(new byte[] { (byte) 0xE4, (byte) 0xB8 }, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void linesIndentTransform() {
+        assertEquals(List.of("a", "b", "c"), "a\nb\r\nc".lines().collect(Collectors.toList()));
+        assertEquals("  a\n  b\n", "a\nb".indent(2));
+        assertEquals("a\n  b\n", "  a\n    b".indent(-2));
+        assertEquals("xy", "x".transform(s -> s + "y"));
     }
 }

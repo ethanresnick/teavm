@@ -494,7 +494,8 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
             for (var e = head; e != null; e = e.next) {
                 var entry = e.forward == null ? e : e.live();
                 if (!entry.removed) {
-                    entry.value = Objects.requireNonNull(function.apply(entry.key, entry.value));
+                    // The callback can resize the table, so follow any forwarding link after it returns.
+                    entry.setValue(Objects.requireNonNull(function.apply(entry.key, entry.value)));
                 }
             }
         }

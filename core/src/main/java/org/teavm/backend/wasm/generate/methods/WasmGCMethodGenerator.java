@@ -333,6 +333,10 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
     private void generateCustomMethodBody(WasmGCBodyIntrinsic intrinsic, MethodReference method,
             WasmFunction function) {
         intrinsic.apply(method, function);
+        // JSPI mode (WasmGCJspi): a suspension switches stacks, so no function is transformed.
+        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+            return;
+        }
         var isSuspend = asyncMethods.contains(method);
         if (isSuspend) {
             if (coroutineTransformation == null) {
@@ -406,6 +410,14 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         if (!isSuspend) {
             calculateNonNullableVars(nonNullableVars, ast);
         }
+        // The coroutine transformation saves and restores every local, so a suspendable method gets nullable
+        // locals. JSPI mode does not transform, so such a method gets the same non-nullable locals as any other.
+        if (isSuspend && org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+            for (var i = firstVar; i < ast.getVariables().size(); ++i) {
+                nonNullableVars[i] = preciseTypes[i].isArrayUnwrap;
+            }
+            calculateNonNullableVars(nonNullableVars, ast);
+        }
 
         for (var i = firstVar; i < ast.getVariables().size(); ++i) {
             var localVar = ast.getVariables().get(i);
@@ -442,6 +454,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             wrapInitializerFailure(method, function);
         }
 
+        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+            return;
+        }
         if (isSuspend) {
             if (coroutineTransformation == null) {
                 coroutineTransformation = new CoroutineTransformation(functionTypes, this, classInfoProvider);

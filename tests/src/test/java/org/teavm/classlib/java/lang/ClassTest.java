@@ -18,11 +18,13 @@ package org.teavm.classlib.java.lang;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.IOException;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Inherited;
@@ -32,7 +34,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -562,5 +563,34 @@ public class ClassTest {
     }
 
     static class Nested {
+    }
+
+    @Test
+    public void genericSupertypesOfNonGenericClass() {
+        assertEquals(Object.class, ClassTest.class.getGenericSuperclass());
+        assertEquals(0, Runnable.class.getGenericInterfaces().length);
+        assertEquals(Runnable.class, TestObject.class.getGenericInterfaces()[0]);
+    }
+
+    @Test
+    public void packageOfArrayAndPrimitiveIsNull() {
+        assertNull(int[].class.getPackage());
+        assertNull(String[].class.getPackage());
+        assertNull(int.class.getPackage());
+        assertEquals("java.lang", String.class.getPackage().getName());
+        assertEquals("org.teavm.classlib.java.lang", ClassTest.class.getPackage().getName());
+    }
+
+    @Test
+    public void forNameWithBootstrapLoaderFindsOnlyJdkClasses() throws ClassNotFoundException {
+        assertEquals(String.class, Class.forName("java.lang.String", false, null));
+        try {
+            Class.forName(ClassTest.class.getName(), false, null);
+            fail();
+        } catch (ClassNotFoundException e) {
+            // ok
+        }
+        assertEquals(ClassTest.class, Class.forName(ClassTest.class.getName(), false,
+                ClassTest.class.getClassLoader()));
     }
 }

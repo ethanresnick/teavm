@@ -16,12 +16,13 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -86,5 +87,18 @@ public class HashSetTest {
             result.add(element);
         }
         return result;
+    }
+
+    @Test
+    public void iterationOrderIsTheJdkOne() {
+        var set = new HashSet<>(List.of("zeta", "alpha", "kafka", "node-1", "node-2", "node-10", "topic", "b", "aa",
+                "Ab", "BB"));
+        assertEquals(List.of("zeta", "aa", "BB", "Ab", "b", "node-1", "alpha", "kafka", "node-2", "topic", "node-10"),
+                new ArrayList<>(set));
+        var ints = new HashSet<Integer>();
+        for (var i : new int[] { 100, 33, 17, 1 << 16, 65, 3 << 16, 1, 48 }) {
+            ints.add(i);
+        }
+        assertEquals(List.of(48, 33, 17, 65536, 65, 1, 196608, 100), new ArrayList<>(ints));
     }
 }

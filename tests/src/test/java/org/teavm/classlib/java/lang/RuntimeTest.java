@@ -15,10 +15,13 @@
  */
 package org.teavm.classlib.java.lang;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -52,5 +55,25 @@ public class RuntimeTest {
         long max = Runtime.getRuntime().maxMemory();
         assertNotEquals(Long.MAX_VALUE, max);
         assertTrue(max >= Runtime.getRuntime().freeMemory());
+    }
+
+    @Test
+    public void maxMemoryIsPositive() {
+        assertTrue(Runtime.getRuntime().maxMemory() > 0);
+    }
+
+    @Test
+    public void shutdownHooks() {
+        var runtime = Runtime.getRuntime();
+        var hook = new Thread(() -> { });
+        runtime.addShutdownHook(hook);
+        try {
+            runtime.addShutdownHook(hook);
+            fail();
+        } catch (IllegalArgumentException e) {
+            // ok
+        }
+        assertTrue(runtime.removeShutdownHook(hook));
+        assertFalse(runtime.removeShutdownHook(hook));
     }
 }

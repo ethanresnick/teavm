@@ -66,7 +66,7 @@ public class THashSet<E> extends TAbstractSet<E> implements TCloneable, TSeriali
      *            the collection of elements to add.
      */
     public THashSet(TCollection<? extends E> collection) {
-        this(new THashMap<>(collection.size() < 6 ? 11 : collection.size() * 2));
+        this(new THashMap<>(THashMap.capacity(Math.max(collection.size(), 12))));
         for (TIterator<? extends E> iter = collection.iterator(); iter.hasNext();) {
             add(iter.next());
         }

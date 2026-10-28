@@ -202,6 +202,15 @@ public class ReflectionTransformer implements ClassHolderTransformer {
             return;
         }
 
+        // Keep loader validation while carrying the known class into dependency analysis. A bare class
+        // constant is not enough to retain its name metadata or its initializer for a runtime lookup.
+        if (invoke.getMethod().equals(forNameMethod)) {
+            invoke.setMethod(new MethodReference(Class.class, "forNameWithClass", Class.class,
+                    boolean.class, ClassLoader.class, Class.class));
+            invoke.setArguments(representative, invoke.getArguments().get(1), invoke.getArguments().get(2));
+            return;
+        }
+
         InvokeInstruction initInvoke = new InvokeInstruction();
         initInvoke.setLocation(invoke.getLocation());
         initInvoke.setType(InvocationType.SPECIAL);

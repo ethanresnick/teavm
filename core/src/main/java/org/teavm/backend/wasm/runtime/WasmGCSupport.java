@@ -50,7 +50,9 @@ public class WasmGCSupport {
     }
 
     public static void failedInitializer() {
-        throw new NoClassDefFoundError();
+        var error = new NoClassDefFoundError();
+        error.initCause(new ExceptionInInitializerError());
+        throw error;
     }
 
     public static Throwable initializerError(Throwable e) {

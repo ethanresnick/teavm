@@ -701,32 +701,10 @@ public class FileTest {
         if (onWindows) {
             assertTrue(f1.equals(f3), "Files Should Return Equal.");
         } else if (onUnix) {
-            // We can't test it right now, since there are OS with `/` separator but with case-insensitive 
-            // file names. Perhaps, we need to support other ways to detect OS.
-            //assertTrue("Files Should NOT Return Equal.", !f1.equals(f3));
+            // File.equals compares abstract pathnames using platform rules. Opening differently-cased paths
+            // cannot test this: a Unix filesystem can be case-insensitive (for example macOS APFS).
+            assertFalse(f1.equals(f3), "Different Unix pathnames should not compare equal");
         }
-
-        f1 = new File(tempDirectory, "casetest.tmp");
-        f2 = new File(tempDirectory, "CaseTest.tmp");
-        new FileOutputStream(f1).close(); // create the file
-        if (f1.equals(f2)) {
-            try {
-                FileInputStream fis = new FileInputStream(f2);
-                fis.close();
-            } catch (IOException e) {
-                fail("File system is case sensitive");
-            }
-        } else {
-            boolean exception = false;
-            try {
-                FileInputStream fis = new FileInputStream(f2);
-                fis.close();
-            } catch (IOException e) {
-                exception = true;
-            }
-            assertTrue(exception, "File system is case insensitive");
-        }
-        f1.delete();
     }
 
     @Test

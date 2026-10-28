@@ -25,17 +25,45 @@ import org.teavm.classlib.java.lang.TCloneNotSupportedException;
 import org.teavm.classlib.java.lang.TCloneable;
 import org.teavm.classlib.java.lang.TIllegalArgumentException;
 import org.teavm.classlib.java.lang.TIllegalStateException;
+import org.teavm.classlib.java.lang.TNullPointerException;
 import org.teavm.classlib.java.lang.TObject;
 import org.teavm.interop.Rename;
 
+/**
+ * kafka-wasm: the JDK 21 HashMap's iteration order. That order is unspecified, but Kafka's assignors iterate
+ * HashMaps and HashSets to break ties, and their tests expect the JDK's results. This class follows the JDK's rules:
+ * <ul>
+ * <li>A bucket index uses the spread hash {@code h ^ (h >>> 16)}.</li>
+ * <li>put appends a new entry at the tail of its bucket. computeIfAbsent, compute, and merge insert at the head.</li>
+ * <li>A resize doubles the table and splits each bucket into a low and a high bucket, in order.</li>
+ * <li>The table is sized at the first insertion, from the constructor's capacity, or from putAll's pre-size.</li>
+ * <li>A bucket of 8 or more entries in a table of less than 64 buckets resizes the table.</li>
+ * </ul>
+ * One difference stays: the JDK turns a bucket of 8 or more entries in a larger table into a tree, which iterates in
+ * another order. This class keeps the list. Keys with well-spread hashes do not reach 8 entries in one bucket.
+ */
 public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TSerializable {
     transient int elementCount;
     transient HashEntry<K, V>[] elementData;
     transient int modCount;
     private static final int DEFAULT_SIZE = 16;
     private static final float DEFAULT_LOAD_FACTOR = 0.75f;
+    private static final int MAXIMUM_CAPACITY = 1 << 30;
+    // The JDK's TREEIFY_THRESHOLD and MIN_TREEIFY_CAPACITY.
+    private static final int LONG_BUCKET = 8;
+    private static final int MIN_TREE_CAPACITY = 64;
     final float loadFactor;
+    /**
+     * As in the JDK: the size at which the next insertion resizes. Before the first insertion
+     * ({@link #tableUnused}), it holds the initial capacity instead, or 0 for the default capacity.
+     */
     int threshold;
+    /**
+     * The JDK allocates the table at the first insertion, and putAll can still change its size until then. True
+     * until that insertion: elementData is then an empty placeholder of one bucket, and {@link #resize} allocates the
+     * real table.
+     */
+    transient boolean tableUnused;
 
     static class HashEntry<K, V> extends TMapEntry<K, V> {
         final int origKeyHash;
@@ -122,7 +150,7 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
                 throw new TIllegalStateException();
             }
             if (prevEntry == null) {
-                int index = currentEntry.origKeyHash & (associatedMap.elementData.length - 1);
+                int index = associatedMap.indexFor(currentEntry.origKeyHash);
                 associatedMap.elementData[index] = associatedMap.elementData[index].next;
             } else {
                 prevEntry.next = currentEntry.next;
@@ -246,27 +274,18 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
     }
 
     public THashMap() {
-        this(DEFAULT_SIZE);
+        loadFactor = DEFAULT_LOAD_FACTOR;
+        clearTable();
     }
 
     public THashMap(int capacity) {
         this(capacity, DEFAULT_LOAD_FACTOR);
     }
 
-    private static int calculateCapacity(int x) {
-        if (x >= 1 << 30) {
-            return 1 << 30;
-        }
-        if (x == 0) {
-            return 16;
-        }
-        x = x - 1;
-        x |= x >> 1;
-        x |= x >> 2;
-        x |= x >> 4;
-        x |= x >> 8;
-        x |= x >> 16;
-        return x + 1;
+    /** The JDK's tableSizeFor: the smallest power of two at least cap, from 1 to 2^30. */
+    static int tableSizeFor(int cap) {
+        int n = -1 >>> Integer.numberOfLeadingZeros(cap - 1);
+        return n < 0 ? 1 : n >= MAXIMUM_CAPACITY ? MAXIMUM_CAPACITY : n + 1;
     }
 
     /**
@@ -282,19 +301,28 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
      *                less or equal to zero.
      */
     public THashMap(int capacity, float loadFactor) {
-        if (capacity >= 0 && loadFactor > 0) {
-            capacity = calculateCapacity(capacity);
-            elementCount = 0;
-            elementData = newElementArray(capacity);
-            this.loadFactor = loadFactor;
-            computeThreshold();
-        } else {
+        if (capacity < 0 || loadFactor <= 0 || Float.isNaN(loadFactor)) {
             throw new TIllegalArgumentException();
         }
+        this.loadFactor = loadFactor;
+        clearTable();
+        threshold = tableSizeFor(Math.min(capacity, MAXIMUM_CAPACITY));
+    }
+
+    /** The JDK's state before the first insertion: no table, and the default capacity. */
+    private void clearTable() {
+        elementData = newElementArray(1);
+        tableUnused = true;
+        threshold = 0;
+    }
+
+    /** The bucket of a key's raw hash code, as the JDK's {@code (n - 1) & (h ^ (h >>> 16))}. */
+    final int indexFor(int hash) {
+        return (hash ^ (hash >>> 16)) & (elementData.length - 1);
     }
 
     public THashMap(TMap<? extends K, ? extends V> map) {
-        this(calculateCapacity(map.size()));
+        this();
         putAllImpl(map);
     }
 
@@ -311,21 +339,17 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
     @SuppressWarnings("unchecked")
     public TObject clone0() {
         try {
+            // As the JDK: a new table, sized for this map's entries, filled in this map's order.
             THashMap<K, V> map = (THashMap<K, V>) super.clone();
             map.elementCount = 0;
             map.modCount = 0;
-            map.elementData = newElementArray(elementData.length);
-            // Not putAll, which a subclass may override: as in the JDK, clone does not call it.
+            map.clearTable();
             map.putAllImpl(this);
 
             return map;
         } catch (TCloneNotSupportedException e) {
             return null;
         }
-    }
-
-    private void computeThreshold() {
-        threshold = (int) (elementData.length * loadFactor);
     }
 
     @Override
@@ -380,8 +404,7 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
             m = findNullKeyEntry();
         } else {
             int hash = key.hashCode();
-            int index = hash & (elementData.length - 1);
-            m = findNonNullKeyEntry(key, index, hash);
+            m = findNonNullKeyEntry(key, indexFor(hash), hash);
         }
         return m;
     }
@@ -453,26 +476,34 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
     }
 
     private V putImpl(K key, V value) {
-        HashEntry<K, V> entry;
-        if (key == null) {
-            entry = findNullKeyEntry();
-            if (entry == null) {
-                modCount++;
-                entry = createHashedEntry(null, 0, 0);
-                if (++elementCount > threshold) {
-                    rehash();
-                }
+        // kafka-wasm: the JDK's putVal. A new entry goes at the tail of its bucket.
+        int hash = TObjects.hashCode(key);
+        if (tableUnused) {
+            resize();
+        }
+        int index = indexFor(hash);
+        HashEntry<K, V> entry = elementData[index];
+        HashEntry<K, V> last = null;
+        int bucketSize = 0;
+        while (entry != null && !(entry.origKeyHash == hash && (entry.key == key || key != null
+                && key.equals(entry.key)))) {
+            last = entry;
+            entry = entry.next;
+            bucketSize++;
+        }
+        if (entry == null) {
+            modCount++;
+            entry = new HashEntry<>(key, hash);
+            if (last == null) {
+                elementData[index] = entry;
+            } else {
+                last.next = entry;
             }
-        } else {
-            int hash = key.hashCode();
-            int index = hash & (elementData.length - 1);
-            entry = findNonNullKeyEntry(key, index, hash);
-            if (entry == null) {
-                modCount++;
-                entry = createHashedEntry(key, index, hash);
-                if (++elementCount > threshold) {
-                    rehash();
-                }
+            if (bucketSize >= LONG_BUCKET) {
+                longBucket();
+            }
+            if (++elementCount > threshold) {
+                resize();
             }
         }
 
@@ -481,11 +512,11 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
         return result;
     }
 
-    private HashEntry<K, V> createHashedEntry(K key, int index, int hash) {
-        HashEntry<K, V> entry = new HashEntry<>(key, hash);
-        entry.next = elementData[index];
-        elementData[index] = entry;
-        return entry;
+    /** The JDK's treeifyBin, without the tree: a small table grows instead. */
+    final void longBucket() {
+        if (elementData.length < MIN_TREE_CAPACITY) {
+            resize();
+        }
     }
 
     @Override
@@ -495,24 +526,168 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
         }
     }
 
-    // computeIfAbsent, computeIfPresent, compute and merge are Map's default methods, plus the check that the
-    // Javadoc of HashMap requires: "throw a ConcurrentModificationException if it is detected that the
-    // (re)mapping function modifies this map during computation".
+    void putAllImpl(TMap<? extends K, ? extends V> map) {
+        presize(map.size());
+        for (var it = map.entrySet().iterator(); it.hasNext();) {
+            TMap.Entry<? extends K, ? extends V> entry = it.next();
+            putImpl(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /** The first half of the JDK's putMapEntries: size the table for s more entries before adding them. */
+    final void presize(int s) {
+        if (s <= 0) {
+            return;
+        }
+        if (tableUnused) {
+            double dt = Math.ceil(s / (double) loadFactor);
+            int t = dt < (double) MAXIMUM_CAPACITY ? (int) dt : MAXIMUM_CAPACITY;
+            if (t > threshold) {
+                threshold = tableSizeFor(t);
+            }
+        } else {
+            while (s > threshold && elementData.length < MAXIMUM_CAPACITY) {
+                resize();
+            }
+        }
+    }
+
+    /**
+     * The JDK's resize. Before the first insertion, it allocates the table. After it, it doubles the table, and
+     * splits each bucket into the same index and the index plus the old length, keeping the entries' order.
+     */
+    final void resize() {
+        int oldCap = tableUnused ? 0 : elementData.length;
+        int oldThr = threshold;
+        int newCap;
+        int newThr = 0;
+        if (oldCap > 0) {
+            if (oldCap >= MAXIMUM_CAPACITY) {
+                threshold = Integer.MAX_VALUE;
+                return;
+            }
+            newCap = oldCap << 1;
+            if (newCap < MAXIMUM_CAPACITY && oldCap >= DEFAULT_SIZE) {
+                newThr = oldThr << 1;
+            }
+        } else if (oldThr > 0) {
+            newCap = oldThr;
+        } else {
+            newCap = DEFAULT_SIZE;
+            newThr = (int) (DEFAULT_LOAD_FACTOR * DEFAULT_SIZE);
+        }
+        if (newThr == 0) {
+            float ft = (float) newCap * loadFactor;
+            newThr = newCap < MAXIMUM_CAPACITY && ft < (float) MAXIMUM_CAPACITY ? (int) ft : Integer.MAX_VALUE;
+        }
+        threshold = newThr;
+        HashEntry<K, V>[] newData = newElementArray(newCap);
+        if (!tableUnused) {
+            for (int j = 0; j < oldCap; j++) {
+                HashEntry<K, V> entry = elementData[j];
+                HashEntry<K, V> loHead = null;
+                HashEntry<K, V> loTail = null;
+                HashEntry<K, V> hiHead = null;
+                HashEntry<K, V> hiTail = null;
+                while (entry != null) {
+                    HashEntry<K, V> next = entry.next;
+                    int h = entry.origKeyHash;
+                    if (((h ^ (h >>> 16)) & oldCap) == 0) {
+                        if (loTail == null) {
+                            loHead = entry;
+                        } else {
+                            loTail.next = entry;
+                        }
+                        loTail = entry;
+                    } else {
+                        if (hiTail == null) {
+                            hiHead = entry;
+                        } else {
+                            hiTail.next = entry;
+                        }
+                        hiTail = entry;
+                    }
+                    entry = next;
+                }
+                if (loTail != null) {
+                    loTail.next = null;
+                    newData[j] = loHead;
+                }
+                if (hiTail != null) {
+                    hiTail.next = null;
+                    newData[j + oldCap] = hiHead;
+                }
+            }
+        }
+        tableUnused = false;
+        elementData = newData;
+    }
+
+    /**
+     * kafka-wasm: computeIfAbsent, compute, and merge resize before they insert, if the map is over its threshold.
+     * Their insertion does not check the threshold, so the map can stay over it until the next insertion.
+     */
+    private void resizeBeforeCompute() {
+        if (elementCount > threshold || tableUnused) {
+            resize();
+        }
+    }
+
+    private HashEntry<K, V> findInBucket(Object key, int hash, int index) {
+        HashEntry<K, V> e = elementData[index];
+        while (e != null && !(e.origKeyHash == hash && (e.key == key || key != null && key.equals(e.key)))) {
+            e = e.next;
+        }
+        return e;
+    }
+
+    private int bucketSize(int index) {
+        int n = 0;
+        for (HashEntry<K, V> e = elementData[index]; e != null; e = e.next) {
+            n++;
+        }
+        return n;
+    }
+
+    /** The JDK's insertion in computeIfAbsent, compute, and merge: at the head of the bucket. */
+    private void insertAtHead(K key, int hash, int index, V value, int sizeBefore) {
+        HashEntry<K, V> entry = new HashEntry<>(key, hash);
+        entry.value = value;
+        entry.next = elementData[index];
+        elementData[index] = entry;
+        if (sizeBefore >= LONG_BUCKET - 1) {
+            longBucket();
+        }
+        elementCount++;
+    }
 
     @Override
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-        TObjects.requireNonNull(mappingFunction);
-        V v = get(key);
-        if (v != null) {
+        if (mappingFunction == null) {
+            throw new TNullPointerException();
+        }
+        int hash = TObjects.hashCode(key);
+        resizeBeforeCompute();
+        int index = indexFor(hash);
+        HashEntry<K, V> old = findInBucket(key, hash, index);
+        if (old != null && old.value != null) {
+            return old.value;
+        }
+        int sizeBefore = old == null ? bucketSize(index) : 0;
+        int mc = modCount;
+        V v = mappingFunction.apply(key);
+        if (mc != modCount) {
+            throw new TConcurrentModificationException();
+        }
+        if (v == null) {
+            return null;
+        } else if (old != null) {
+            old.value = v;
             return v;
         }
-        int mc = modCount;
-        V newValue = mappingFunction.apply(key);
-        checkModCount(mc);
-        if (newValue != null) {
-            put(key, newValue);
-        }
-        return newValue;
+        insertAtHead(key, hash, index, v, sizeBefore);
+        modCount = mc + 1;
+        return v;
     }
 
     @Override
@@ -533,81 +708,71 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
         return newValue;
     }
 
-    @Override
-    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        TObjects.requireNonNull(remappingFunction);
-        V oldValue = get(key);
-        int mc = modCount;
-        V newValue = remappingFunction.apply(key, oldValue);
-        checkModCount(mc);
-        if (newValue != null) {
-            put(key, newValue);
-        } else {
-            // "If the remapping function returns null, the mapping is removed", also a mapping to null.
-            remove(key);
-        }
-        return newValue;
-    }
-
-    @Override
-    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
-        TObjects.requireNonNull(value);
-        TObjects.requireNonNull(remappingFunction);
-        V oldValue = get(key);
-        V newValue;
-        if (oldValue == null) {
-            newValue = value;
-        } else {
-            int mc = modCount;
-            newValue = remappingFunction.apply(oldValue, value);
-            checkModCount(mc);
-        }
-        if (newValue != null) {
-            put(key, newValue);
-        } else {
-            remove(key);
-        }
-        return newValue;
-    }
-
     private void checkModCount(int expected) {
         if (modCount != expected) {
             throw new TConcurrentModificationException();
         }
     }
 
-    void putAllImpl(TMap<? extends K, ? extends V> map) {
-        int capacity = elementCount + map.size();
-        if (capacity > threshold) {
-            rehash(capacity);
+    @Override
+    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+        if (remappingFunction == null) {
+            throw new TNullPointerException();
         }
-        for (var it = map.entrySet().iterator(); it.hasNext();) {
-            TMap.Entry<? extends K, ? extends V> entry = it.next();
-            putImpl(entry.getKey(), entry.getValue());
+        int hash = TObjects.hashCode(key);
+        resizeBeforeCompute();
+        int index = indexFor(hash);
+        HashEntry<K, V> old = findInBucket(key, hash, index);
+        int sizeBefore = old == null ? bucketSize(index) : 0;
+        V oldValue = old == null ? null : old.value;
+        int mc = modCount;
+        V v = remappingFunction.apply(key, oldValue);
+        if (mc != modCount) {
+            throw new TConcurrentModificationException();
         }
-    }
-
-    void rehash(int capacity) {
-        int length = calculateCapacity(capacity == 0 ? 1 : capacity << 1);
-
-        HashEntry<K, V>[] newData = newElementArray(length);
-        for (int i = 0; i < elementData.length; i++) {
-            HashEntry<K, V> entry = elementData[i];
-            elementData[i] = null;
-            while (entry != null) {
-                int index = entry.origKeyHash & (length - 1);
-                HashEntry<K, V> next = entry.next;
-                entry.next = newData[index];
-                newData[index] = entry;
-                entry = next;
+        if (old != null) {
+            if (v != null) {
+                old.value = v;
+            } else {
+                removeEntry(old);
             }
+        } else if (v != null) {
+            insertAtHead(key, hash, index, v, sizeBefore);
+            modCount = mc + 1;
         }
-        elementData = newData;
-        computeThreshold();
+        return v;
     }
 
-    void rehash() {
-        rehash(elementData.length);
+    @Override
+    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+        if (value == null || remappingFunction == null) {
+            throw new TNullPointerException();
+        }
+        int hash = TObjects.hashCode(key);
+        resizeBeforeCompute();
+        int index = indexFor(hash);
+        HashEntry<K, V> old = findInBucket(key, hash, index);
+        if (old != null) {
+            V v;
+            if (old.value != null) {
+                int mc = modCount;
+                v = remappingFunction.apply(old.value, value);
+                if (mc != modCount) {
+                    throw new TConcurrentModificationException();
+                }
+            } else {
+                v = value;
+            }
+            if (v != null) {
+                old.value = v;
+            } else {
+                removeEntry(old);
+            }
+            return v;
+        }
+        insertAtHead(key, hash, index, value, bucketSize(index));
+        modCount++;
+        return value;
     }
 
     @Override
@@ -620,7 +785,7 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
     }
 
     final void removeEntry(HashEntry<K, V> entry) {
-        int index = entry.origKeyHash & (elementData.length - 1);
+        int index = indexFor(entry.origKeyHash);
         var m = elementData[index];
         if (m == entry) {
             elementData[index] = entry.next;
@@ -640,7 +805,7 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
         HashEntry<K, V> last = null;
         if (key != null) {
             int hash = key.hashCode();
-            index = hash & (elementData.length - 1);
+            index = indexFor(hash);
             entry = elementData[index];
             while (entry != null && !(entry.origKeyHash == hash && areEqualKeys(key, entry.key))) {
                 last = entry;
@@ -745,8 +910,9 @@ public class THashMap<K, V> extends TAbstractMap<K, V> implements TCloneable, TS
         return (key1 == key2) || key1.equals(key2);
     }
 
+    // The JDK's calculateHashMapCapacity.
     static int capacity(int size) {
-        return (int) Math.ceil(size / DEFAULT_LOAD_FACTOR);
+        return (int) Math.ceil(size / (double) DEFAULT_LOAD_FACTOR);
     }
 
     public static <K, V> THashMap<K, V> newHashMap(int size) {

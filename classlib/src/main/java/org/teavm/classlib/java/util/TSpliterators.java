@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.util;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.PrimitiveIterator;
@@ -333,5 +334,61 @@ public class TSpliterators {
                 return characteristics;
             }
         };
+    }
+
+    /**
+     * kafka-wasm: the JDK's base class for a spliterator that defines only tryAdvance (log4j's ServiceLoaderUtil
+     * extends it). As in the JDK, trySplit copies a batch of elements into an array; each batch is 1024 elements
+     * larger than the last, up to 2^25.
+     */
+    public abstract static class AbstractSpliterator<T> implements TSpliterator<T> {
+        static final int BATCH_UNIT = 1 << 10;
+        static final int MAX_BATCH = 1 << 25;
+        private final int characteristics;
+        private long est;
+        private int batch;
+
+        protected AbstractSpliterator(long est, int additionalCharacteristics) {
+            this.est = est;
+            this.characteristics = (additionalCharacteristics & TSpliterator.SIZED) != 0
+                    ? additionalCharacteristics | TSpliterator.SUBSIZED
+                    : additionalCharacteristics;
+        }
+
+        @Override
+        public TSpliterator<T> trySplit() {
+            Object[] holder = new Object[1];
+            long s = est;
+            if (s > 1 && tryAdvance(value -> holder[0] = value)) {
+                int n = batch + BATCH_UNIT;
+                if (n > s) {
+                    n = (int) s;
+                }
+                if (n > MAX_BATCH) {
+                    n = MAX_BATCH;
+                }
+                Object[] a = new Object[n];
+                int j = 0;
+                do {
+                    a[j] = holder[0];
+                } while (++j < n && tryAdvance(value -> holder[0] = value));
+                batch = j;
+                if (est != Long.MAX_VALUE) {
+                    est -= j;
+                }
+                return spliterator(Arrays.copyOf(a, j), characteristics() | TSpliterator.SUBSIZED);
+            }
+            return null;
+        }
+
+        @Override
+        public long estimateSize() {
+            return est;
+        }
+
+        @Override
+        public int characteristics() {
+            return characteristics;
+        }
     }
 }

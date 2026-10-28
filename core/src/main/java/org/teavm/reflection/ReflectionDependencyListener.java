@@ -118,7 +118,7 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
             Annotation[].class);
     private MethodReference getClassAnnotations = new MethodReference(Class.class, "getDeclaredAnnotations",
             Annotation[].class);
-    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, Boolean.class,
+    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, boolean.class,
             ClassLoader.class, Class.class);
     private MethodReference classNewInstance = new MethodReference(Class.class, "newInstance", Object.class);
     private MethodReference forNameShort = new MethodReference(Class.class, "forName", String.class, Class.class);
@@ -215,17 +215,32 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
                 if (reflectionSuppliers.stream().anyMatch(s -> s.isClassFoundByName(reflectionContext, className))) {
                     if (classesFoundByName.add(className)) {
                         agent.linkClass(className);
+                        // kafka-wasm patch: a class found by name after start() must also get name metadata,
+                        // or Class.forName cannot see it at run time, and must flow out of every forName call
+                        // that was reached before it was found. Upstream did both only for classes found
+                        // before start(), and that set is always empty.
+                        markFoundByName(className);
                     }
                 }
             }
         });
 
         if (!classesFoundByName.isEmpty()) {
-            var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
-            getName.getVariable(0).propagate(agent.getType(ValueType.object("java.lang.Class")));
             for (var className : classesFoundByName) {
-                getName.getVariable(0).getClassValueNode().propagate(agent.getType(ValueType.object(className)));
+                markFoundByName(className);
             }
+        }
+    }
+
+    // kafka-wasm patch: the forName calls reached so far, so classes found later can flow out of them.
+    private final List<MethodDependency> reachedForNames = new ArrayList<>();
+
+    private void markFoundByName(String className) {
+        var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));
+        getName.getVariable(0).propagate(agent.getType(ValueType.object("java.lang.Class")));
+        getName.getVariable(0).getClassValueNode().propagate(agent.getType(ValueType.object(className)));
+        for (var forNameMethod : reachedForNames) {
+            forNameMethod.getResult().getClassValueNode().propagate(agent.getType(ValueType.object(className)));
         }
     }
 
@@ -400,6 +415,7 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
                 }
             });
         } else if (method.getReference().equals(forName) || method.getReference().equals(forNameShort)) {
+            reachedForNames.add(method);
             method.getResult().propagate(agent.getType(ValueType.object("java.lang.Class")));
             for (var className : classesFoundByName) {
                 method.getResult().getClassValueNode().propagate(agent.getType(ValueType.object(className)));

@@ -41,6 +41,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.teavm.jso.JSClass;
+import org.teavm.jso.JSObject;
 
 public final class TPattern implements Serializable {
 
@@ -146,6 +148,35 @@ public final class TPattern implements Serializable {
     Map<String, Integer> namedGroups;
 
     /**
+     * kafka-wasm patch (kafka-wasm only, not for upstream): not a JDK flag. {@code compile(text, HOST_REGEXP)} makes
+     * a pattern that the host matches: {@code text} is a JS RegExp in its literal form, {@code /source/flags}.
+     * Nothing is compiled in Java. Each {@link #matcher} call asks the host whether {@code RegExp.prototype.test}
+     * accepts the input, and then returns a matcher of a pattern that matches every input or none, so
+     * {@code matches()}, {@code lookingAt()}, and {@code find()} all give that answer. The npm build uses it for a
+     * consumer's RegExp subscription, so Kafka's {@code SubscriptionState} matches topics with the user's own
+     * RegExp (docs/js-api.md, "Consumer").
+     */
+    static final int HOST_REGEXP = 1 << 30;
+
+    /** For a {@link #HOST_REGEXP} pattern: its text. Null for any other pattern. */
+    private String hostRegExp;
+
+    private static TPattern hostAll;
+    private static TPattern hostNone;
+
+    /**
+     * kafka-wasm patch: the host's RegExp test, {@code globalThis.__kafkaWasmRegExp} (js/host-node.mjs). A
+     * {@code @JSBody} in a class-library source compiles to invalid Wasm, so this is a {@code @JSClass} binding, as
+     * in {@code TXHRURLConnection}.
+     */
+    @JSClass(name = "__kafkaWasmRegExp")
+    static class HostRegExp implements JSObject {
+        static native boolean test(String regexp, String input);
+    }
+
+
+
+    /**
      * Returns a {@link TMatcher} for the {@code Pattern} and a given input. The
      * {@code Matcher} can be used to match the {@code Pattern} against the
      * whole input, find occurrences of the {@code Pattern} in the input, or
@@ -157,6 +188,19 @@ public final class TPattern implements Serializable {
      * @return the resulting {@code Matcher}.
      */
     public TMatcher matcher(CharSequence input) {
+        if (hostRegExp != null) {
+            if (HostRegExp.test(hostRegExp, input.toString())) {
+                if (hostAll == null) {
+                    hostAll = compile("(?s).*");
+                }
+                return hostAll.matcher(input);
+            }
+            if (hostNone == null) {
+                hostNone = compile("(?!)");
+            }
+            return hostNone.matcher(input);
+        }
+
         return new TMatcher(this, input);
     }
 
@@ -243,6 +287,10 @@ public final class TPattern implements Serializable {
      * @return the regular expression.
      */
     public String pattern() {
+        if (hostRegExp != null) {
+            return hostRegExp;
+        }
+
         return source;
     }
 
@@ -299,6 +347,12 @@ public final class TPattern implements Serializable {
         if (pattern == null) {
             throw new NullPointerException("Patter is null");
         }
+        if (flags == HOST_REGEXP) {
+            TPattern p = new TPattern();
+            p.hostRegExp = pattern;
+            p.flags = flags;
+            return p;
+        }
         if ((flags != 0) && ((flags | flagsBitMask) != flagsBitMask)) {
             throw new IllegalArgumentException("");
         }
@@ -338,7 +392,8 @@ public final class TPattern implements Serializable {
         TCharClass auxRange = new TCharClass(hasFlag(TPattern.CASE_INSENSITIVE), hasFlag(TPattern.UNICODE_CASE));
         while (!lexemes.isEmpty()
                 && lexemes.isLetter()
-                && (lexemes.lookAhead() == 0 || lexemes.lookAhead() == TLexer.CHAR_VERTICAL_BAR
+                && ((!lexemes.isNextSpecial() && lexemes.lookAhead() == 0)
+                || lexemes.lookAhead() == TLexer.CHAR_VERTICAL_BAR
                 || lexemes.lookAhead() == TLexer.CHAR_RIGHT_PARENTHESIS)) {
             auxRange.add(lexemes.next());
             if (lexemes.peek() == TLexer.CHAR_VERTICAL_BAR) {

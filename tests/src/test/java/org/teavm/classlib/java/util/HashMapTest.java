@@ -21,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +36,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeMap;
-import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.MapTest2Support;
 import org.teavm.classlib.support.UnmodifiableCollectionTestSupport;
 import org.teavm.junit.TeaVMTest;
@@ -1006,6 +1007,51 @@ public class HashMapTest {
                 return false;
             }
             return key == ((ReusableKey) o).key;
+        }
+    }
+
+    @Test
+    public void iterationOrderIsTheJdkOne() {
+        var map = new HashMap<String, Integer>();
+        for (var key : List.of("zeta", "alpha", "kafka", "node-1", "node-2", "node-10", "topic", "b", "aa", "Ab", "BB")) {
+            map.put(key, 1);
+        }
+        assertEquals(List.of("zeta", "aa", "BB", "Ab", "b", "node-1", "alpha", "kafka", "node-2", "topic", "node-10"),
+                new ArrayList<>(map.keySet()));
+    }
+
+    @Test
+    public void computeIfAbsentAddsAtHeadOfBucket() {
+        // "Aa" and "BB" have the same hash code.
+        var map = new HashMap<String, Integer>();
+        map.computeIfAbsent("q", k -> 1);
+        map.put("Aa", 1);
+        map.computeIfAbsent("BB", k -> 2);
+        assertEquals(List.of("BB", "Aa", "q"), new ArrayList<>(map.keySet()));
+    }
+
+    @Test
+    public void functionThatChangesMapIsDetected() {
+        var map = new HashMap<Integer, Integer>();
+        try {
+            map.computeIfAbsent(1, k -> {
+                map.put(2, 2);
+                return 1;
+            });
+            fail();
+        } catch (ConcurrentModificationException e) {
+            // ok
+        }
+        var other = new HashMap<Integer, Integer>();
+        other.put(5, 5);
+        try {
+            other.compute(1, (k, v) -> {
+                other.put(3, 3);
+                return 1;
+            });
+            fail();
+        } catch (ConcurrentModificationException e) {
+            // ok
         }
     }
 }

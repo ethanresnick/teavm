@@ -115,6 +115,33 @@ public class TRuntime {
         TSystem.loadLibrary(libname);
     }
 
+    public void halt(int status) {
+        exit(status);
+    }
+
+    // kafka-wasm patch: shutdown hooks, which upstream lacks (Kafka's Exit registers them). The hooks are kept
+    // with the JDK's checks, but nothing runs them: the host process ends without a Java shutdown sequence.
+    private final java.util.Set<Thread> shutdownHooks = new java.util.LinkedHashSet<>();
+
+    public void addShutdownHook(Thread hook) {
+        if (hook == null) {
+            throw new NullPointerException();
+        }
+        if (hook.isAlive()) {
+            throw new IllegalArgumentException();
+        }
+        if (!shutdownHooks.add(hook)) {
+            throw new IllegalArgumentException();
+        }
+    }
+
+    public boolean removeShutdownHook(Thread hook) {
+        if (hook == null) {
+            throw new NullPointerException();
+        }
+        return shutdownHooks.remove(hook);
+    }
+
     public static Version version() {
         if (version == null) {
             version = new Version();

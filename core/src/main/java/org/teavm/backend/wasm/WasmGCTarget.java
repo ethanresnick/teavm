@@ -191,6 +191,7 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
         divisionCheckInsertion = new DivisionCheckInsertion(nullCheckFilter::apply);
         this.controller = controller;
         controller.addVirtualMethods(reflection::isVirtual);
+        WasmGCJspi.configure(controller.getProperties());
     }
 
     @Override

@@ -54,6 +54,7 @@ import org.teavm.model.ValueType;
 import org.teavm.reflection.AnnotationGenerationHelper;
 import org.teavm.reflection.ReflectionDependencyListener;
 import org.teavm.runtime.EventQueue;
+import org.teavm.runtime.Fiber;
 import org.teavm.runtime.StringInfo;
 import org.teavm.runtime.heap.Heap;
 import org.teavm.runtime.reflect.AnnotationConstructor;
@@ -105,6 +106,7 @@ public class WasmGCIntrinsics {
         bodyReg.registerIntrinsic(WasmGCSupport.class, new WasmGCStringPoolIntrinsic(ctx.module(), ctx.names()));
         bodyReg.registerIntrinsic(WeakReference.class, new WeakReferenceIntrinsic(ctx));
         bodyReg.registerIntrinsic(EventQueue.class, new EventQueueIntrinsic(ctx));
+        bodyReg.registerIntrinsic(Fiber.class, new FiberJspiIntrinsic(ctx));
     }
 
     private static void fillIntLong(IntrinsicRegistry<WasmGCInlineIntrinsic> reg,

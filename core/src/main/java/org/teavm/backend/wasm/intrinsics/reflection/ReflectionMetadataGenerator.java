@@ -942,6 +942,10 @@ public class ReflectionMetadataGenerator {
             boxIfNecessary(body, method.getResultType());
         }
 
+        // JSPI mode (WasmGCJspi): no coroutine transformation.
+        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+            return function;
+        }
         if (async) {
             var transformation = new CoroutineTransformation(functionTypes, functions, classInfoProvider);
             transformation.transform(function);
@@ -1080,6 +1084,12 @@ public class ReflectionMetadataGenerator {
 
     private void generateGenericType(WasmInstructionBuilder builder, ClassReader contextClass,
             MethodReader contextMethod, GenericValueType type) {
+        if (type == null) {
+            // kafka-wasm patch: a generic signature that names a class missing from the class path parses to
+            // null. Describe it by its erasure (Object) instead of failing the build.
+            generateDerivedClass(builder, ValueType.object("java.lang.Object"));
+            return;
+        }
         if (type.canBeRepresentedAsRaw()) {
             generateDerivedClass(builder, type.asValueType());
         } else if (type instanceof GenericValueType.Object objectType) {
@@ -1135,7 +1145,8 @@ public class ReflectionMetadataGenerator {
                 }
                 contextClass = classes.get(contextClass.getOwnerName());
             }
-            throw new IllegalArgumentException("Unknown type variable: " + typeVar.getName());
+            // An enclosing method type variable may not be available in this reflection context.
+            generateDerivedClass(builder, ValueType.object("java.lang.Object"));
         } else if (type instanceof GenericValueType.Array arrayType) {
             var struct = classInfoProvider.reflectionTypes().genericArrayInfo();
             generateGenericType(builder, contextClass, contextMethod, arrayType.getItemType());

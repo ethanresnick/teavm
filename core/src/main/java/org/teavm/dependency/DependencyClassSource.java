@@ -89,6 +89,17 @@ class DependencyClassSource implements ClassHolderSource {
         var result = cache.get(name);
         if (result == null) {
             var cls = findClass(name);
+            if (cls != null && LAZY_LINKING) {
+                String missing = missingSupertype(cls.getName(), new HashSet<>());
+                if (missing != null) {
+                    // kafka-wasm patch: a class whose superclass or interface is missing cannot be loaded, as
+                    // on a JVM. With lazy linking it counts as missing too, so its uses compile into throws of
+                    // NoClassDefFoundError. Without this, TeaVM reports an error and writes no output.
+                    diagnostics.warning(null, "Class {{c0}} is missing: its supertype {{c1}} was not found",
+                            name, missing);
+                    cls = null;
+                }
+            }
             result = Optional.ofNullable(cls);
             cache.put(name, result);
             if (cls != null) {
@@ -138,6 +149,45 @@ class DependencyClassSource implements ClassHolderSource {
                 });
             }
         }
+    }
+
+    // kafka-wasm patch: see get().
+    private static final boolean LAZY_LINKING = Boolean.getBoolean("kafkawasm.lazyLinking");
+    private final Map<String, Optional<String>> missingSupertypes = new HashMap<>();
+
+    /** The first superclass or interface of a class, transitively, that is not on the class path; or null. */
+    private String missingSupertype(String name, Set<String> visiting) {
+        var known = missingSupertypes.get(name);
+        if (known != null) {
+            return known.orElse(null);
+        }
+        if (!visiting.add(name) || name.startsWith("org.teavm.")) {
+            // TeaVM's own classes are always present when the build is set up right; a missing one (for example
+            // JSObject without teavm-jso) must stay a hard error.
+            return null;
+        }
+        ClassReader cls = innerSource.get(name);
+        if (cls == null) {
+            cls = generatedClasses.get(name);
+        }
+        String result = null;
+        if (cls == null) {
+            result = name;
+        } else {
+            if (cls.getParent() != null) {
+                result = missingSupertype(cls.getParent(), visiting);
+            }
+            if (result == null) {
+                for (String itf : cls.getInterfaces()) {
+                    result = missingSupertype(itf, visiting);
+                    if (result != null) {
+                        break;
+                    }
+                }
+            }
+        }
+        missingSupertypes.put(name, Optional.ofNullable(result));
+        return result;
     }
 
     private ClassHolder findClass(String name) {

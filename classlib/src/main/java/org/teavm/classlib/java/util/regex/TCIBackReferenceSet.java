@@ -98,4 +98,13 @@ class TCIBackReferenceSet extends TJointSet {
         return res;
     }
 
+    /**
+     * kafka-wasm: a back reference can start with any character. The inherited TJointSet.first looked for
+     * children and, finding none, returned false,
+     * so TPattern made the quantifier before this set non-backtracking (TUnifiedQuantifierSet), as for TDotSet.
+     */
+    @Override
+    public boolean first(TAbstractSet set) {
+        return true;
+    }
 }

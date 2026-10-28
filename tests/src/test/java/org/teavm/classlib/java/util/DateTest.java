@@ -16,10 +16,11 @@
 package org.teavm.classlib.java.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Instant;
 import java.util.Date;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -80,5 +81,11 @@ public class DateTest {
         assertThrows(IllegalArgumentException.class, () -> Date.from(Instant.MIN));
         assertThrows(IllegalArgumentException.class, () -> Date.from(Instant.ofEpochMilli(Long.MAX_VALUE)
                 .plusMillis(1)));
+    }
+
+    @Test
+    public void instantConversions() {
+        assertEquals(Instant.ofEpochMilli(1600000000123L), new Date(1600000000123L).toInstant());
+        assertEquals(5, Date.from(Instant.ofEpochMilli(5)).getTime());
     }
 }

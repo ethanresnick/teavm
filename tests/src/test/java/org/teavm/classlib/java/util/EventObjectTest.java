@@ -15,12 +15,15 @@
  */
 package org.teavm.classlib.java.util;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.EventObject;
-import org.junit.jupiter.api.Test;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -80,5 +83,10 @@ public class EventObjectTest {
         void setSourceField(Object source) {
             this.source = source;
         }
+    }
+
+    @Test
+    public void toStringNamesSource() {
+        assertEquals("java.util.EventObject[source=src]", new EventObject("src").toString());
     }
 }

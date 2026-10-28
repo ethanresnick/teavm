@@ -191,12 +191,12 @@ public final class TSystem extends TObject {
             Properties defaults = new Properties();
             defaults.put("java.version", "21");
             // The JDK always defines the vendor, and code reads it without a null check.
-            defaults.put("java.vendor", "TeaVM");
-            defaults.put("java.vm.vendor", "TeaVM");
+            defaults.put("java.vendor", "kafka-wasm");
+            defaults.put("java.vm.vendor", "kafka-wasm");
             defaults.put("os.name", "TeaVM");
             // A JDK always sets os.arch, and libraries read it without a null check. "teavm" names no real CPU, so
             // such libraries take their portable code paths.
-            defaults.put("os.arch", "teavm");
+            defaults.put("os.arch", "wasm32");
             defaults.put("file.separator", VirtualFileSystemProvider.getInstance().isWindows() ? "\\" : "/");
             defaults.put("path.separator", VirtualFileSystemProvider.getInstance().isWindows() ? ";" : ":");
             defaults.put("line.separator", lineSeparator());
@@ -205,11 +205,11 @@ public final class TSystem extends TObject {
             defaults.put("user.home", getHomeDir());
             // More properties that the JDK always defines. Code saves and restores them with System.setProperty,
             // which throws for a null value.
-            defaults.put("java.runtime.name", "TeaVM Runtime Environment");
+            defaults.put("java.runtime.name", "kafka-wasm Runtime Environment");
             defaults.put("java.runtime.version", "21");
             defaults.put("java.specification.version", "21");
             defaults.put("java.specification.name", "Java Platform API Specification");
-            defaults.put("java.vm.name", "TeaVM");
+            defaults.put("java.vm.name", "kafka-wasm");
             defaults.put("java.vm.specification.version", "21");
             defaults.put("java.class.version", "65.0");
             defaults.put("java.class.path", "");
@@ -353,6 +353,13 @@ public final class TSystem extends TObject {
             throw new NullPointerException();
         }
         throw new UnsatisfiedLinkError();
+    }
+
+    public static String mapLibraryName(String libname) {
+        if (libname == null) {
+            throw new NullPointerException();
+        }
+        return "lib" + libname + ".so";
     }
 
     public static String getenv(String name) {

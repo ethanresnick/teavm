@@ -40,6 +40,9 @@ public final class TAccessController {
     // TeaVM has no security manager or policy, so no permission is ever granted. Since JDK 24 the spec
     // says checkPermission always throws AccessControlException; failing closed is the safe choice.
     public static void checkPermission(TPermission permission) {
+        if (permission == null) {
+            throw new NullPointerException();
+        }
         throw new TAccessControlException(null, permission);
     }
 }

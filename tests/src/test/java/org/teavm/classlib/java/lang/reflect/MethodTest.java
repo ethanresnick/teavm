@@ -15,10 +15,14 @@
  */
 package org.teavm.classlib.java.lang.reflect;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+
 import java.io.IOException;
 import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
@@ -34,7 +38,6 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
@@ -590,5 +593,28 @@ public class MethodTest {
             Thread.sleep(1);
             return x;
         }
+    }
+
+    @Test
+    public void defaultMethodToString() throws NoSuchMethodException {
+        Method values = WithDefault.class.getDeclaredMethod("values", String[].class, int.class);
+        Method plain = WithDefault.class.getDeclaredMethod("plain", long[][].class);
+        assertTrue(values.isDefault());
+        assertFalse(plain.isDefault());
+        var prefix = "org.teavm.classlib.java.lang.reflect.MethodTest$WithDefault.";
+        assertEquals("public default int[] " + prefix + "values(java.lang.String[],int) throws java.io.IOException",
+                values.toString());
+        assertEquals("public abstract void " + prefix + "plain(long[][])", plain.toString());
+        assertEquals(values.toString(), values.toGenericString());
+        assertArrayEquals(new Object[] { String[].class, int.class }, values.getGenericParameterTypes());
+    }
+    interface WithDefault {
+        @Reflectable
+        default int[] values(String[] names, int count) throws IOException {
+            return null;
+        }
+
+        @Reflectable
+        void plain(long[][] values);
     }
 }

@@ -18,6 +18,7 @@ package org.teavm.classlib.java.util;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class TLinkedHashMap<K, V> extends THashMap<K, V> implements TSequencedMap<K, V> {
     private boolean accessOrder;
@@ -59,10 +60,7 @@ public class TLinkedHashMap<K, V> extends THashMap<K, V> implements TSequencedMa
 
     @Override
     void putAllImpl(TMap<? extends K, ? extends V> map) {
-        int capacity = elementCount + map.size();
-        if (capacity > threshold) {
-            rehash(capacity);
-        }
+        presize(map.size());
         for (var it = map.entrySet().iterator(); it.hasNext();) {
             var entry = it.next();
             putImpl(entry.getKey(), entry.getValue(), false, accessOrder);
@@ -133,8 +131,7 @@ public class TLinkedHashMap<K, V> extends THashMap<K, V> implements TSequencedMa
             entry = (LinkedHashMapEntry<K, V>) findNullKeyEntry();
         } else {
             int hash = key.hashCode();
-            int index = (hash & 0x7FFFFFFF) % elementData.length;
-            entry = (LinkedHashMapEntry<K, V>) findNonNullKeyEntry(key, index, hash);
+            entry = (LinkedHashMapEntry<K, V>) findNonNullKeyEntry(key, indexFor(hash), hash);
         }
         if (entry == null) {
             return defaultValue;
@@ -174,6 +171,68 @@ public class TLinkedHashMap<K, V> extends THashMap<K, V> implements TSequencedMa
         return entry;
     }
 
+    // kafka-wasm: THashMap's computeIfAbsent, compute, and merge insert into buckets directly, and do not link the
+    // entry. Here they use get, put, and remove, as Map's default methods do.
+
+    @Override
+    public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+        TObjects.requireNonNull(mappingFunction);
+        V v = get(key);
+        if (v != null) {
+            return v;
+        }
+        int mc = modCount;
+        V newValue = mappingFunction.apply(key);
+        checkModCount(mc);
+        if (newValue != null) {
+            put(key, newValue);
+        }
+        return newValue;
+    }
+
+    @Override
+    public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+        TObjects.requireNonNull(remappingFunction);
+        V oldValue = get(key);
+        int mc = modCount;
+        V newValue = remappingFunction.apply(key, oldValue);
+        checkModCount(mc);
+        if (newValue != null) {
+            put(key, newValue);
+        } else {
+            // "If the remapping function returns null, the mapping is removed", also a mapping to null.
+            remove(key);
+        }
+        return newValue;
+    }
+
+    @Override
+    public V merge(K key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+        TObjects.requireNonNull(value);
+        TObjects.requireNonNull(remappingFunction);
+        V oldValue = get(key);
+        V newValue;
+        if (oldValue == null) {
+            newValue = value;
+        } else {
+            int mc = modCount;
+            newValue = remappingFunction.apply(oldValue, value);
+            checkModCount(mc);
+        }
+        if (newValue != null) {
+            put(key, newValue);
+        } else {
+            remove(key);
+        }
+        return newValue;
+    }
+
+    private void checkModCount(int expected) {
+        if (modCount != expected) {
+            throw new TConcurrentModificationException();
+        }
+    }
+
     @Override
     public V put(K key, V value) {
         var oldSize = size();
@@ -193,13 +252,18 @@ public class TLinkedHashMap<K, V> extends THashMap<K, V> implements TSequencedMa
             tail = null;
         }
         int hash = Objects.hashCode(key);
-        int index = (hash & Integer.MAX_VALUE) % elementData.length;
+        // kafka-wasm: THashMap's bucket index and resize (the JDK's). The iteration order is the linked order, so
+        // the bucket order does not matter here, but lookups must use THashMap's index.
+        if (tableUnused) {
+            resize();
+        }
+        int index = indexFor(hash);
         entry = (LinkedHashMapEntry<K, V>) (key != null ? findNonNullKeyEntry(key, index, hash) : findNullKeyEntry());
         if (entry == null) {
             modCount++;
             if (++elementCount > threshold) {
-                rehash();
-                index = (hash & Integer.MAX_VALUE) % elementData.length;
+                resize();
+                index = indexFor(hash);
             }
             entry = (LinkedHashMapEntry<K, V>) createHashedEntry(key, index, hash, first);
         } else if (forceMotion) {
