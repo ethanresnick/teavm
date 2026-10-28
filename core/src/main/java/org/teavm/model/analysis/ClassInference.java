@@ -23,8 +23,11 @@ import com.carrotsearch.hppc.ObjectIntMap;
 import com.carrotsearch.hppc.cursors.IntCursor;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.teavm.common.Graph;
 import org.teavm.common.GraphBuilder;
@@ -80,6 +83,9 @@ public class ClassInference {
     private ValueCast[] casts;
     private int[] exceptions;
     private VirtualCallSite[] virtualCallSites;
+    // What initializing each class can throw. It depends only on dependency information, so it is kept across
+    // the methods that this instance analyzes.
+    private Map<String, Set<String>> initializerExceptions = new HashMap<>();
     private int overflowLimit;
 
     private int[] propagationPath;
@@ -701,6 +707,13 @@ public class ClassInference {
     // backends turn what it throws into the errors of a failed initialization. Dependency analysis has collected
     // what each initializer throws.
     private void propagateInitializerExceptions(String className, BasicBlock block) {
+        for (var exception : initializerExceptions.computeIfAbsent(className, this::collectInitializerExceptions)) {
+            propagateException(exception, block);
+        }
+    }
+
+    private Set<String> collectInitializerExceptions(String className) {
+        var result = new LinkedHashSet<String>();
         ImplicitExceptions.readInitializers(dependencyInfo.getClassSource(), className, clinit -> {
             MethodDependencyInfo clinitDep = dependencyInfo.getMethod(clinit);
             if (clinitDep == null) {
@@ -708,12 +721,12 @@ public class ClassInference {
             }
             for (var thrownType : clinitDep.getThrown().getTypes()) {
                 if (thrownType instanceof ValueType.Object) {
-                    propagateException(((ValueType.Object) thrownType).getClassName(), block);
-                    ImplicitExceptions.readInitializerFailure(hierarchy, thrownType,
-                            error -> propagateException(error, block));
+                    result.add(((ValueType.Object) thrownType).getClassName());
+                    ImplicitExceptions.readInitializerFailure(hierarchy, thrownType, result::add);
                 }
             }
         });
+        return result;
     }
 
     private void propagateException(String thrownTypeName, BasicBlock block) {

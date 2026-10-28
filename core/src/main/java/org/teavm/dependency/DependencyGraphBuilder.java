@@ -189,6 +189,7 @@ class DependencyGraphBuilder {
         private ClassReader[] exceptions;
         private DependencyNode[] vars;
         private MethodDependency method;
+        private DependencyConsumer initializerFailure;
 
         ExceptionConsumer(DependencyAnalyzer analyzer, ClassReader[] exceptions, DependencyNode[] vars,
                 MethodDependency method) {
@@ -196,6 +197,17 @@ class DependencyGraphBuilder {
             this.exceptions = exceptions;
             this.vars = vars;
             this.method = method;
+        }
+
+        // Delivers the errors of a failed initializer, which can occur only when the initializer throws something.
+        // One instance per block, so that a node that several of the block's instructions connect keeps one copy.
+        DependencyConsumer initializerFailure() {
+            if (initializerFailure == null) {
+                ClassHierarchy hierarchy = analyzer.getClassHierarchy();
+                initializerFailure = type -> ImplicitExceptions.readInitializerFailure(hierarchy,
+                        type.getValueType(), error -> consume(analyzer.getClassType(error)));
+            }
+            return initializerFailure;
         }
 
         @Override
@@ -218,19 +230,11 @@ class DependencyGraphBuilder {
     // exception handlers, as the thrown types of an invoked method do. Initializing a class also initializes its
     // superclasses, so their initializers can throw there too.
     private void connectInitializerExceptions(String className) {
-        var handlers = currentExceptionConsumer;
         ImplicitExceptions.readInitializers(dependencyAnalyzer.getClassSource(), className, clinitRef -> {
             MethodDependency clinit = dependencyAnalyzer.linkMethod(clinitRef);
-            clinit.getThrown().addConsumer(handlers);
-            clinit.getThrown().addConsumer(initializerFailureConsumer(handlers));
+            clinit.getThrown().addConsumer(currentExceptionConsumer);
+            clinit.getThrown().addConsumer(currentExceptionConsumer.initializerFailure());
         });
-    }
-
-    // The errors of a failed initializer can occur only when the initializer throws something.
-    private DependencyConsumer initializerFailureConsumer(DependencyConsumer handlers) {
-        ClassHierarchy hierarchy = dependencyAnalyzer.getClassHierarchy();
-        return type -> ImplicitExceptions.readInitializerFailure(hierarchy, type.getValueType(),
-                error -> handlers.consume(dependencyAnalyzer.getClassType(error)));
     }
 
     private AbstractInstructionAnalyzer reader = new AbstractInstructionAnalyzer() {

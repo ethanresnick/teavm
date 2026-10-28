@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import org.teavm.model.BasicBlockReader;
 import org.teavm.model.ClassHierarchy;
-import org.teavm.model.ClassReader;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.FieldReference;
 import org.teavm.model.MethodDescriptor;
@@ -43,8 +42,8 @@ public final class ImplicitExceptions {
     public static final String ARRAY_INDEX_OUT_OF_BOUNDS = ArrayIndexOutOfBoundsException.class.getName();
     public static final String CLASS_CAST = ClassCastException.class.getName();
     public static final String NEGATIVE_ARRAY_SIZE = NegativeArraySizeException.class.getName();
-    public static final String EXCEPTION_IN_INITIALIZER = ExceptionInInitializerError.class.getName();
-    public static final String NO_CLASS_DEF_FOUND = NoClassDefFoundError.class.getName();
+    private static final String EXCEPTION_IN_INITIALIZER = ExceptionInInitializerError.class.getName();
+    private static final String NO_CLASS_DEF_FOUND = NoClassDefFoundError.class.getName();
     private static final MethodDescriptor CLINIT = new MethodDescriptor("<clinit>", void.class);
 
     private ImplicitExceptions() {
@@ -74,7 +73,8 @@ public final class ImplicitExceptions {
      * Passes to the consumer, once each, the classes whose initialization the block's instructions can trigger, as
      * dependency analysis sees them: the owner of a static field, the class of a method that is not called
      * virtually (the backends initialize it on entry to its static methods and constructors), and the class of an
-     * explicit initialization. {@link #readInitializers} adds their superclasses.
+     * explicit initialization. {@link #readInitializers} adds their superclasses. Keep this in line with the
+     * initClass calls of the dependency package's AbstractInstructionAnalyzer and DependencyGraphBuilder.
      */
     public static void readInitializedClasses(BasicBlockReader block, Consumer<String> consumer) {
         var reader = new InitializedClassReader();
@@ -88,12 +88,9 @@ public final class ImplicitExceptions {
      */
     public static void readInitializers(ClassReaderSource classSource, String className,
             Consumer<MethodReference> consumer) {
-        for (ClassReader cls = classSource.get(className); cls != null;
-                cls = cls.getParent() != null ? classSource.get(cls.getParent()) : null) {
-            if (cls.getMethod(CLINIT) != null) {
-                consumer.accept(new MethodReference(cls.getName(), CLINIT));
-            }
-        }
+        classSource.getAncestorClasses(className)
+                .filter(cls -> cls.getMethod(CLINIT) != null)
+                .forEach(cls -> consumer.accept(new MethodReference(cls.getName(), CLINIT)));
     }
 
     /**
