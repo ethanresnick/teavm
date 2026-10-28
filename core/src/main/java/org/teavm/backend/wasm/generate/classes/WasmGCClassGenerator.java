@@ -164,7 +164,7 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
         newArrayGenerator = new WasmGCNewArrayFunctionGenerator(module, functionTypes, this, names, queue);
         reflectionTypes = new ReflectionTypes(names, module, dependencyInfo, classSource, functionTypes, this,
                 functionProvider, metadataRequirements);
-        typeMapper = new WasmGCTypeMapper(classSource, this, functionTypes, reflectionTypes);
+        typeMapper = new WasmGCTypeMapper(classSource, originalClassSource, this, functionTypes, reflectionTypes);
         var customTypeMapperFactoryContext = customTypeMapperFactoryContext();
         typeMapper.setCustomTypeMappers(customTypeMapperFactories.stream()
                 .map(factory -> factory.createTypeMapper(customTypeMapperFactoryContext))

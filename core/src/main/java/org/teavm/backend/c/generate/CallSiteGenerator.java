@@ -97,7 +97,15 @@ public class CallSiteGenerator {
                 }
             }
 
-            String firstHandlerExpr = !callSite.getHandlers().isEmpty()
+            // A handler for a class that is missing from the class path never matches (the class has no instances),
+            // and the class has no C declaration to refer to, so leave it out.
+            var handlers = new ArrayList<ExceptionHandlerDescriptor>(callSite.getHandlers().size());
+            for (var handler : callSite.getHandlers()) {
+                if (handler.getClassName() == null || context.getClassSource().get(handler.getClassName()) != null) {
+                    handlers.add(handler);
+                }
+            }
+            String firstHandlerExpr = !handlers.isEmpty()
                     ? "exceptionHandlers_" + callSitesName + " + " + exceptionHandlers.size()
                     : "NULL";
             writer.println().print("{ ");
@@ -106,11 +114,11 @@ public class CallSiteGenerator {
                     .print(locationIndex >= 0 ? "callSiteLocations_" + callSitesName + " + " + locationIndex : "NULL");
             writer.print(" }");
 
-            for (int i = 0; i < callSite.getHandlers().size(); ++i) {
+            for (int i = 0; i < handlers.size(); ++i) {
                 if (i > 0) {
                     exceptionHandlers.get(exceptionHandlers.size() - 1).nextIndex = exceptionHandlers.size();
                 }
-                exceptionHandlers.add(new HandlerContainer(callSite.getHandlers().get(i)));
+                exceptionHandlers.add(new HandlerContainer(handlers.get(i)));
             }
         }
 
