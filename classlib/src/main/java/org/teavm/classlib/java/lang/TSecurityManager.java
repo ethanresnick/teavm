@@ -21,4 +21,8 @@ public class TSecurityManager {
 
     public TSecurityManager() {
     }
+
+    public TThreadGroup getThreadGroup() {
+        return TThread.currentThread().getThreadGroup();
+    }
 }
