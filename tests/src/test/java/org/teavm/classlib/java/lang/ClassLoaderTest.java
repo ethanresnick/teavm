@@ -35,12 +35,30 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
 @EachTestCompiledSeparately
 public class ClassLoaderTest {
+    @Test
+    public void reflectiveResourceReaderRetainsItsDependencies() throws Exception {
+        var method = ResourceReader.class.getDeclaredMethod("read", String.class);
+        assertEquals("qw", method.invoke(null, "resources-for-test/2"));
+        assertNull(method.invoke(null, "missing-reflective-resource"));
+    }
+
+    public static class ResourceReader {
+        @Reflectable
+        public static String read(String name) throws IOException {
+            try (var stream = ClassLoader.getSystemClassLoader().getResourceAsStream(name)) {
+                return stream != null
+                        ? new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8) : null;
+            }
+        }
+    }
+
     @Test
     public void loadsResources() {
         assertEquals("q", loadResource("1"));

@@ -107,7 +107,6 @@ import org.teavm.backend.c.intrinsic.reflection.StringInfoIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.TypeVariableInfoIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.TypeVariableReferenceIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.WildcardTypeInfoIntrinsic;
-import org.teavm.backend.c.runtime.CResources;
 import org.teavm.backend.c.transform.CFileSystemTransformer;
 import org.teavm.backend.c.transform.ClassInitFailureTransformer;
 import org.teavm.backend.c.transform.ClassLoaderCResourceTransformation;
@@ -392,9 +391,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
 
         dependencyAnalyzer.linkClass(CallSite.class.getName());
         dependencyAnalyzer.linkClass(CallSiteLocation.class.getName());
-
-        dependencyAnalyzer.linkMethod(new MethodReference(CResources.class, "create",
-                String.class, int.class, int.class, CResources.Resource.class)).use();
 
         dependencyAnalyzer.addDependencyListener(new ExceptionHandlingDependencyListener());
         dependencyAnalyzer.addDependencyListener(new StringsDependencyListener());
