@@ -555,6 +555,10 @@ public class TObject {
             // onTimer()), so nothing else marks the listener expired. Without this, the listener stays in the
             // queue, and a later notify() takes it and wakes no thread.
             expired = true;
+            // The completed wait must not retain its object and callback through the thread's interrupt handler.
+            if (currentThread.interruptHandler == this) {
+                currentThread.interruptHandler = null;
+            }
             TThread.setCurrentThread(currentThread);
             monitorEnterWait(obj, lockCount, new AsyncCallback<Void>() {
                 @Override
