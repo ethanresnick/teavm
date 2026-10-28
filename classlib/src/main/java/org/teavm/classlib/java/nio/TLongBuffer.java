@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Address;
 import org.teavm.jso.typedarrays.BigInt64Array;
@@ -42,6 +43,7 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
     }
 
     public static TLongBuffer wrap(long[] array, int offset, int length) {
+        Objects.checkFromIndexSize(offset, length, array.length);
         if (PlatformDetector.isJavaScript()) {
             var result = new TLongBufferOverTypedArray(0, array.length, false, BigInt64Array.fromJavaArray(array),
                     array);
@@ -82,9 +84,7 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
     abstract void putElement(int index, long value);
 
     public TLongBuffer get(long[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
         if (length > remaining()) {
             throw new TBufferUnderflowException();
         }
@@ -94,9 +94,8 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
     }
 
     public TLongBuffer get(int index, long[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        Objects.checkFromIndexSize(index, length, limit());
         getImpl(index, dst, offset, length);
         return this;
     }
@@ -115,9 +114,8 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.limit());
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
@@ -149,9 +147,7 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
         if (remaining() < length) {
             throw new TBufferOverflowException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
         putImpl(position, src, offset, length);
         position += length;
         return this;
@@ -161,9 +157,8 @@ public abstract class TLongBuffer extends TBuffer implements Comparable<TLongBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }

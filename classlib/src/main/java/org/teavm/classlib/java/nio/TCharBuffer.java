@@ -50,9 +50,7 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
     }
 
     public static TCharBuffer wrap(char[] array, int offset, int length) {
-        if (length < 0 || offset < 0 || length + offset > array.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, array.length);
         if (PlatformDetector.isJavaScript()) {
             var result = new TCharBufferOverTypedArray(0, array.length, false, Uint16Array.fromJavaArray(array), array);
             result.position = offset;
@@ -112,9 +110,7 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
     public abstract TCharBuffer put(int index, char c);
 
     public TCharBuffer get(char[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
         if (length > remaining()) {
             throw new TBufferUnderflowException();
         }
@@ -124,9 +120,8 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
     }
 
     public TCharBuffer get(int index, char[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        Objects.checkFromIndexSize(index, length, limit());
         getImpl(index, dst, offset, length);
         return this;
     }
@@ -159,9 +154,8 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.limit());
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
@@ -175,9 +169,7 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
         if (remaining() < length) {
             throw new TBufferOverflowException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
         putImpl(position, src, offset, length);
         position += length;
         return this;
@@ -187,9 +179,8 @@ public abstract class TCharBuffer extends TBuffer implements Comparable<TCharBuf
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }

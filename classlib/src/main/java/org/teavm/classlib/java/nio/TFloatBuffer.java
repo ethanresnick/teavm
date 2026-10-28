@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Address;
 import org.teavm.jso.typedarrays.Float32Array;
@@ -42,6 +43,7 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
     }
 
     public static TFloatBuffer wrap(float[] array, int offset, int length) {
+        Objects.checkFromIndexSize(offset, length, array.length);
         if (PlatformDetector.isJavaScript()) {
             var result = new TFloatBufferOverTypedArray(0, array.length, false, Float32Array.fromJavaArray(array),
                     array);
@@ -82,9 +84,7 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
     abstract void putElement(int index, float value);
 
     public TFloatBuffer get(float[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
         if (length > remaining()) {
             throw new TBufferUnderflowException();
         }
@@ -94,9 +94,8 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
     }
 
     public TFloatBuffer get(int index, float[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        Objects.checkFromIndexSize(index, length, limit());
         getImpl(index, dst, offset, length);
         return this;
     }
@@ -115,9 +114,8 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.limit());
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
@@ -145,9 +143,7 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
         if (remaining() < length) {
             throw new TBufferOverflowException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
         putImpl(position, src, offset, length);
         position += length;
         return this;
@@ -157,9 +153,8 @@ public abstract class TFloatBuffer extends TBuffer implements Comparable<TFloatB
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
