@@ -78,6 +78,7 @@ import org.teavm.ast.TryCatchStatement;
 import org.teavm.ast.UnaryExpr;
 import org.teavm.ast.UnwrapArrayExpr;
 import org.teavm.ast.VariableExpr;
+import org.teavm.ast.VariableNode;
 import org.teavm.ast.WhileStatement;
 import org.teavm.backend.c.analyze.VolatileDefinitionFinder;
 import org.teavm.backend.c.intrinsic.Intrinsic;
@@ -94,6 +95,7 @@ import org.teavm.model.CallLocation;
 import org.teavm.model.ClassReader;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.ElementModifier;
+import org.teavm.model.FieldReader;
 import org.teavm.model.FieldReference;
 import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReader;
@@ -104,6 +106,7 @@ import org.teavm.model.classes.VirtualTable;
 import org.teavm.model.lowlevel.CallSiteDescriptor;
 import org.teavm.model.lowlevel.CallSiteLocation;
 import org.teavm.model.lowlevel.ExceptionHandlerDescriptor;
+import org.teavm.model.util.VariableType;
 import org.teavm.runtime.Allocator;
 import org.teavm.runtime.ExceptionHandling;
 import org.teavm.runtime.RuntimeArray;
@@ -141,6 +144,7 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
     private IntSet spilledVariables = new IntHashSet();
     private int[] maxTemporaryVariableLevel = new int[5];
     private MethodReference callingMethod;
+    private List<VariableNode> variables = Collections.emptyList();
     private IncludeManager includes;
     private boolean end;
     private boolean async;
@@ -187,6 +191,10 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
 
     public IntContainer getSpilledVariables() {
         return spilledVariables;
+    }
+
+    public void setVariables(List<VariableNode> variables) {
+        this.variables = variables;
     }
 
     public void setCallingMethod(MethodReference callingMethod) {
@@ -462,11 +470,60 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         writer.print("(");
         expr.getCondition().acceptVisitor(this);
         writer.print(" ? ");
-        expr.getConsequent().acceptVisitor(this);
+        // Java references map to several C pointer types (void*, TeaVM_Array*, TeaVM_String*, ...),
+        // and C requires both branches of ?: to have compatible pointer types (GCC 15+ rejects
+        // a mismatch). Both branches of a reference conditional are references, so converting
+        // both to void* is always valid.
+        boolean reference = isReference(expr.getConsequent()) || isReference(expr.getAlternative());
+        writeConditionalBranch(expr.getConsequent(), reference);
         writer.print(" : ");
-        expr.getAlternative().acceptVisitor(this);
+        writeConditionalBranch(expr.getAlternative(), reference);
         writer.print(")");
         popLocation(expr.getLocation());
+    }
+
+    private void writeConditionalBranch(Expr expr, boolean reference) {
+        if (reference) {
+            writer.print("(void*) (");
+            expr.acceptVisitor(this);
+            writer.print(")");
+        } else {
+            expr.acceptVisitor(this);
+        }
+    }
+
+    private boolean isReference(Expr expr) {
+        if (expr instanceof ConstantExpr) {
+            Object value = ((ConstantExpr) expr).getValue();
+            return value == null || value instanceof String || value instanceof ValueType;
+        } else if (expr instanceof VariableExpr) {
+            int index = ((VariableExpr) expr).getIndex();
+            if (index < 0 || index >= variables.size()) {
+                return false;
+            }
+            VariableType type = variables.get(index).getType();
+            return type != null && type != VariableType.INT && type != VariableType.LONG
+                    && type != VariableType.FLOAT && type != VariableType.DOUBLE;
+        } else if (expr instanceof InvocationExpr) {
+            return isReference(((InvocationExpr) expr).getMethod().getReturnType());
+        } else if (expr instanceof QualificationExpr) {
+            FieldReader field = context.getClassSource().resolve(((QualificationExpr) expr).getField());
+            return field != null && isReference(field.getType());
+        } else if (expr instanceof SubscriptExpr) {
+            return ((SubscriptExpr) expr).getType() == ArrayType.OBJECT;
+        } else if (expr instanceof CastExpr) {
+            return isReference(((CastExpr) expr).getTarget());
+        } else if (expr instanceof ConditionalExpr) {
+            ConditionalExpr conditional = (ConditionalExpr) expr;
+            return isReference(conditional.getConsequent()) || isReference(conditional.getAlternative());
+        } else {
+            return expr instanceof NewExpr || expr instanceof NewArrayExpr || expr instanceof NewMultiArrayExpr
+                    || expr instanceof ArrayFromDataExpr;
+        }
+    }
+
+    private static boolean isReference(ValueType type) {
+        return type instanceof ValueType.Object || type instanceof ValueType.Array;
     }
 
     @Override
