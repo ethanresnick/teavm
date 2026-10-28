@@ -15,6 +15,7 @@
  */
 package org.teavm.wasm;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -27,6 +28,7 @@ import org.teavm.backend.javascript.JavaScriptTarget;
 import org.teavm.backend.wasm.WasmGCTarget;
 import org.teavm.browserrunner.BrowserRunDescriptor;
 import org.teavm.browserrunner.BrowserRunner;
+import org.teavm.jso.JSObject;
 import org.teavm.tooling.ConsoleTeaVMToolLog;
 import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.vm.TeaVM;
@@ -159,9 +161,28 @@ public class MissingClassTypeTest {
         checkLinkError(LambdaOfMissingInterface.class, "extends " + MISSING_INTERFACE);
     }
 
+    @Test
+    public void javaScriptInterfaceWithMissingParentDoesNotCrash() {
+        assumeTrue(jsNeeded || wasmGCNeeded);
+        for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
+            if (jsNeeded) {
+                checkLinkError(buildVm(new JavaScriptTarget(), ImplementJSInterface.class, level,
+                        "missing-js-parent-js-" + level, "test.js"), MISSING_INTERFACE);
+            }
+            if (wasmGCNeeded) {
+                checkLinkError(buildVm(new WasmGCTarget(), ImplementJSInterface.class, level,
+                        "missing-js-parent-wasm-" + level, "test.wasm"), MISSING_INTERFACE);
+            }
+        }
+    }
+
     private void checkLinkError(Class<?> entry, String expectedMessagePart) {
         var name = entry.getSimpleName() + "-link";
         var vm = buildVm(new WasmGCTarget(), entry, TeaVMOptimizationLevel.SIMPLE, name, "test.wasm");
+        checkLinkError(vm, expectedMessagePart);
+    }
+
+    private void checkLinkError(TeaVM vm, String expectedMessagePart) {
         var log = new StringBuilder();
         TeaVMProblemRenderer.describeProblems(vm, new ConsoleTeaVMToolLog(false) {
             @Override
@@ -342,6 +363,21 @@ public class MissingClassTypeTest {
 
     public interface MissingInterface {
         void run();
+    }
+
+    public interface JSInterfaceWithMissingParent extends JSObject, MissingInterface {
+    }
+
+    public static class JSImplementation implements JSInterfaceWithMissingParent {
+        @Override
+        public void run() {
+        }
+    }
+
+    public static class ImplementJSInterface {
+        public static void main(String[] args) {
+            Sinks.objectSink = new JSImplementation();
+        }
     }
 
     public static class SubOfMissing extends MissingException {
