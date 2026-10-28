@@ -160,6 +160,7 @@ import org.teavm.model.transformation.ClassPatch;
 import org.teavm.model.transformation.DivisionCheckInsertion;
 import org.teavm.model.transformation.NullCheckInsertion;
 import org.teavm.model.util.AsyncMethodFinder;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.model.util.DefaultVariableCategoryProvider;
 import org.teavm.model.util.VariableCategoryProvider;
 import org.teavm.reflection.AnnotationGenerationHelper;
@@ -348,6 +349,8 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         dependencyAnalyzer.linkMethod(new MethodReference(ExceptionHandling.class, "throwArithmeticException",
                 void.class)).use();
         DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
+        dependencyAnalyzer.addDependencyListener(new ClassInitializationErrorDependencyListener(
+                ClassInitializationErrorDependencyListener.Backend.C));
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.MARK_FAILED).use();
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.INITIALIZER_ERROR)
                 .propagateClass(1, Throwable.class.getName())
@@ -432,7 +435,8 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     public void afterOptimizations(Program program, MethodReader method) {
         classInitializerEliminator.apply(program);
         if (isDynamicInitializer(method)) {
-            new ClassInitFailureTransformer().apply(program);
+            new ClassInitFailureTransformer().apply(program, ClassInitializationErrorDependencyListener.canFail(
+                    controller.getDependencyInfo(), method.getOwnerName()));
         }
         if (characteristics.isManaged(method.getReference())) {
             new CoroutineTransformation(controller.getUnprocessedClassSource(), asyncMethods, hasThreads)

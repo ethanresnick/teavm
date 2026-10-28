@@ -61,6 +61,7 @@ import org.teavm.model.classes.VirtualTable;
 import org.teavm.model.classes.VirtualTableEntry;
 import org.teavm.model.lowlevel.CallSiteDescriptor;
 import org.teavm.model.lowlevel.Characteristics;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.model.util.ReflectionUtil;
 import org.teavm.reflection.AnnotationGenerationHelper;
 import org.teavm.reflection.ReflectionDependencyListener;
@@ -448,7 +449,13 @@ public class ClassGenerator {
         codeWriter.print("TeaVM_Class* cls = (TeaVM_Class*) &").print(classInstanceName).println(";");
         codeWriter.println("if (!(cls->flags & INT32_C(" + RuntimeClass.INITIALIZED + "))) {").indent();
         codeWriter.println("if (cls->flags & INT32_C(" + RuntimeClass.INITIALIZATION_FAILED + ")) {").indent();
-        codeWriter.println("teavm_throwNoClassDefFoundError();");
+        if (ClassInitializationErrorDependencyListener.canFail(context.getDependencies(), cls.getName())) {
+            var fail = ClassInitializationErrorDependencyListener.FAIL_C;
+            includes.includeClass(fail.getClassName());
+            codeWriter.print(context.getNames().forMethod(fail)).println("(cls);");
+        } else {
+            codeWriter.println("teavm_throwNoClassDefFoundError();");
+        }
         codeWriter.println("return;");
         codeWriter.outdent().println("}");
         codeWriter.println("cls->flags |= INT32_C(" + RuntimeClass.INITIALIZED + ");");

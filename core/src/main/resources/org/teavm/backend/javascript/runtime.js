@@ -199,3 +199,11 @@ let $rt_classReflectionMetadata = (cls) => {
     }
     return cls[$rt_meta].reflection;
 }
+
+let $rt_saveClinitError = err => teavm_javaConstructor("java.lang.ExceptionInInitializerError",
+    "(Ljava/lang/Throwable;)V")($rt_wrapException(err));
+let $rt_failedClinitCause = cause => {
+    let error = teavm_javaConstructor("java.lang.NoClassDefFoundError", "()V")();
+    teavm_javaMethod("java.lang.Throwable", "initCause(Ljava/lang/Throwable;)Ljava/lang/Throwable;")(error, cause);
+    $rt_throw(error);
+};

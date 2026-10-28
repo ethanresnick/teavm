@@ -257,4 +257,6 @@ public final class ExceptionHandling {
 
         return target;
     }
+    // Same marker as above, with a saved cause for subsequent uses of the class.
+    public static native void markInitializerFailed(Throwable original);
 }

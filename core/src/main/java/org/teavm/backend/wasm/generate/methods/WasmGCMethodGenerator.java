@@ -40,6 +40,7 @@ import org.teavm.backend.wasm.generate.strings.WasmGCStringProvider;
 import org.teavm.backend.wasm.intrinsics.WasmGCBodyIntrinsic;
 import org.teavm.backend.wasm.intrinsics.WasmGCInlineIntrinsic;
 import org.teavm.backend.wasm.model.WasmFunction;
+import org.teavm.backend.wasm.model.WasmGlobal;
 import org.teavm.backend.wasm.model.WasmLocal;
 import org.teavm.backend.wasm.model.WasmModule;
 import org.teavm.backend.wasm.model.WasmType;
@@ -52,6 +53,7 @@ import org.teavm.backend.wasm.model.instruction.WasmIntBinaryOperation;
 import org.teavm.backend.wasm.model.instruction.WasmIntType;
 import org.teavm.backend.wasm.model.instruction.WasmIntUnaryOperation;
 import org.teavm.backend.wasm.model.instruction.WasmNullCondition;
+import org.teavm.backend.wasm.model.instruction.WasmNullConstant;
 import org.teavm.backend.wasm.model.instruction.WasmUnreachable;
 import org.teavm.backend.wasm.runtime.WasmGCSupport;
 import org.teavm.backend.wasm.transformation.CoroutineTransformation;
@@ -78,6 +80,7 @@ import org.teavm.model.ValueType;
 import org.teavm.model.Variable;
 import org.teavm.model.analysis.ClassInitializerInfo;
 import org.teavm.model.instructions.NullConstantInstruction;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.model.util.InstructionVariableMapper;
 import org.teavm.model.util.RegisterAllocator;
@@ -636,8 +639,17 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         tryCatch.getCatches().add(new WasmCatchClause(exceptionTag, false, catchBlock.list));
         catchBlock.return_();
 
-        var failedInitializer = forStaticMethod(FAILED_INITIALIZER);
-        failedInitializer.setReferenced(true);
+        WasmFunction failedInitializer;
+        if (ClassInitializationErrorDependencyListener.canFail(dependency, method.getOwnerName())) {
+            var error = new WasmLocal(throwableType, "initError");
+            function.add(error);
+            body.teeLocal(error);
+            failedInitializer = saveInitializerFailure(method, body, throwableType);
+            body.getLocal(error);
+        } else {
+            failedInitializer = forStaticMethod(FAILED_INITIALIZER);
+            failedInitializer.setReferenced(true);
+        }
         body.funcRef(failedInitializer).setGlobal(classInfo.getInitializerPointer());
         if (classInfoStruct.initializerIndex() >= 0) {
             body
@@ -696,8 +708,14 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         setInitializerPointer(method, catchBlock, getDummyInitializer());
         catchBlock.breakTo(ended);
         ended.setLocal(error);
-        var failedInitializer = forStaticMethod(FAILED_INITIALIZER);
-        failedInitializer.setReferenced(true);
+        WasmFunction failedInitializer;
+        if (ClassInitializationErrorDependencyListener.canFail(dependency, method.getOwnerName())) {
+            ended.getLocal(error);
+            failedInitializer = saveInitializerFailure(method, ended, throwableType);
+        } else {
+            failedInitializer = forStaticMethod(FAILED_INITIALIZER);
+            failedInitializer.setReferenced(true);
+        }
         setInitializerPointer(method, ended, failedInitializer);
 
         body
@@ -709,6 +727,23 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
                 .nullBranch(WasmNullCondition.NULL, normal)
                 .call(forStaticMethod(INITIALIZER_ERROR))
                 .throw_(exceptionTag);
+    }
+
+    // Consumes the original throwable and saves one EIIE in a GC-rooted global. The zero-argument thunk matches
+    // both direct and reflective initializer pointers and allocates a fresh NCDFE on every later use.
+    private WasmFunction saveInitializerFailure(MethodReader method, WasmInstructionBuilder body,
+            WasmType.Reference throwableType) {
+        var saved = new WasmGlobal(names.topLevel(method.getOwnerName() + "@initError"), throwableType);
+        saved.getInitialValue().add(new WasmNullConstant(throwableType));
+        module.globals.add(saved);
+        body.call(forStaticMethod(ClassInitializationErrorDependencyListener.WRAP)).setGlobal(saved);
+        var failed = new WasmFunction(functionTypes.of(null));
+        failed.setName(names.topLevel(method.getOwnerName() + "@failedInitializer"));
+        failed.setReferenced(true);
+        module.functions.add(failed);
+        failed.getBody().builder().getGlobal(saved)
+                .call(forStaticMethod(ClassInitializationErrorDependencyListener.FAIL));
+        return failed;
     }
 
     private void setInitializerPointer(MethodReader method, WasmInstructionBuilder body, WasmFunction initializer) {

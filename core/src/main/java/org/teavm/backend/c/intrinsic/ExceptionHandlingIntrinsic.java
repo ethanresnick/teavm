@@ -18,6 +18,7 @@ package org.teavm.backend.c.intrinsic;
 import org.teavm.ast.InvocationExpr;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.runtime.ExceptionHandling;
 import org.teavm.runtime.RuntimeClass;
 
@@ -77,8 +78,20 @@ public class ExceptionHandlingIntrinsic implements Intrinsic {
                 var className = context.callingMethod().getClassName();
                 context.includes().includeClass(className);
                 var cls = "((TeaVM_Class*) &" + context.names().forClassInstance(ValueType.object(className)) + ")";
+                var saveCause = invocation.getMethod().parameterCount() != 0;
+                if (saveCause) {
+                    context.writer().print("(");
+                }
                 context.writer().print(cls + "->flags = (" + cls + "->flags & ~INT32_C(" + RuntimeClass.INITIALIZED
                         + ")) | INT32_C(" + RuntimeClass.INITIALIZATION_FAILED + ")");
+                if (saveCause) {
+                    var save = ClassInitializationErrorDependencyListener.SAVE_C;
+                    context.includes().includeClass(save.getClassName());
+                    context.writer().print(", ").print(context.names().forMethod(save))
+                            .print("(").print(cls).print(", ");
+                    context.emit(invocation.getArguments().get(0));
+                    context.writer().print("))");
+                }
                 break;
             }
         }

@@ -24,6 +24,7 @@ import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.JumpInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
 import org.teavm.model.util.BasicBlockMapper;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.runtime.ExceptionHandling;
 
 // When a class initializer throws, the class must not stay initialized (JLS 12.4.2). The body of <clinit>
@@ -35,7 +36,7 @@ public class ClassInitFailureTransformer {
     public static final MethodReference INITIALIZER_ERROR = new MethodReference(ExceptionHandling.class,
             "initializerError", Throwable.class, Throwable.class);
 
-    public void apply(Program program) {
+    public void apply(Program program, boolean saveCause) {
         var firstBlockReplacement = program.createBasicBlock();
         var firstBlock = program.basicBlockAt(0);
         while (firstBlock.getFirstInstruction() != null) {
@@ -51,7 +52,10 @@ public class ClassInitFailureTransformer {
         handler.setExceptionVariable(program.createVariable());
         var markFailed = new InvokeInstruction();
         markFailed.setType(InvocationType.SPECIAL);
-        markFailed.setMethod(MARK_FAILED);
+        markFailed.setMethod(saveCause ? ClassInitializationErrorDependencyListener.MARK_CAUSE : MARK_FAILED);
+        if (saveCause) {
+            markFailed.setArguments(handler.getExceptionVariable());
+        }
         handler.add(markFailed);
         var error = new InvokeInstruction();
         error.setType(InvocationType.SPECIAL);

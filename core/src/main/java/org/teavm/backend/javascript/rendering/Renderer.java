@@ -66,6 +66,7 @@ import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
 import org.teavm.model.analysis.ClassMetadataRequirements;
 import org.teavm.model.util.AsyncMethodFinder;
+import org.teavm.model.util.ClassInitializationErrorDependencyListener;
 import org.teavm.model.util.ClassInitializationLockDependencyListener;
 import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.RenderingException;
@@ -434,8 +435,15 @@ public class Renderer implements RenderingManager {
                 .append("();").softNewLine();
         writer.outdent().append("}").ws().append("catch").ws().append("($$e)").ws().append("{").indent()
                 .softNewLine();
-        writer.appendClassInit(cls.getName()).ws().append("=").ws().appendFunction("$rt_failedClinit")
-                .append(";").softNewLine();
+        if (ClassInitializationErrorDependencyListener.canFail(context.getDependencyInfo(), cls.getName())) {
+            writer.append("let $cause").ws().append("=").ws().appendFunction("$rt_saveClinitError")
+                    .append("($$e);").softNewLine();
+            writer.appendClassInit(cls.getName()).ws().append("=").ws().append("()").ws().append("=>").ws()
+                    .appendFunction("$rt_failedClinitCause").append("($cause);").softNewLine();
+        } else {
+            writer.appendClassInit(cls.getName()).ws().append("=").ws().appendFunction("$rt_failedClinit")
+                    .append(";").softNewLine();
+        }
         writer.append("throw ").appendFunction("$rt_clinitError").append("($$e);").softNewLine();
         writer.outdent().append("}").softNewLine();
 
@@ -450,6 +458,11 @@ public class Renderer implements RenderingManager {
         var ptr = context.pointerName();
         var stateField = new FieldReference(cls.getName(), "$_teavm_clinitState_$");
         writer.startVariableDeclaration().appendStaticField(stateField).append("0").endDeclaration();
+        FieldReference errorField = null;
+        if (ClassInitializationErrorDependencyListener.canFail(context.getDependencyInfo(), cls.getName())) {
+            errorField = new FieldReference(cls.getName(), "$_teavm_clinitError_$");
+            writer.startVariableDeclaration().appendStaticField(errorField).append("null").endDeclaration();
+        }
 
         writer.startVariableDeclaration().appendClassInit(cls.getName());
         writer.append("()").sameLineWs().append("=>").ws().append("{").softNewLine().indent();
@@ -464,7 +477,7 @@ public class Renderer implements RenderingManager {
         writer.append(ptr).ws().append("=").ws().append("$T.pop();").softNewLine();
         // A space, not ws(): the minified output drops ws(), and "elseif" is not JavaScript
         writer.outdent().append("}").ws().append("else ");
-        renderReturnIfInitialized(stateField);
+        renderReturnIfInitialized(stateField, errorField);
 
         renderAsyncPrologue(writer, context);
 
@@ -475,7 +488,7 @@ public class Renderer implements RenderingManager {
         renderBreakIfSuspending();
         writer.append("if").ws().append("($initState").ws().append("===").ws()
                 .append(String.valueOf(ClassInitializationLock.WAITED)).append(")").ws();
-        renderReturnIfInitialized(stateField);
+        renderReturnIfInitialized(stateField, errorField);
         writer.append("if").ws().append("($initState").ws().append("===").ws()
                 .append(String.valueOf(ClassInitializationLock.RECURSIVE)).append(")").ws().append("return;")
                 .softNewLine();
@@ -487,6 +500,10 @@ public class Renderer implements RenderingManager {
                 .append("();").softNewLine();
         writer.outdent().append("}").ws().append("catch").ws().append("($$e)").ws().append("{").indent()
                 .softNewLine();
+        if (errorField != null) {
+            writer.appendStaticField(errorField).ws().append("=").ws().appendFunction("$rt_saveClinitError")
+                    .append("($$e);").softNewLine();
+        }
         writer.appendStaticField(stateField).ws().append("=").ws().append("2;").softNewLine();
         writer.append("$initError").ws().append("=").ws().append("$$e;").softNewLine();
         writer.outdent().append("}").softNewLine();
@@ -514,11 +531,16 @@ public class Renderer implements RenderingManager {
     }
 
     // Returns when the initializer ended, and throws NoClassDefFoundError when it failed
-    private void renderReturnIfInitialized(FieldReference stateField) {
+    private void renderReturnIfInitialized(FieldReference stateField, FieldReference errorField) {
         writer.append("if").ws().append("(").appendStaticField(stateField).ws().append("!==").ws().append("0)")
                 .ws().append("{").indent().softNewLine();
-        writer.append("if").ws().append("(").appendStaticField(stateField).ws().append("===").ws().append("2)")
-                .ws().appendFunction("$rt_failedClinit").append("();").softNewLine();
+        writer.append("if").ws().append("(").appendStaticField(stateField).ws().append("===").ws().append("2)").ws();
+        if (errorField != null) {
+            writer.appendFunction("$rt_failedClinitCause").append("(").appendStaticField(errorField).append(");")
+                    .softNewLine();
+        } else {
+            writer.appendFunction("$rt_failedClinit").append("();").softNewLine();
+        }
         writer.append("return;").softNewLine();
         writer.outdent().append("}").softNewLine();
     }

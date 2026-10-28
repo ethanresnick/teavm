@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -1825,5 +1827,128 @@ public class VMTest {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // HotSpot retains a diagnostic copy rather than the original throwable. TeaVM has no unloading class
+    // loaders, so its saved EIIE keeps the original and has no diagnostic message or thread-name suffix.
+    @Test
+    @SkipJVM
+    public void failedInitializerCauseIsSharedAcrossLaterUses() throws ClassNotFoundException {
+        var original = new InitCauseFailure();
+        InitCauseState.original = original;
+        var first = assertThrows(ExceptionInInitializerError.class, CauseInitializer::value);
+        assertSame(original, first.getCause());
+        var second = assertThrows(NoClassDefFoundError.class, CauseInitializer::value);
+        var third = assertThrows(NoClassDefFoundError.class, CauseInitializer::value);
+        checkInitializerCause(second, original);
+        checkInitializerCause(third, original);
+        assertNotSame(second, third);
+        assertSame(second.getCause(), third.getCause());
+        var reflected = assertThrows(NoClassDefFoundError.class,
+                () -> Class.forName(CauseInitializer.class.getName()));
+        checkInitializerCause(reflected, original);
+        assertSame(second.getCause(), reflected.getCause());
+    }
+
+    @Test
+    @SkipJVM
+    public void failedInitializerCauseReachesLaterThread() throws InterruptedException {
+        var original = new InitCauseFailure();
+        InitCauseState.original = original;
+        assertThrows(ExceptionInInitializerError.class, CauseInitializer::value);
+        var errors = new NoClassDefFoundError[1];
+        var thread = new Thread(() -> errors[0] = assertThrows(NoClassDefFoundError.class, CauseInitializer::value));
+        thread.start();
+        thread.join();
+        checkInitializerCause(errors[0], original);
+    }
+
+    @Test
+    @SkipJVM
+    public void failedInitializerCauseWrapsOriginalError() {
+        var original = new AssertionError("original");
+        InitCauseState.original = original;
+        assertSame(original, assertThrows(AssertionError.class, CauseInitializer::value));
+        var error = assertThrows(NoClassDefFoundError.class, CauseInitializer::value);
+        checkInitializerCause(error, original);
+    }
+
+    @Test
+    @SkipJVM
+    @SkipPlatform(TestPlatform.C) // C does not support suspending class initializers.
+    public void failedInitializerCauseReachesWaitingThread() throws InterruptedException {
+        var original = new InitCauseFailure();
+        InitCauseState.original = original;
+        var first = new Throwable[1];
+        var later = new NoClassDefFoundError[1];
+        var initializer = new Thread(() -> first[0] = assertThrows(ExceptionInInitializerError.class,
+                AsyncCauseInitializer::value));
+        initializer.start();
+        while (!InitCauseState.entered) {
+            Thread.sleep(1);
+        }
+        var waiter = new Thread(() -> later[0] = assertThrows(NoClassDefFoundError.class,
+                AsyncCauseInitializer::value));
+        waiter.start();
+        Thread.sleep(30);
+        assertTrue(waiter.isAlive());
+        InitCauseState.release = true;
+        initializer.join();
+        waiter.join();
+        assertSame(original, first[0].getCause());
+        checkInitializerCause(later[0], original);
+        var again = assertThrows(NoClassDefFoundError.class, AsyncCauseInitializer::value);
+        assertSame(later[0].getCause(), again.getCause());
+    }
+
+    private static void checkInitializerCause(NoClassDefFoundError error, Throwable original) {
+        assertNotNull(error);
+        assertNull(error.getMessage());
+        assertTrue(error.getCause() instanceof ExceptionInInitializerError);
+        var saved = (ExceptionInInitializerError) error.getCause();
+        assertNull(saved.getMessage());
+        assertSame(original, saved.getCause());
+        assertSame(original, saved.getException());
+    }
+
+    static class InitCauseFailure extends RuntimeException {
+    }
+
+    static class InitCauseState {
+        static Throwable original;
+        static boolean entered;
+        static boolean release;
+    }
+
+    static class CauseInitializer {
+        static final int VALUE = failWithOriginal();
+
+        static int value() {
+            return VALUE;
+        }
+    }
+
+    static class AsyncCauseInitializer {
+        static final int VALUE = initialize();
+
+        static int initialize() {
+            InitCauseState.entered = true;
+            while (!InitCauseState.release) {
+                sleepInInitializer();
+            }
+            return failWithOriginal();
+        }
+
+        static int value() {
+            return VALUE;
+        }
+    }
+
+    private static int failWithOriginal() {
+        var original = InitCauseState.original;
+        if (original instanceof Error) {
+            throw (Error) original;
+        }
+        throw (RuntimeException) original;
     }
 }
