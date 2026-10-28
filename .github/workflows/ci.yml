@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    # Use the stricter GCC image for C even while ubuntu-latest rolls out gradually.
+    runs-on: ${{ matrix.platform == 'c' && 'ubuntu-26.04' || 'ubuntu-latest' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -30,15 +31,21 @@ jobs:
       with:
         node-version: 26
     - uses: gradle/actions/setup-gradle@v5
+    - name: Show C compiler version
+      if: matrix.platform == 'c'
+      run: gcc --version
     - run: |
         platforms=("c" "js" "wasm-gc")
         args=()
         for v in "${platforms[@]}"
         do
-          if [[ "${{ matrix.platform }}" != "$v" ]]; then
+          if [[ "${{ matrix.platform }}" == "$v" ]]; then
+            args+=("-Pteavm.tests.${v}=true")
+          else
             args+=("-Pteavm.tests.${v}=false")
           fi
         done
+        args+=("-Pteavm.tests.optimized=true")
         args+=("-Pteavm.localNodeJS=true")
         args+=("-Pteavm.tests.c.runWrapper=")
         args+=("-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m")
@@ -54,7 +61,7 @@ jobs:
           tests/build/teavm-tests/browser-stderr-*.txt
           tests/build/teavm-tests/browser-stdout-*.txt
   checkstyle:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
