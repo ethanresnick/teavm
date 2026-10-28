@@ -87,7 +87,7 @@ class BrowserRunStrategy implements TestRunStrategy {
         while (cls != null) {
             var classAttachAnnot = cls.getAnnotation(AttachJavaScript.class);
             if (classAttachAnnot != null) {
-                result.addAll(List.of(attachAnnot.value()));
+                result.addAll(List.of(classAttachAnnot.value()));
             }
             cls = cls.getSuperclass();
         }

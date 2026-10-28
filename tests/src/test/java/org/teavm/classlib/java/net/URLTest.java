@@ -29,6 +29,7 @@ import java.net.URLConnection;
 import java.net.URLStreamHandler;
 import java.net.URLStreamHandlerFactory;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -45,7 +46,9 @@ public class URLTest {
     
     
     @Test
+    @SkipJVM
     public void openStreamOfUnsupportedProtocolThrowsIOException() throws MalformedURLException {
+        // FTP is unsupported by TeaVM, but the JVM would attempt a real network connection.
         // On C, this test also checks that a program that opens a URL builds.
         var url = new URL("ftp://example.com/file");
         try {
