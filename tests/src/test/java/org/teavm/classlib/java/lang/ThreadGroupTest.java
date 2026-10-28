@@ -35,6 +35,8 @@ import org.teavm.junit.TeaVMTest;
 @TeaVMTest
 @EachTestCompiledSeparately
 public class ThreadGroupTest {
+    private static volatile ThreadGroup[] retainedRegistryGroups;
+
     // ThreadGroup: "A thread group is weakly reachable from its parent group".
     @Test
     public void unusedGroupsAndSubclassStateAreCollectable() throws InterruptedException {
@@ -43,7 +45,7 @@ public class ThreadGroupTest {
         var references = new WeakReference<?>[2];
         var creator = new Thread(() -> createUnusedGroups(parent, references));
         creator.start();
-        creator.join();
+        awaitCreator(creator);
         GCSupport.tryToTriggerGC(references[0]);
         // FinalizationRegistry delivers queue notifications in a later host job than the collection.
         Thread.sleep(20);
@@ -55,6 +57,7 @@ public class ThreadGroupTest {
         assertSame(retained, groups[0]);
         parent.setMaxPriority(3);
         assertEquals(3, retained.getMaxPriority());
+        System.out.println("Unused thread groups collected");
     }
 
     private static void createUnusedGroups(ThreadGroup parent, WeakReference<?>[] references) {
@@ -75,12 +78,14 @@ public class ThreadGroupTest {
     @Test
     public void liveThreadKeepsItsGroupUntilTermination() throws InterruptedException {
         checkGroupLifetime(false);
+        System.out.println("Live thread group lifetime checked");
     }
 
     @Test
     @SkipJVM // TeaVM releases its own group metadata even if an application retains the terminated Thread.
     public void terminatedThreadDoesNotRetainGroupMetadata() throws InterruptedException {
         checkGroupLifetime(true);
+        System.out.println("Terminated thread group metadata released");
     }
 
     private static void checkGroupLifetime(boolean retainThread) throws InterruptedException {
@@ -114,7 +119,7 @@ public class ThreadGroupTest {
         });
         creator.setUncaughtExceptionHandler((thread, error) -> failure[0] = error);
         creator.start();
-        creator.join();
+        awaitCreator(creator);
         assertNull(failure[0]);
         assertNull(members[0].getThreadGroup());
         if (!retainThread) {
@@ -127,6 +132,15 @@ public class ThreadGroupTest {
         if (retainThread) {
             assertFalse(members[0].isAlive());
         }
+    }
+
+    private static void awaitCreator(Thread creator) throws InterruptedException {
+        // C's collector does not trace packed monitor references. Keep collection in the creator independent
+        // of that existing runtime limitation by waiting without an active join monitor.
+        while (creator.isAlive()) {
+            Thread.sleep(1);
+        }
+        creator.join();
     }
 
     private static Thread createGroupMember(ThreadGroup parent, WeakReference<?>[] references, AtomicBoolean started) {
@@ -168,25 +182,35 @@ public class ThreadGroupTest {
         });
         creator.setUncaughtExceptionHandler((thread, error) -> failure[0] = error);
         creator.start();
-        creator.join();
+        awaitCreator(creator);
         assertNull(failure[0]);
-        GCSupport.tryToTriggerGC(groups[0]);
-        Thread.sleep(20);
-        // Collect the head, tail and adjacent middle nodes, leaving two live siblings in the registry.
-        for (int index : new int[] { 0, 2, 3, 5 }) {
-            assertNull(groups[index].get());
-        }
-        assertEquals(2, parent.activeGroupCount());
-        var enumerated = new ThreadGroup[3];
-        assertEquals(2, parent.enumerate(enumerated));
-        assertTrue(Arrays.asList(enumerated).contains(retained[0]));
-        assertTrue(Arrays.asList(enumerated).contains(retained[1]));
-        parent.setMaxPriority(4);
-        assertEquals(4, retained[0].getMaxPriority());
-        assertEquals(4, retained[1].getMaxPriority());
-        GCSupport.tryToTriggerGC(nodes[0]);
-        for (int index : new int[] { 0, 2, 3, 5 }) {
-            assertNull(nodes[index].get());
+        // Keep the control parent and surviving children GC-live through the final node collection.
+        retainedRegistryGroups = new ThreadGroup[] { parent, retained[0], retained[1] };
+        try {
+            GCSupport.tryToTriggerGC(groups[0]);
+            Thread.sleep(20);
+            // Collect the head, tail and adjacent middle nodes, leaving two live siblings in the registry.
+            for (int index : new int[] { 0, 2, 3, 5 }) {
+                assertNull(groups[index].get());
+            }
+            assertEquals(2, parent.activeGroupCount());
+            var enumerated = new ThreadGroup[3];
+            assertEquals(2, parent.enumerate(enumerated));
+            assertTrue(Arrays.asList(enumerated).contains(retained[0]));
+            assertTrue(Arrays.asList(enumerated).contains(retained[1]));
+            parent.setMaxPriority(4);
+            assertEquals(4, retained[0].getMaxPriority());
+            assertEquals(4, retained[1].getMaxPriority());
+            GCSupport.tryToTriggerGC(nodes[0]);
+            assertSame(parent, retainedRegistryGroups[0]);
+            assertSame(retained[0], retainedRegistryGroups[1]);
+            assertSame(retained[1], retainedRegistryGroups[2]);
+            for (int index : new int[] { 0, 2, 3, 5 }) {
+                assertNull(nodes[index].get());
+            }
+            System.out.println("Thread group registry cleanup checked");
+        } finally {
+            retainedRegistryGroups = null;
         }
     }
 
@@ -279,7 +303,7 @@ public class ThreadGroupTest {
         creator.setDaemon(true);
         creator.setPriority(3);
         creator.start();
-        creator.join();
+        awaitCreator(creator);
         assertNull(failure[0]);
     }
 
@@ -422,7 +446,7 @@ public class ThreadGroupTest {
             seen[2] = new ThreadGroup("child").getParent();
         });
         creator.start();
-        creator.join();
+        awaitCreator(creator);
         assertEquals(Arrays.asList(group, group, group), Arrays.asList(seen));
     }
 

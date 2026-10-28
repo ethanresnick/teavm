@@ -371,11 +371,23 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public static Map<TThread, TStackTraceElement[]> getAllStackTraces() {
-        Map<TThread, TStackTraceElement[]> result = new HashMap<>();
+        int count = 0;
         for (var thread = liveHead; thread != null; thread = thread.liveNext) {
             if (thread.alive) {
-                result.put(thread, thread.getStackTrace());
+                ++count;
             }
+        }
+        var threads = new TThread[count];
+        int index = 0;
+        for (var thread = liveHead; thread != null; thread = thread.liveNext) {
+            if (thread.alive) {
+                threads[index++] = thread;
+            }
+        }
+        // Overridden getStackTrace or hashCode methods can terminate threads and change the live list.
+        Map<TThread, TStackTraceElement[]> result = new HashMap<>();
+        for (var thread : threads) {
+            result.put(thread, thread.getStackTrace());
         }
         return result;
     }

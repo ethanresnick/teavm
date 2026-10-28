@@ -610,4 +610,84 @@ public class ThreadTest {
         }
     }
 
+    @Test
+    public void stackTraceSnapshotSurvivesTraceCallback() throws InterruptedException {
+        checkStackTraceSnapshot(false);
+        System.out.println("Thread stack trace snapshot checked");
+    }
+
+    @Test
+    public void stackTraceSnapshotSurvivesHashCallback() throws InterruptedException {
+        checkStackTraceSnapshot(true);
+        System.out.println("Thread stack hash snapshot checked");
+    }
+
+    private static void checkStackTraceSnapshot(boolean hashCallback) throws InterruptedException {
+        var observed = new SnapshotThread(hashCallback);
+        var survivor = new Thread(() -> {
+            try {
+                Thread.sleep(10000);
+            } catch (InterruptedException e) {
+                // Release the thread after the snapshot has been checked.
+            }
+        });
+        observed.start();
+        survivor.start();
+        observed.armed = true;
+        try {
+            var snapshot = Thread.getAllStackTraces();
+            assertTrue(snapshot.containsKey(survivor));
+        } finally {
+            observed.armed = false;
+            observed.interrupt();
+            survivor.interrupt();
+            observed.join();
+            survivor.join();
+        }
+    }
+
+    private static class SnapshotThread extends Thread {
+        private final boolean hashCallback;
+        boolean armed;
+
+        SnapshotThread(boolean hashCallback) {
+            super(() -> {
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException e) {
+                    // Terminate when the snapshot callback releases this thread.
+                }
+            });
+            this.hashCallback = hashCallback;
+        }
+
+        private void terminateIfArmed() {
+            if (armed) {
+                armed = false;
+                interrupt();
+                try {
+                    join(2000);
+                } catch (InterruptedException e) {
+                    throw new AssertionError(e);
+                }
+            }
+        }
+
+        @Override
+        public StackTraceElement[] getStackTrace() {
+            if (!hashCallback) {
+                terminateIfArmed();
+            }
+            return super.getStackTrace();
+        }
+
+        @Override
+        public int hashCode() {
+            if (hashCallback) {
+                terminateIfArmed();
+            }
+            return super.hashCode();
+        }
+    }
+
 }
