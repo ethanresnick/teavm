@@ -35,6 +35,43 @@ public class DivisionByZeroTest {
     private static long longMinusOne = -1;
     private static int intMin = Integer.MIN_VALUE;
     private static long longMin = Long.MIN_VALUE;
+    private static boolean throwCustom;
+    private static int intSink;
+
+    static class CustomArithmeticException extends ArithmeticException {
+        @Override
+        public String getMessage() {
+            return "custom";
+        }
+    }
+
+    private static CustomArithmeticException customOrNull() {
+        return throwCustom ? new CustomArithmeticException() : null;
+    }
+
+    static void throwIf(CustomArithmeticException e) {
+        if (e != null) {
+            throw e;
+        }
+    }
+
+    // The handler receives the ArithmeticException of the division check besides the program's own subclass. The
+    // optimizer must not call the subclass's getMessage on it, as it would if it saw only the subclass. A missing
+    // type shows only in optimized builds.
+    @Test
+    public void handlerSeesDivisionExceptionBesideOwnSubclass() {
+        var custom = customOrNull();
+        var divisor = intZero;
+        String kind;
+        try {
+            throwIf(custom);
+            intSink = intSeven / divisor;
+            kind = "no exception";
+        } catch (ArithmeticException e) {
+            kind = "custom".equals(e.getMessage()) ? "custom" : "other";
+        }
+        assertEquals("other", kind);
+    }
 
     @Test
     public void intDivisionByZeroThrows() {
