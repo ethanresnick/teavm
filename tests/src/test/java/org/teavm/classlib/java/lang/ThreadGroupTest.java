@@ -26,6 +26,7 @@ import java.io.PrintStream;
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -401,12 +402,12 @@ public class ThreadGroupTest {
     public void membershipEnumerationAndInterrupt() throws InterruptedException {
         var parent = new ThreadGroup("parent");
         var child = new ThreadGroup(parent, "child");
-        var interrupted = new int[1];
+        var interrupted = new AtomicInteger();
         Runnable wait = () -> {
             try {
                 Thread.sleep(10000);
             } catch (InterruptedException e) {
-                ++interrupted[0];
+                interrupted.incrementAndGet();
             }
         };
         var first = new Thread(parent, wait, "first");
@@ -430,7 +431,7 @@ public class ThreadGroupTest {
         parent.interrupt();
         first.join();
         second.join();
-        assertEquals(2, interrupted[0]);
+        assertEquals(2, interrupted.get());
         assertEquals(0, parent.activeCount());
         assertNull(first.getThreadGroup());
         assertNull(second.getThreadGroup());
