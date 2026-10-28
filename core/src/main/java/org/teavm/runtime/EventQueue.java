@@ -33,13 +33,40 @@ public final class EventQueue {
     private EventQueue() {
     }
 
-    public static void offer(Event action) {
-        offer(action, System.currentTimeMillis());
+    /**
+     * The queue's clock, in milliseconds. Every {@code time} that this class takes or stores is on this clock. It is
+     * {@code System.nanoTime()}, which measures elapsed time, so a change of the wall clock does not move a deadline.
+     * {@code System.currentTimeMillis()} stays the wall clock.
+     */
+    public static long now() {
+        return System.nanoTime() / 1_000_000L;
     }
 
+    /** Returns {@code now() + millis}, saturated, so that a very long timeout does not wrap to the past. */
+    public static long deadlineAfter(long millis) {
+        long now = now();
+        return millis > Long.MAX_VALUE - now ? Long.MAX_VALUE : now + Math.max(0, millis);
+    }
+
+    /** Runs {@code action} after {@code millis} milliseconds of elapsed time. */
+    public static int offerAfter(Event action, long millis) {
+        // On Wasm GC this must go through offer(Event, long): WasmGCDependencies links run() for the event types that
+        // reach that method's parameter.
+        return offer(action, deadlineAfter(millis));
+    }
+
+    public static void offer(Event action) {
+        offer(action, now());
+    }
+
+    /** Runs {@code action} at {@code time} on the {@link #now()} clock. */
     public static int offer(Event action, long time) {
         if (PlatformDetector.isWebAssemblyGC()) {
-            return offerWasmGC(action, time);
+            // The host takes a wall-clock time and subtracts the wall clock at once to get a timer delay. So pass the
+            // remaining time added to a wall-clock time read now. A host timer delay is at most 2^31 - 1 ms: Node
+            // runs a longer setTimeout after 1 ms.
+            double delay = Math.min((double) (time - now()), Integer.MAX_VALUE);
+            return offerWasmGC(action, (double) System.currentTimeMillis() + delay);
         }
         ensureCapacity(size + 1);
         int current = size;
@@ -98,8 +125,8 @@ public final class EventQueue {
         }
 
         Node node = data[0];
-        long currentTime = System.currentTimeMillis();
-        if (node.time <= System.currentTimeMillis()) {
+        long currentTime = now();
+        if (node.time <= currentTime) {
             remove(0);
             node.event.run();
             if (size == 0) {
@@ -122,11 +149,11 @@ public final class EventQueue {
 
     private static void next() {
         while (data.length == 0) {
-            waitUntil(System.currentTimeMillis() + 1000);
+            waitUntil(now() + 1000);
         }
         Node node = data[0];
         waitUntil(node.time);
-        if (node.time <= System.currentTimeMillis()) {
+        if (node.time <= now()) {
             remove(0);
             node.event.run();
         }
@@ -164,11 +191,13 @@ public final class EventQueue {
     }
 
     private static void waitUntil(long time) {
-        long diff = time - System.currentTimeMillis();
+        long diff = time - now();
         if (diff <= 0) {
             return;
         }
-        waitFor(diff);
+        // The native waits take a bounded timeout: macOS select() fails at once with EINVAL for one over 10^8 s, so
+        // a far deadline at the head of the queue made process() spin. next() waits again after a shorter wait.
+        waitFor(Math.min(diff, Integer.MAX_VALUE));
     }
 
     @Import(name = "teavm_waitFor")

@@ -101,9 +101,9 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
     public boolean offer(E e, long timeout, TTimeUnit unit) throws InterruptedException {
         Objects.requireNonNull(e);
         if (isFull()) {
-            long timeLimit = System.currentTimeMillis() + unit.toMillis(timeout);
+            long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isFull()) {
-                if (!waitForChange(timeLimit)) {
+                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
                     return false;
                 }
             }
@@ -131,9 +131,9 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
     @Override
     public E poll(long timeout, TTimeUnit unit) throws InterruptedException {
         if (isEmpty()) {
-            long timeLimit = System.currentTimeMillis() + unit.toMillis(timeout);
+            long timeLimit = timeLimit(unit.toMillis(timeout));
             while (isEmpty()) {
-                if (!waitForChange(timeLimit)) {
+                if (!waitForChange(timeLimit) && timeLimitReached(timeLimit)) {
                     return null;
                 }
             }
@@ -421,6 +421,18 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         return waitForChangeImpl(timeLimit);
     }
 
+    // The time limit of a timed wait, on EventQueue's clock. At least 1, because 0 means "no limit" in
+    // waitForChange.
+    private static long timeLimit(long millis) {
+        return Math.max(1, EventQueue.deadlineAfter(millis));
+    }
+
+    // A host timer takes an int delay, so a wait longer than Integer.MAX_VALUE ms (about 24.8 days) times out
+    // before its limit. offer and poll then wait again for the time that is left.
+    private static boolean timeLimitReached(long timeLimit) {
+        return EventQueue.now() >= timeLimit;
+    }
+
     @Async
     private native Boolean waitForChangeImpl(long timeLimit) throws InterruptedException;
 
@@ -433,7 +445,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         handler.queue = this;
         waitHandlers.add(handler);
         if (timeLimit > 0) {
-            int timeout = Math.max(0, (int) (timeLimit - System.currentTimeMillis()));
+            int timeout = (int) Math.max(0, Math.min(Integer.MAX_VALUE, timeLimit - EventQueue.now()));
             handler.timerId = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
                     ? EventQueue.offer(handler, timeLimit)
                     : Platform.schedule(handler, timeout);
