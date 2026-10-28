@@ -33,15 +33,18 @@ import org.teavm.runtime.reflect.AnnotationData;
 
 public class WasmGCTypeMapper {
     private ClassReaderSource classes;
+    private ClassReaderSource originalClasses;
     private WasmGCClassInfoProvider classInfoProvider;
     private WasmFunctionTypes functionTypes;
     private ReflectionTypes reflectionTypes;
     private List<WasmGCCustomTypeMapper> customTypeMappers;
     private Map<String, WasmType> typeCache = new HashMap<>();
 
-    WasmGCTypeMapper(ClassReaderSource classes, WasmGCClassInfoProvider classInfoProvider,
-            WasmFunctionTypes functionTypes, ReflectionTypes reflectionTypes) {
+    WasmGCTypeMapper(ClassReaderSource classes, ClassReaderSource originalClasses,
+            WasmGCClassInfoProvider classInfoProvider, WasmFunctionTypes functionTypes,
+            ReflectionTypes reflectionTypes) {
         this.classes = classes;
+        this.originalClasses = originalClasses;
         this.classInfoProvider = classInfoProvider;
         this.functionTypes = functionTypes;
         this.reflectionTypes = reflectionTypes;
@@ -49,6 +52,16 @@ public class WasmGCTypeMapper {
 
     void setCustomTypeMappers(List<WasmGCCustomTypeMapper> customTypeMappers) {
         this.customTypeMappers = List.copyOf(customTypeMappers);
+    }
+
+    /**
+     * Whether a class is missing from the class path. Such a class has no instances: creating one, or an array of
+     * one, is a link error, and so is a class on the class path that extends or implements it. So its only value
+     * is null, and it maps to the bottom type (ref null none). A class that is on the class path but was not
+     * linked (no code creates it) still maps to Object, as before.
+     */
+    public boolean isMissingFromClassPath(String className) {
+        return classes.get(className) == null && (originalClasses == null || originalClasses.get(className) == null);
     }
 
     public WasmStorageType mapStorageType(ValueType type) {
@@ -108,6 +121,11 @@ public class WasmGCTypeMapper {
                 var className = ((ValueType.Object) type).getClassName();
                 var cls = classes.get(className);
                 if (cls == null) {
+                    if (isMissingFromClassPath(className)) {
+                        // An array of a missing class can never be created (creating one is a link error), so its
+                        // only value is null, as for the missing class itself (see isMissingFromClassPath).
+                        return WasmType.SpecialReferenceKind.NONE.asType();
+                    }
                     type = ValueType.object("java.lang.Object");
                 }
             }
@@ -197,6 +215,14 @@ public class WasmGCTypeMapper {
                     default: {
                         var cls = classes.get(className);
                         if (cls == null) {
+                            if (isMissingFromClassPath(className)) {
+                                // A missing class has only null values (see isMissingFromClassPath). Object is not
+                                // a subtype of the supertypes that the class really has (TeaVM cannot know them),
+                                // so a throw, call argument, return, or store of such a value would fail Wasm
+                                // validation. The bottom type (ref null none) is a subtype of every struct type.
+                                result = WasmType.SpecialReferenceKind.NONE.asType();
+                                break;
+                            }
                             className = "java.lang.Object";
                         } else if (Objects.equals(cls.getParent(), AnnotationData.class.getName())) {
                             var annotClassName = cls.getName().substring(0, cls.getName().length()

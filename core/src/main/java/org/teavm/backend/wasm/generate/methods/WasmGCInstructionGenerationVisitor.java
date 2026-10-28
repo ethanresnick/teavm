@@ -809,6 +809,14 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
             if (arrayType instanceof WasmType.CompositeReference) {
                 var arrayStruct = (WasmStructure) ((WasmType.CompositeReference) arrayType).composite;
                 builder.structGet(arrayStruct, WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET);
+            } else if (arrayType instanceof WasmType.SpecialReference
+                    && ((WasmType.SpecialReference) arrayType).kind == WasmType.SpecialReferenceKind.NONE) {
+                // An array of a class missing from the class path is typed (ref null none) and is always null.
+                // All object arrays share the structure of Object[], so read its data field: this validates and
+                // traps on null, as for any other null array.
+                var objectArray = context.classInfoProvider().getClassInfo(
+                        ValueType.arrayOf(ValueType.object("java.lang.Object")));
+                builder.structGet(objectArray.getStructure(), WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET);
             }
         }
         builder.popLocation();
@@ -1729,7 +1737,15 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
             if (exType == null) {
                 exType = "java.lang.Throwable";
             }
-            var exceptionType = (WasmType.Reference) context.classInfoProvider().getClassInfo(exType).getType();
+            WasmType.Reference exceptionType;
+            if (context.typeMapper().isMissingFromClassPath(exType)) {
+                // A class missing from the class path has no instances, so this handler never matches. Its
+                // exception variable is typed (ref null none) (see WasmGCTypeMapper); a cast to that validates and
+                // never succeeds, since a thrown exception is never null.
+                exceptionType = WasmType.SpecialReferenceKind.NONE.asType();
+            } else {
+                exceptionType = context.classInfoProvider().getClassInfo(exType).getType();
+            }
             typeConsumer.accept(exceptionType);
             var catchBlock = new WasmBlock(false);
             catchBlock.getBody().add(innerInsnList.getBreakTarget());
@@ -1920,7 +1936,13 @@ public class WasmGCInstructionGenerationVisitor implements StatementVisitor, Exp
 
     private void virtualCall(InvocationExpr expr) {
         var instanceType = ValueType.object(expr.getMethod().getClassName());
-        var instanceWasmType = (WasmType.CompositeReference) context.typeMapper().mapType(instanceType);
+        var mappedInstanceType = context.typeMapper().mapType(instanceType);
+        if (!(mappedInstanceType instanceof WasmType.CompositeReference)) {
+            // A class missing from the class path is typed (ref null none), so the receiver is always null. Such a
+            // class has no virtual table, and the call generator emits a trap.
+            mappedInstanceType = context.typeMapper().mapType(ValueType.object("java.lang.Object"));
+        }
+        var instanceWasmType = (WasmType.CompositeReference) mappedInstanceType;
         accept(expr.getArguments().get(0), builder, instanceWasmType);
 
         vcallGen.generate(

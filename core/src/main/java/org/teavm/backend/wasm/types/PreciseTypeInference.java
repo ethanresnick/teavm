@@ -15,6 +15,7 @@
  */
 package org.teavm.backend.wasm.types;
 
+import java.util.function.Predicate;
 import org.teavm.backend.wasm.WasmGCUtil;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.MethodReference;
@@ -27,10 +28,17 @@ public class PreciseTypeInference extends BaseTypeInference<PreciseValueType> {
     public static final PreciseValueType OBJECT_TYPE = new PreciseValueType(ValueType.object("java.lang.Object"),
             false);
     private ClassHierarchy hierarchy;
+    private Predicate<String> missingClass;
 
-    public PreciseTypeInference(Program program, MethodReference reference, ClassHierarchy hierarchy) {
+    /**
+     * @param missingClass tells whether a class is missing from the class path. Such a class has only null values,
+     *                     so a merge treats it as the bottom type.
+     */
+    public PreciseTypeInference(Program program, MethodReference reference, ClassHierarchy hierarchy,
+            Predicate<String> missingClass) {
         super(program, reference);
         this.hierarchy = hierarchy;
+        this.missingClass = missingClass;
     }
 
     @Override
@@ -88,10 +96,18 @@ public class PreciseTypeInference extends BaseTypeInference<PreciseValueType> {
                         return a;
                     }
                     var first = hierarchy.getClassSource().get(p);
+                    var second = hierarchy.getClassSource().get(q);
+                    // A class missing from the class path has only null values, and WasmGCTypeMapper maps it to the
+                    // bottom type (ref null none). So it joins as the bottom: the merge is the other operand.
+                    if (first == null && missingClass.test(p)) {
+                        return b;
+                    }
+                    if (second == null && missingClass.test(q)) {
+                        return a;
+                    }
                     if (first == null) {
                         p = "java.lang.Object";
                     }
-                    var second = hierarchy.getClassSource().get(q);
                     if (second == null) {
                         q = "java.lang.Object";
                     }

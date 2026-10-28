@@ -136,6 +136,12 @@ public class SystemArrayCopyIntrinsic implements WasmGCInlineIntrinsic {
                 || !hierarchy.isSuperType(targetItemType, sourceItemType, false)) {
             return false;
         }
+        // An array of a class that is missing from the class source maps to (ref null none), not to an array
+        // structure (see WasmGCTypeMapper). Such an array is always null; leave it to the generic copy.
+        if (!(typeMapper.mapType(ValueType.arrayOf(targetItemType)) instanceof WasmType.CompositeReference)
+                || !(typeMapper.mapType(ValueType.arrayOf(sourceItemType)) instanceof WasmType.CompositeReference)) {
+            return false;
+        }
 
         var wasmTargetArrayType = (WasmType.CompositeReference) typeMapper.mapType(
                 ValueType.arrayOf(targetItemType));

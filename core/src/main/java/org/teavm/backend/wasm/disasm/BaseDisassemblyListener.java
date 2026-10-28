@@ -103,6 +103,9 @@ public abstract class BaseDisassemblyListener  {
                         case I31:
                             writer.write("i31ref");
                             return;
+                        case NONE:
+                            writer.write("nullref");
+                            return;
                         default:
                             throw new IllegalArgumentException();
                     }
@@ -132,6 +135,9 @@ public abstract class BaseDisassemblyListener  {
                             break;
                         case I31:
                             writer.write("i31");
+                            break;
+                        case NONE:
+                            writer.write("none");
                             break;
                         default:
                             throw new IllegalArgumentException();
