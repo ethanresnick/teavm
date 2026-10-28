@@ -72,6 +72,7 @@ public class CodeGenerator {
                 volatileDefinitions);
         visitor.setAsync(context.isAsync(methodNode.getReference()));
         visitor.setCallingMethod(methodNode.getReference());
+        visitor.setVariables(methodNode.getVariables());
         methodNode.getBody().acceptVisitor(visitor);
         return visitor;
     }
