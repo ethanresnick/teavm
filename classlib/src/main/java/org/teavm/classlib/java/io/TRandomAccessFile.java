@@ -25,8 +25,6 @@ import java.io.UTFDataFormatException;
 import java.util.Objects;
 import org.teavm.classlib.java.lang.TIndexOutOfBoundsException;
 import org.teavm.classlib.java.lang.TNullPointerException;
-import org.teavm.classlib.java.nio.channels.TFileChannel;
-import org.teavm.classlib.java.nio.channels.impl.TAccessorFileChannel;
 import org.teavm.runtime.fs.VirtualFile;
 import org.teavm.runtime.fs.VirtualFileAccessor;
 
@@ -36,8 +34,6 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
     private boolean autoFlush;
     private VirtualFileAccessor accessor;
     private byte[] buff;
-    // kafka-wasm: getChannel's channel, made once, as in the JDK.
-    private TFileChannel channel;
 
     public TRandomAccessFile(String name, String mode) throws FileNotFoundException {
         this(new TFile(name), mode);
@@ -58,8 +54,7 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
                 throw new IllegalArgumentException("Invalid mode: " + mode);
         }
 
-        // kafka-wasm: the JDK's messages, such as "a/b (No such file or directory)"; upstream had none. As in the
-        // JDK, a writable mode creates a missing file; upstream threw.
+        // A writable mode creates a missing file, as in the JDK.
         VirtualFile virtualFile = file.findVirtualFile();
         if ((virtualFile == null || !virtualFile.isFile() && !virtualFile.isDirectory()) && !readOnly
                 && !file.getName().isEmpty()) {
@@ -86,11 +81,7 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
 
     @Override
     public void close() throws IOException {
-        // kafka-wasm: close the file (upstream only dropped the accessor, so each file kept its host descriptor),
-        // and the channel with it, as in the JDK.
-        if (channel != null) {
-            channel.close();
-        } else if (accessor != null) {
+        if (accessor != null) {
             accessor.close();
         }
         accessor = null;
@@ -520,14 +511,6 @@ public class TRandomAccessFile implements DataInput, DataOutput, Closeable {
             }
         }
         return offset;
-    }
-
-    // kafka-wasm: the channel shares this file's accessor, so its position is the file pointer, as in the JDK.
-    public TFileChannel getChannel() {
-        if (channel == null) {
-            channel = new TAccessorFileChannel(accessor, true, !readOnly, false);
-        }
-        return channel;
     }
 
 }

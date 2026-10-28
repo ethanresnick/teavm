@@ -90,17 +90,6 @@ public class TDefaultFileSystemProvider extends TFileSystemProvider {
         throw new UnsupportedOperationException();
     }
 
-    // kafka-wasm: for FileChannel.open, which lives in another package.
-    public static VirtualFile virtualFile(TPath path) {
-        var defaultPath = (TDefaultPath) path;
-        return defaultPath.getFileSystem().vfs.getFile(defaultPath.pathString);
-    }
-
-    public static VirtualFile createFileIfMissing(TPath path) throws IOException {
-        createEntry((TDefaultPath) path, false);
-        return virtualFile(path);
-    }
-
     @Override
     public InputStream newInputStream(TPath path, TOpenOption... options) throws IOException {
         for (var option : options) {
