@@ -35,9 +35,9 @@ public class EventQueueIntrinsic implements WasmGCBodyIntrinsic {
 
         var runtimeFn = new WasmFunction(context.functionTypes().of(WasmType.INT32, eventType,
                 eventCallbackType.getReference(), WasmType.FLOAT64));
-        runtimeFn.setName(context.names().topLevel("teavmAsync.offer"));
+        runtimeFn.setName(context.names().topLevel("teavmAsync.offerAfter"));
         runtimeFn.setImportModule("teavmAsync");
-        runtimeFn.setImportName("offer");
+        runtimeFn.setImportName("offerAfter");
         context.module().functions.add(runtimeFn);
 
         var callerFn = context.functions().forStaticMethod(new MethodReference(EventQueue.class, "run",
@@ -45,15 +45,15 @@ public class EventQueueIntrinsic implements WasmGCBodyIntrinsic {
         callerFn.setReferenced(true);
 
         var eventVar = new WasmLocal(eventType, "event");
-        var timeVar = new WasmLocal(WasmType.FLOAT64, "time");
+        var delayVar = new WasmLocal(WasmType.FLOAT64, "delay");
         function.add(eventVar);
-        function.add(timeVar);
+        function.add(delayVar);
 
         var body = function.getBody().builder();
         body
                 .getLocal(eventVar)
                 .funcRef(callerFn)
-                .getLocal(timeVar)
+                .getLocal(delayVar)
                 .call(runtimeFn);
     }
 }

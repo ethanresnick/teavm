@@ -59,11 +59,9 @@ public class TReferenceQueue<T> {
             }
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
-                callbackWrapper.id = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                        ? EventQueue.offerAfter(callbackWrapper, timeout)
-                        // A host timer takes an int delay, so a timeout over Integer.MAX_VALUE ms (about 24.8 days)
-                        // ends after that delay, as in Thread.sleep.
-                        : Platform.schedule(callbackWrapper, (int) Math.min(timeout, Integer.MAX_VALUE));
+                callbackWrapper.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
+                        ? EventQueue.scheduleAfter(callbackWrapper, timeout)
+                        : Platform.scheduleAfter(callbackWrapper, timeout);
             }
             TThread.currentThread().interruptHandler = callbackWrapper;
             registerCallback(callbackWrapper);
@@ -103,8 +101,7 @@ public class TReferenceQueue<T> {
             TThreadInterruptHandler {
         RemoveCallback next;
         RemoveCallback prev;
-        // -1 while no timer is scheduled. On C, event ids start at 0.
-        int id = -1;
+        EventQueue.Timer timer;
         AsyncCallback<TReference<T>> callback;
 
         // The waiting thread (see TArrayBlockingQueue.WaitHandler).
@@ -150,13 +147,9 @@ public class TReferenceQueue<T> {
         private void remove() {
             // A wait that got a reference or was interrupted does not keep its timer, which would keep the
             // callback, and with it the waiting thread, until the timeout.
-            if (id >= 0) {
-                if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                    EventQueue.kill(id);
-                } else {
-                    Platform.killSchedule(id);
-                }
-                id = -1;
+            if (timer != null) {
+                timer.kill();
+                timer = null;
             }
             if (thread.interruptHandler == this) {
                 thread.interruptHandler = null;
