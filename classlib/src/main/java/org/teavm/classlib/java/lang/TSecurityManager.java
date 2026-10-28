@@ -15,8 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
-// Note: this class is left empty on purpose -
-//  functionality is intended to be added as need arises
+// Functionality is intended to be added as need arises.
 public class TSecurityManager {
 
     public TSecurityManager() {

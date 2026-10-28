@@ -25,17 +25,41 @@ import org.teavm.junit.TeaVMTest;
 @SkipJVM
 @SuppressWarnings("removal")
 public class SecurityManagerTest {
+    // Java SE 21 SecurityManager.getThreadGroup: the default returns the current thread's group.
+    // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/SecurityManager.html#getThreadGroup()
     @Test
     public void threadGroupTracksCallingThread() throws InterruptedException {
         var manager = System.getSecurityManager();
         assertNotNull(manager);
         assertSame(Thread.currentThread().getThreadGroup(), manager.getThreadGroup());
-        var group = new ThreadGroup("security-manager-group");
-        var observed = new ThreadGroup[1];
-        var thread = new Thread(group, () -> observed[0] = manager.getThreadGroup(), "security-manager-reader");
-        thread.start();
-        thread.join();
-        assertSame(group, observed[0]);
+        var group = Thread.currentThread().getThreadGroup();
+        for (int depth = 0; depth < 4; depth++) {
+            group = new ThreadGroup(group, "security-manager-group-" + depth);
+            var observed = new ThreadGroup[2];
+            var thread = new Thread(group, () -> {
+                observed[0] = manager.getThreadGroup();
+                Thread.yield();
+                observed[1] = manager.getThreadGroup();
+            }, "security-manager-reader");
+            thread.start();
+            thread.join();
+            assertSame(group, observed[0]);
+            assertSame(group, observed[1]);
+        }
         assertSame(Thread.currentThread().getThreadGroup(), manager.getThreadGroup());
+    }
+
+    @Test
+    public void subclassCanChooseThreadGroup() {
+        var group = new ThreadGroup("chosen-security-manager-group");
+        SecurityManager manager = new SecurityManager() {
+            @Override
+            public ThreadGroup getThreadGroup() {
+                return group;
+            }
+        };
+        // The same Javadoc explicitly permits a specific security manager to override this method.
+        assertSame(group, manager.getThreadGroup());
+        assertSame(Thread.currentThread().getThreadGroup(), new SecurityManager().getThreadGroup());
     }
 }
