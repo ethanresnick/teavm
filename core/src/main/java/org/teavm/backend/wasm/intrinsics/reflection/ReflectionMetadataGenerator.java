@@ -289,9 +289,9 @@ public class ReflectionMetadataGenerator {
             generateAnnotations(builder, annotations);
         }
         if (fieldReflectionStruct.genericTypeIndex() >= 0) {
-            var cls = classes.get(field.getOwnerName());
             if (genericType != null) {
-                generateGenericType(builder, cls, null, genericType, field.getType());
+                var cls = classes.get(field.getOwnerName());
+                generateGenericType(builder, cls, null, genericType);
             } else {
                 builder.nullConst(WasmType.STRUCT);
             }
@@ -425,7 +425,7 @@ public class ReflectionMetadataGenerator {
 
         if (methodReflectionStruct.genericReturnTypeIndex() >= 0) {
             if (genericReturnType != null) {
-                generateGenericType(builder, cls, method, genericReturnType, method.getResultType());
+                generateGenericType(builder, cls, method, genericReturnType);
             } else {
                 builder.nullConst(WasmType.STRUCT);
             }
@@ -1084,11 +1084,6 @@ public class ReflectionMetadataGenerator {
 
     private void generateGenericType(WasmInstructionBuilder builder, ClassReader contextClass,
             MethodReader contextMethod, GenericValueType type) {
-        generateGenericType(builder, contextClass, contextMethod, type, ValueType.object("java.lang.Object"));
-    }
-
-    private void generateGenericType(WasmInstructionBuilder builder, ClassReader contextClass,
-            MethodReader contextMethod, GenericValueType type, ValueType erasure) {
         if (type.canBeRepresentedAsRaw()) {
             generateDerivedClass(builder, type.asValueType());
         } else if (type instanceof GenericValueType.Object objectType) {
@@ -1144,9 +1139,7 @@ public class ReflectionMetadataGenerator {
                 }
                 contextClass = classes.get(contextClass.getOwnerName());
             }
-            // Enclosing-method type parameters are not represented in class metadata. Preserve the member's
-            // erased type instead of failing compilation; nested type arguments fall back to Object.
-            generateDerivedClass(builder, erasure);
+            throw new IllegalArgumentException("Unknown type variable: " + typeVar.getName());
         } else if (type instanceof GenericValueType.Array arrayType) {
             var struct = classInfoProvider.reflectionTypes().genericArrayInfo();
             generateGenericType(builder, contextClass, contextMethod, arrayType.getItemType());
