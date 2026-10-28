@@ -332,3 +332,4 @@ extern void* teavm_fillDoubleArray(void* array, ...);
 
 #define TEAVM_MODIFIER_PRIVATE (1 << 1)
 #define TEAVM_MODIFIER_STATIC  (1 << 3)
+extern int32_t teavm_libraryNamePlatform(void);

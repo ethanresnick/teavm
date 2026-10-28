@@ -38,6 +38,17 @@ import org.teavm.junit.TeaVMTest;
 @EachTestCompiledSeparately
 public class SystemTest {
     @Test
+    public void mapsLibraryNamesWithoutLoadingThem() {
+        String mapped = System.mapLibraryName("example");
+        assertTrue(mapped.equals("libexample.so") || mapped.equals("libexample.dylib")
+                || mapped.equals("example.dll"));
+        String empty = System.mapLibraryName("");
+        assertEquals(mapped, empty.startsWith("lib") ? "libexample" + empty.substring(3) : "example" + empty);
+        assertThrows(NullPointerException.class, () -> System.mapLibraryName(null));
+        System.out.println("LIBRARY-NAME=" + mapped);
+    }
+
+    @Test
     public void copiesArray() {
         Object a = new Object();
         Object b = new Object();
