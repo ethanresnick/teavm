@@ -23,6 +23,7 @@ import org.teavm.model.ElementModifier;
 import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
+import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.runtime.reflect.ClassInfo;
 
 public class ClassGenerator implements DependencyPlugin {
@@ -31,6 +32,9 @@ public class ClassGenerator implements DependencyPlugin {
     @Override
     public void methodReached(DependencyAgent agent, MethodDependency method) {
         switch (method.getReference().getName()) {
+            case "initialize":
+                reachInitialize(agent, method);
+                break;
             case "getSuperclass":
                 reachGetSuperclass(agent, method);
                 break;
@@ -70,6 +74,26 @@ public class ClassGenerator implements DependencyPlugin {
                 break;
             }
         }
+    }
+
+    private void reachInitialize(DependencyAgent agent, MethodDependency method) {
+        var intrinsic = new MethodReference(ClassInfo.class, "initialize", void.class);
+        var location = new CallLocation(intrinsic);
+        method.getVariable(0).getClassValueNode().addConsumer(type -> {
+            if (!(type.getValueType() instanceof ValueType.Object)) {
+                return;
+            }
+            var className = ((ValueType.Object) type.getValueType()).getClassName();
+            // The actual indirect call lives in ClassInfo.initialize. Its call-graph edge also lets the async
+            // finder mark the intrinsic when one of the reachable initializers can suspend.
+            agent.linkClass(className).initClass(location);
+            ImplicitExceptions.readInitializers(agent.getClassSource(), className, initializer -> {
+                agent.linkMethod(initializer).getThrown().connect(method.getThrown());
+                agent.linkMethod(initializer).getThrown().addConsumer(thrown ->
+                        ImplicitExceptions.readInitializerFailure(agent.getClassHierarchy(), thrown.getValueType(),
+                                error -> method.getThrown().propagate(agent.getType(ValueType.object(error)))));
+            });
+        });
     }
 
     private void reachGetSuperclass(DependencyAgent agent, MethodDependency method) {

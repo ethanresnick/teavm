@@ -184,6 +184,24 @@ public class ReflectionTransformer implements ClassHolderTransformer {
         int classNameIndex = varSet.find(invoke.getArguments().get(0).getIndex());
         var nameIndex = nameRepresentatives[classNameIndex];
         String constant = stringConstantsByClasses[classNameIndex];
+        if (invoke.getMethod().equals(forNameMethod)) {
+            // Preserve a named class, but let the runtime loader perform the lookup and honor initialize.
+            if (constant != null && hierarchy.getClassSource().get(constant) != null && filterClassName(constant)) {
+                var classConstant = new ClassConstantInstruction();
+                classConstant.setConstant(ValueType.object(constant));
+                classConstant.setReceiver(program.createVariable());
+                classConstant.setLocation(invoke.getLocation());
+                invoke.insertPrevious(classConstant);
+                var getName = new InvokeInstruction();
+                getName.setMethod(new MethodReference(Class.class, "getName", String.class));
+                getName.setType(InvocationType.SPECIAL);
+                getName.setInstance(classConstant.getReceiver());
+                getName.setReceiver(program.createVariable());
+                getName.setLocation(invoke.getLocation());
+                invoke.insertPrevious(getName);
+            }
+            return;
+        }
         if (nameIndex >= 0) {
             representative = program.variableAt(nameIndex);
         } else if (constant != null) {
