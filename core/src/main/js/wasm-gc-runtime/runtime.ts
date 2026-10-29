@@ -140,7 +140,17 @@ export function defaults(
     consoleImports(imports);
     coreImports(imports, context);
     asyncImports(imports);
-    jspiImports(imports);
+    let jspi: unknown;
+    Object.defineProperty(imports, "teavmJspi", {
+        configurable: true,
+        enumerable: true,
+        get() {
+            return jspi ??= jspiImports();
+        },
+        set(value: unknown) {
+            jspi = value;
+        }
+    });
     jsoImports(imports, context, stringBuiltins);
     imports.teavmMath = Math;
     return {
@@ -159,19 +169,18 @@ interface JspiAPI {
     promising?: (run: (fiber: object) => void) => (fiber: object) => Promise<void>;
 }
 
-function jspiImports(imports: Record<string, unknown>): void {
+function jspiImports(): WebAssembly.ModuleImports {
     const api = WebAssembly as unknown as JspiAPI;
     if (typeof api.Suspending !== "function" || typeof api.promising !== "function") {
         const missing = () => {
-            throw new Error("This TeaVM module requires WebAssembly JavaScript Promise Integration (JSPI)");
+            throw new Error();
         };
-        imports.teavmJspi = { start: missing, park: missing, unpark: missing };
-        return;
+        return { start: missing, park: missing, unpark: missing };
     }
     const promising = api.promising;
     const parked = new Map<object, () => void>();
     const runners = new WeakMap<(fiber: object) => void, (fiber: object) => Promise<void>>();
-    imports.teavmJspi = {
+    return {
         start(fiber: object, run: (fiber: object) => void) {
             let runner = runners.get(run);
             if (runner === undefined) {
@@ -188,7 +197,7 @@ function jspiImports(imports: Record<string, unknown>): void {
         unpark(fiber: object) {
             const resolve = parked.get(fiber);
             if (resolve === undefined) {
-                throw new Error("Cannot resume a JSPI fiber that is not parked");
+                throw new Error();
             }
             parked.delete(fiber);
             resolve();

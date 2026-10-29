@@ -16,10 +16,14 @@
 package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
+import org.teavm.jso.JSBody;
+import org.teavm.jso.browser.Window;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
@@ -27,6 +31,7 @@ import org.teavm.junit.TeaVMProperties;
 import org.teavm.junit.TeaVMProperty;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
+import org.teavm.runtime.Fiber;
 
 @TeaVMTest
 @SkipJVM
@@ -40,6 +45,68 @@ public class JspiVMTest extends org.teavm.vm.VMTest {
         assertEquals(42, asyncResult(2));
         assertThrows(IllegalArgumentException.class, () -> asyncResult(1));
         assertEquals(42, asyncResult(2));
+    }
+
+    @Test
+    public void nestedFiberCompletesBeforeCallerParks() {
+        Fiber caller = Fiber.current();
+        assertEquals(42, nestedResult(false));
+        assertSame(caller, Fiber.current());
+        assertThrows(IllegalArgumentException.class, () -> nestedResult(true));
+        assertSame(caller, Fiber.current());
+        assertEquals(42, asyncResult(2));
+    }
+
+    @Test
+    public void deferredCompletionRestoresContextAndFinally() {
+        assertTrue(hostSupportsJspi());
+        Fiber caller = Fiber.current();
+        Thread thread = Thread.currentThread();
+        int completed = 0;
+        for (int i = 0; i < 4; ++i) {
+            try {
+                if ((i & 1) == 0) {
+                    assertEquals(42, deferredResult(false));
+                } else {
+                    assertThrows(IllegalArgumentException.class, () -> deferredResult(true));
+                }
+            } finally {
+                assertSame(caller, Fiber.current());
+                assertSame(thread, Thread.currentThread());
+                ++completed;
+            }
+        }
+        assertEquals(4, completed);
+    }
+
+    @JSBody(script = "return typeof WebAssembly.Suspending === 'function'"
+            + " && typeof WebAssembly.promising === 'function';")
+    private static native boolean hostSupportsJspi();
+
+    @Async
+    private static native int nestedResult(boolean fail);
+
+    private static void nestedResult(boolean fail, AsyncCallback<Integer> callback) {
+        Fiber.start(() -> {
+            if (fail) {
+                callback.error(new IllegalArgumentException());
+            } else {
+                callback.complete(42);
+            }
+        }, true);
+    }
+
+    @Async
+    private static native int deferredResult(boolean fail);
+
+    private static void deferredResult(boolean fail, AsyncCallback<Integer> callback) {
+        Window.setTimeout(() -> {
+            if (fail) {
+                callback.error(new IllegalArgumentException());
+            } else {
+                callback.complete(42);
+            }
+        }, 0);
     }
 
     @Async

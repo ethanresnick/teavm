@@ -300,53 +300,47 @@ public final class Fiber {
 
         @Override
         public void complete(Object result) {
-            if (Fiber.current == this.fiber) {
+            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
                 fiber.result = result;
                 fiber.isPendingResume = true;
                 removePendingCall();
             } else {
-                if (isJspi()) {
-                    Fiber fiber = this.fiber;
-                    this.fiber = null;
-                    javaThread = null;
-                    fiber.result = result;
-                    removePendingCall();
-                    jspiUnpark(fiber);
-                    return;
+                if (!isJspi()) {
+                    setCurrentThread(javaThread);
                 }
-                setCurrentThread(javaThread);
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.result = result;
                 removePendingCall();
-                fiber.resume();
+                if (isJspi()) {
+                    jspiUnpark(fiber);
+                } else {
+                    fiber.resume();
+                }
             }
         }
 
         @Override
         public void error(Throwable e) {
-            if (Fiber.current == this.fiber) {
+            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
                 fiber.exception = e;
                 fiber.isPendingResume = true;
                 removePendingCall();
             } else {
-                if (isJspi()) {
-                    Fiber fiber = this.fiber;
-                    this.fiber = null;
-                    javaThread = null;
-                    fiber.exception = e;
-                    removePendingCall();
-                    jspiUnpark(fiber);
-                    return;
+                if (!isJspi()) {
+                    setCurrentThread(javaThread);
                 }
-                setCurrentThread(javaThread);
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.exception = e;
                 removePendingCall();
-                fiber.resume();
+                if (isJspi()) {
+                    jspiUnpark(fiber);
+                } else {
+                    fiber.resume();
+                }
             }
         }
 

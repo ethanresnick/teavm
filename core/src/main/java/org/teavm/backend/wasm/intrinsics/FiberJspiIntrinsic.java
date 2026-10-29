@@ -69,7 +69,7 @@ public class FiberJspiIntrinsic implements WasmGCBodyIntrinsic {
                 break;
             }
             default:
-                throw new IllegalArgumentException(method.toString());
+                throw new IllegalArgumentException();
         }
     }
 
