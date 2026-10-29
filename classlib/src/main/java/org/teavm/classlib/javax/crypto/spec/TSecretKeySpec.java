@@ -58,6 +58,9 @@ public class TSecretKeySpec implements KeySpec, SecretKey {
     }
 
     private static int foldCase(int codePoint) {
+        if (codePoint < 128) {
+            return codePoint >= 'A' && codePoint <= 'Z' ? codePoint + ('a' - 'A') : codePoint;
+        }
         return Character.toLowerCase(Character.toUpperCase(codePoint));
     }
 

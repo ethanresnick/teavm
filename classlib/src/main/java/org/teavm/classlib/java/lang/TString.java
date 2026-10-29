@@ -288,37 +288,47 @@ public final class TString extends TObject implements TSerializable, TComparable
         for (int i = 0; i < count; i++) {
             int a = charactersGet(start + i);
             int b = other.charactersGet(otherStart + i);
-            if (a != b || TCharacter.isSurrogate((char) a)) {
-                a = foldedCodePointAt(start + i, start, end);
-                b = other.foldedCodePointAt(otherStart + i, otherStart, otherEnd);
-                if (a != b) {
-                    return a - b;
+            if (a < 128 && b < 128) {
+                if (a >= 'A' && a <= 'Z') {
+                    a += 'a' - 'A';
                 }
+                if (b >= 'A' && b <= 'Z') {
+                    b += 'a' - 'A';
+                }
+            } else if (a != b || TCharacter.isSurrogate((char) a)) {
+                a = regionCodePointAt(start + i, start, end);
+                b = other.regionCodePointAt(otherStart + i, otherStart, otherEnd);
+                if (a != b) {
+                    a = TCharacter.toUpperCase(a);
+                    b = TCharacter.toUpperCase(b);
+                    if (a != b) {
+                        a = TCharacter.toLowerCase(a);
+                        b = TCharacter.toLowerCase(b);
+                    }
+                }
+            }
+            if (a != b) {
+                return a - b;
             }
         }
         return (end - start) - (otherEnd - otherStart);
     }
 
-    private int foldedCodePointAt(int index, int start, int end) {
+    private int regionCodePointAt(int index, int start, int end) {
         char c = charactersGet(index);
-        if (c < 128) {
-            return c >= 'A' && c <= 'Z' ? (char) (c + ('a' - 'A')) : c;
-        }
         // A region boundary can split a surrogate pair. Only combine pairs wholly inside the region.
         if (TCharacter.isHighSurrogate(c) && index + 1 < end) {
             char next = charactersGet(index + 1);
             if (TCharacter.isLowSurrogate(next)) {
-                int folded = TCharacter.toLowerCase(TCharacter.toUpperCase(TCharacter.toCodePoint(c, next)));
-                return folded;
+                return TCharacter.toCodePoint(c, next);
             }
         } else if (TCharacter.isLowSurrogate(c) && index > start) {
             char previous = charactersGet(index - 1);
             if (TCharacter.isHighSurrogate(previous)) {
-                int folded = TCharacter.toLowerCase(TCharacter.toUpperCase(TCharacter.toCodePoint(previous, c)));
-                return folded;
+                return TCharacter.toCodePoint(previous, c);
             }
         }
-        return TCharacter.toLowerCase(TCharacter.toUpperCase((int) c));
+        return c;
     }
 
     public boolean startsWith(TString prefix, int toffset) {

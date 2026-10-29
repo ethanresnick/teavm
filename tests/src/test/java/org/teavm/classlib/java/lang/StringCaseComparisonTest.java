@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -28,6 +29,21 @@ public class StringCaseComparisonTest {
         { "K", "k", "\u212a" }, { "S", "s", "\u017f" }, { "\u00b5", "\u039c", "\u03bc" },
         { "\ud801\udc00", "\ud801\udc28" }
     };
+
+    @Test
+    public void asciiPairsMatchCanonicalFold() {
+        for (int a = 0; a < 128; a++) {
+            for (int b = 0; b < 128; b++) {
+                String first = String.valueOf((char) a);
+                String second = String.valueOf((char) b);
+                int expected = Character.toLowerCase(Character.toUpperCase(a))
+                        - Character.toLowerCase(Character.toUpperCase(b));
+                assertEquals(Integer.signum(expected), Integer.signum(first.compareToIgnoreCase(second)));
+                assertEquals(expected == 0, first.equalsIgnoreCase(second));
+                assertEquals(expected == 0, first.regionMatches(true, 0, second, 0, 1));
+            }
+        }
+    }
 
     @Test
     public void caseMappingGapsRemainUnchanged() {
@@ -136,7 +152,8 @@ public class StringCaseComparisonTest {
     @Test
     public void comparisonsMatchFoldedCodePointSequences() {
         String[] values = { "", "ABC", "abc", "AbD", "\u03c2", "\u03c3", "\u0131", "I", "\ue000",
-                "\ud801", "\udc00", "\ud801\udc00", "\ud801\udc28", "\ud801x", "x\ud801\udc28y" };
+                "K", "\u212a", "S", "\u017f", "\ud801", "\udc00", "\ud801\udc00",
+                "\ud801\udc28", "\ud801x", "x\ud801\udc28y" };
         for (String first : values) {
             for (String second : values) {
                 String a = fold(first);
@@ -150,9 +167,32 @@ public class StringCaseComparisonTest {
                         for (int length = 0; length <= limit; length++) {
                             boolean expected = fold(first.substring(start, start + length))
                                     .equals(fold(second.substring(otherStart, otherStart + length)));
-                            assertEquals(expected, first.regionMatches(true, start, second, otherStart, length));
+                            assertEquals(expected, first.regionMatches(true, start, second, otherStart, length),
+                                    java.util.Arrays.toString(first.chars().toArray()) + ":" + start + " vs "
+                                            + java.util.Arrays.toString(second.chars().toArray()) + ":" + otherStart
+                                            + " length=" + length);
                         }
                     }
+                }
+            }
+        }
+    }
+
+    @Test
+    @SkipJVM
+    public void matchingSurrogatesStillRespectDifferentPartners() {
+        // JDK 25 incorrectly reports these distinct three-unit regions equal after skipping equal high surrogates.
+        String first = "\ud800\udc00\ud800\udc00";
+        String second = "\ud800\ud800\udc00\udc00";
+        assertFalse(first.equalsIgnoreCase(second));
+        assertTrue(first.compareToIgnoreCase(second) > 0);
+        for (int start = 0; start <= first.length(); start++) {
+            for (int otherStart = 0; otherStart <= second.length(); otherStart++) {
+                int limit = Math.min(first.length() - start, second.length() - otherStart);
+                for (int length = 0; length <= limit; length++) {
+                    boolean expected = fold(first.substring(start, start + length))
+                            .equals(fold(second.substring(otherStart, otherStart + length)));
+                    assertEquals(expected, first.regionMatches(true, start, second, otherStart, length));
                 }
             }
         }
