@@ -53,7 +53,11 @@ public class IntrospectionTest {
         var resourceProvider = new ClasspathResourceProvider(classLoader);
         var classHolderSource = new ClasspathClassHolderSource(resourceProvider, new ReferenceCache(),
                 classLoader);
-        world = new Introspection(new ClassHierarchy(classHolderSource), classLoader);
+        // Model the root explicitly: the introspection fixture must not load host-JDK bytecode.
+        var objectClass = new ClassHolder("java.lang.Object");
+        objectClass.setParent(null);
+        world = new Introspection(new ClassHierarchy(name -> name.equals(objectClass.getName())
+                ? objectClass : classHolderSource.get(name)), classLoader);
     }
 
     @Test

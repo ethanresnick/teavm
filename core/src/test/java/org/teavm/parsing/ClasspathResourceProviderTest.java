@@ -21,6 +21,13 @@ import org.junit.Test;
 
 public class ClasspathResourceProviderTest {
     @Test
+    public void runtimeModulesAreExcludedByDefault() {
+        try (var provider = new ClasspathResourceProvider(ClassLoader.getPlatformClassLoader())) {
+            assertNull(provider.getResource("java/util/concurrent/Future.class"));
+        }
+    }
+
+    @Test
     public void canExcludeRuntimeModulesWithoutExcludingClasspath() {
         var loader = ClasspathResourceProviderTest.class.getClassLoader();
         try (var provider = new ClasspathResourceProvider(loader, false)) {
@@ -30,8 +37,8 @@ public class ClasspathResourceProviderTest {
     }
 
     @Test
-    public void existingConstructorRetainsClassLoaderBehavior() {
-        try (var provider = new ClasspathResourceProvider(ClassLoader.getPlatformClassLoader())) {
+    public void runtimeModulesRequireExplicitOptIn() {
+        try (var provider = new ClasspathResourceProvider(ClassLoader.getPlatformClassLoader(), true)) {
             assertNotNull(provider.getResource("java/util/concurrent/Future.class"));
         }
     }

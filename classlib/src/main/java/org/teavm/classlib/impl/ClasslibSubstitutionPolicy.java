@@ -25,7 +25,8 @@ public class ClasslibSubstitutionPolicy extends SimpleSubstitutionPolicy {
     public void contribute(SubstitutionSink sink) {
         sink.selectClasses(inPackage("java", true).or(inPackage("javax.xml")))
                 .dontFallbackWhenNoSubstitution();
-        sink.selectClasses(inPackage("java", true).or(inPackage("javax.crypto", true)))
+        sink.selectClasses(inPackage("java", true).or(inPackage("javax.crypto", true))
+                .or(inPackage("javax.security.auth", false)))
                 .packagePrefix("org.teavm.classlib.")
                 .simpleNamePrefix("T");
         sink.substitutePackage("java.time", "org.threeten.bp");

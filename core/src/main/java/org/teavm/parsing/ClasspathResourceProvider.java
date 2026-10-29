@@ -32,7 +32,7 @@ public class ClasspathResourceProvider implements ResourceProvider {
     private boolean includeSystemModules;
 
     public ClasspathResourceProvider(ClassLoader classLoader) {
-        this(classLoader, true);
+        this(classLoader, false);
     }
 
     public ClasspathResourceProvider(ClassLoader classLoader, boolean includeSystemModules) {
