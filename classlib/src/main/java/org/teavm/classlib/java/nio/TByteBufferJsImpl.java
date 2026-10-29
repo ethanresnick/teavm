@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.jso.typedarrays.ArrayBufferView;
 import org.teavm.jso.typedarrays.BigInt64Array;
 import org.teavm.jso.typedarrays.DataView;
@@ -98,8 +99,14 @@ class TByteBufferJsImpl extends TByteBuffer implements TArrayBufferViewProvider 
 
     @Override
     public TByteBuffer slice() {
-        var newData = new Int8Array(data.getBuffer(), data.getByteOffset() + position, remaining());
-        var result = new TByteBufferJsImpl(array, arrayOffset + position, newData, direct, readOnly);
+        return slice(position, remaining());
+    }
+
+    @Override
+    public TByteBuffer slice(int index, int length) {
+        Objects.checkFromIndexSize(index, length, limit);
+        var newData = new Int8Array(data.getBuffer(), data.getByteOffset() + index, length);
+        var result = new TByteBufferJsImpl(array, arrayOffset + index, newData, direct, readOnly);
         result.position = 0;
         result.limit = newData.getLength();
         result.order = TByteOrder.BIG_ENDIAN;
