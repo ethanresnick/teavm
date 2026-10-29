@@ -60,10 +60,15 @@ public class ReflectiveInitializationTest {
     }
 
     @Test
-    public void bootstrapLookupFailsExplicitly() {
-        assertThrows(UnsupportedOperationException.class, () -> Class.forName("java.lang.String", false, null));
-        assertThrows(UnsupportedOperationException.class,
+    public void bootstrapLookupRejectsApplicationClassesWithoutInitializing() {
+        // Java SE 21 Class.forName: a null loader denotes the bootstrap loader.
+        assertEquals(0, Initialization.counter);
+        assertThrows(ClassNotFoundException.class,
                 () -> Class.forName(ToInitialize.class.getName(), false, null));
+        assertThrows(ClassNotFoundException.class,
+                () -> Class.forName(ToInitialize.class.getName(), true, null));
+        assertThrows(ClassNotFoundException.class, () -> Class.forName("java.lang.NotPresent", false, null));
+        assertEquals(0, Initialization.counter);
     }
 
     @Test
@@ -318,7 +323,7 @@ public class ReflectiveInitializationTest {
     @Test
     public void dynamicArrayLookupFailsExplicitly() {
         String name = new String("[Ljava.lang.String;".toCharArray());
-        assertThrows(UnsupportedOperationException.class,
+        assertThrows(ClassNotFoundException.class,
                 () -> Class.forName(name, false, getClass().getClassLoader()));
     }
 
@@ -361,12 +366,21 @@ public class ReflectiveInitializationTest {
         }
     }
 
-    // Java SE 21 Class.forName specifies bootstrap lookup for a null loader and array-name lookup.
-    // TeaVM currently lacks defining-loader identity and general dynamic array class metadata.
+    // Java SE 21 Class.forName specifies bootstrap lookup for a null loader.
     @Test
-    @Disabled("Known gap: bootstrap-only Class.forName lookup is unsupported")
     public void bootstrapLookupFindsPlatformClass() throws Exception {
         assertEquals(String.class, Class.forName("java.lang.String", false, null));
+        assertEquals(String.class, Class.forName("java.lang.String", true, null));
+        assertEquals(String[][].class, Class.forName("[[Ljava.lang.String;", true, null));
+    }
+
+    @Test
+    public void malformedAndMissingArrayDescriptorsAreRejected() {
+        // Java SE 21 Class.forName throws ClassNotFoundException when the named class cannot be located.
+        for (String name : new String[] { "[V", "[Q", "[[", "[Ljava.lang.NotPresent;", "[Ljava.lang.String" }) {
+            assertThrows(ClassNotFoundException.class,
+                    () -> Class.forName(name, false, getClass().getClassLoader()));
+        }
     }
 
     @Test

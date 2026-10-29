@@ -632,13 +632,11 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     private static TClass<?> lookupClass(TString name, TClassLoader loader) throws TClassNotFoundException {
         String className = (String) (Object) name;
         if (className.startsWith("[")) {
-            throw new UnsupportedOperationException();
+            throw new TClassNotFoundException();
         }
-        if (loader == null) {
-            // TeaVM has one compiled class space and does not record bootstrap defining-loader identity.
-            throw new UnsupportedOperationException();
-        }
-        TClass<?> result = loader.loadClass(className);
+        // Use ClassLoader's existing compiled-platform bootstrap approximation.
+        TClass<?> result = loader != null ? loader.loadClass(className)
+                : TClassLoader.findBootstrapClassOrNull(className);
         if (result == null || result.isPrimitive() || !result.getName().equals(className)) {
             throw new TClassNotFoundException();
         }
