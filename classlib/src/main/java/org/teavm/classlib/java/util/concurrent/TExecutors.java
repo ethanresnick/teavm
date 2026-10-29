@@ -16,7 +16,7 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/Executors.java).
- * TeaVM uses cooperative threads and reference-queue cleanup in place of finalization.
+ * TeaVM uses cooperative threads and browser Cleaner cleanup in place of finalization.
  * TeaVM has no ForkJoinPool or security manager checks; the edits for that are marked "TeaVM:".
  * The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
  */
@@ -44,6 +44,9 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.teavm.classlib.PlatformDetector;
+import org.teavm.jso.JSObject;
+import org.teavm.jso.core.JSObjects;
 
 /**
  * Factory and utility methods for {@link Executor}, {@link
@@ -134,7 +137,7 @@ public class TExecutors {
      * @return the newly created single-threaded Executor
      */
     public static ExecutorService newSingleThreadExecutor() {
-        return new AutoShutdownDelegatedExecutorService
+        return wrapSingleThreadExecutor
             (new TThreadPoolExecutor(1, 1,
                                     0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>()));
@@ -153,11 +156,17 @@ public class TExecutors {
      * @throws NullPointerException if threadFactory is null
      */
     public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
-        return new AutoShutdownDelegatedExecutorService
+        return wrapSingleThreadExecutor
             (new TThreadPoolExecutor(1, 1,
                                     0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>(),
                                     threadFactory));
+    }
+
+    private static ExecutorService wrapSingleThreadExecutor(ExecutorService executor) {
+        // C retains explicit lifecycle only: Cleaner is unavailable on that backend.
+        return PlatformDetector.isC() ? new DelegatedExecutorService(executor)
+                : new AutoShutdownDelegatedExecutorService(executor);
     }
 
     /**
@@ -454,17 +463,13 @@ public class TExecutors {
                 return e.shutdownNow();
             } finally { endCall(); }
         }
+        // The auto-shutdown wrapper owns an exact TThreadPoolExecutor: these two queries only read ctl.
+        // They cannot allocate, suspend or call user code, so cleanup cannot run during either query.
         public boolean isShutdown() {
-            beginCall();
-            try {
-                return e.isShutdown();
-            } finally { endCall(); }
+            return e.isShutdown();
         }
         public boolean isTerminated() {
-            beginCall();
-            try {
-                return e.isTerminated();
-            } finally { endCall(); }
+            return e.isTerminated();
         }
         public boolean awaitTermination(long timeout, TimeUnit unit)
             throws InterruptedException {
@@ -526,16 +531,21 @@ public class TExecutors {
     // TeaVM does not run finalizers. The cleanup record owns the underlying pool, never this wrapper.
     private static class AutoShutdownDelegatedExecutorService
             extends DelegatedExecutorService {
+        // A Java object's JSO wrapper can be collected independently on Wasm GC.
+        private final JSObject lifetime = JSObjects.create();
         private final ExecutorCleanup cleanup;
 
         AutoShutdownDelegatedExecutorService(ExecutorService executor) {
             super(executor);
-            cleanup = new ExecutorCleanup(this, executor);
+            cleanup = new ExecutorCleanup(lifetime, executor);
         }
         @Override
         void beginCall() { cleanup.beginCall(); }
         @Override
-        void endCall() { cleanup.endCall(); }
+        void endCall() {
+            cleanup.endCall();
+            ExecutorCleanup.keepAlive(lifetime);
+        }
         @Override
         public void shutdown() {
             super.shutdown();

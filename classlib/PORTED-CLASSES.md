@@ -52,11 +52,14 @@ TeaVM, not ported.
 ExecutorCompletionService and CompletionService use the JDK fallback; they are not ported here.
 
 Executor ports also remove ForkJoinPool-only paths, use one green thread per default asynchronous
-CompletableFuture task. The single-thread executor wrappers use weak references and a reference queue
-instead of finalizers. A lazy daemon thread calls orderly shutdown when a wrapper is collected;
-explicit shutdown unregisters it. Active delegated calls delay cleanup until they finish, including
-calls that suspend. Other executor factories do not gain automatic shutdown. The C backend polls the
-queue while registrations exist because its ReferenceQueue.remove is not implemented.
+CompletableFuture task. On JavaScript and Wasm GC, single-thread executor wrappers use Cleaner
+instead of finalizers. Each wrapper retains a JavaScript lifetime token because a Java object's
+interop wrapper can be collected independently on Wasm GC. Guarded calls keep that token live.
+Collection starts an isolated daemon thread that calls orderly shutdown;
+explicit shutdown unregisters cleanup. Active delegated calls delay cleanup until they finish,
+including calls that suspend. Pure state queries do not need this protection. Other executor
+factories do not gain automatic shutdown. Automatic shutdown after collection is not implemented
+on C; callers must shut down their executors explicitly. Disabled C-only regressions document this gap.
 Hand edits are marked "TeaVM:" in the source. The default factory captures its
 creating thread's group. The Java SE 21 privilegedThreadFactory, privilegedCallable and
 privilegedCallableUsingCurrentClassLoader methods are omitted because TeaVM cannot capture and enforce

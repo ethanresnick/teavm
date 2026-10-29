@@ -15,35 +15,29 @@
  */
 package org.teavm.classlib.java.util.concurrent;
 
-import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
-import java.util.HashSet;
-import java.util.Set;
+import java.lang.ref.Cleaner;
 import java.util.concurrent.ExecutorService;
-import org.teavm.classlib.PlatformDetector;
+import org.teavm.jso.JSBody;
+import org.teavm.jso.JSObject;
 
-/** Cleanup for the otherwise unreachable wrapper returned by newSingleThreadExecutor. */
-final class ExecutorCleanup extends WeakReference<Object> {
-    private static final ReferenceQueue<Object> queue = new ReferenceQueue<>();
-    private static final Set<ExecutorCleanup> pending = new HashSet<>();
-    private static Thread worker;
+/** Browser cleanup for the otherwise unreachable wrapper returned by newSingleThreadExecutor. */
+final class ExecutorCleanup {
+    private static final Cleaner cleaner = Cleaner.create();
     private ExecutorService executor;
+    private Cleaner.Cleanable cleanable;
     private int calls;
     private boolean collected;
 
-    ExecutorCleanup(Object wrapper, ExecutorService executor) {
-        super(wrapper, queue);
+    ExecutorCleanup(JSObject token, ExecutorService executor) {
         this.executor = executor;
-        pending.add(this);
-        if (worker == null) {
-            worker = cleanupThread(ExecutorCleanup::processQueue);
-            worker.start();
-        }
+        cleanable = cleaner.register(token, this::collected);
     }
 
-    // These short operations cannot suspend: TeaVM executes one cooperative thread at a time.
-    // A live call may outlast its wrapper's last compiler-visible use. Defer cleanup until it returns,
-    // rather than relying on the no-op reachabilityFence used by the original port.
+    // Keep the token field visible to the compiler and live through the last guarded call.
+    @JSBody(params = "token", script = "")
+    static native void keepAlive(JSObject token);
+
+    // A live call may outlast its wrapper's last compiler-visible use. Defer cleanup until it returns.
     void beginCall() {
         ++calls;
     }
@@ -55,23 +49,23 @@ final class ExecutorCleanup extends WeakReference<Object> {
     }
 
     void cancel() {
+        var registration = cleanable;
         takeExecutor();
-        if (pending.isEmpty() && worker != null) {
-            worker.interrupt();
+        if (registration != null) {
+            // clean() invokes the action synchronously. Detach the executor first so this only unregisters it.
+            registration.clean();
         }
     }
 
     private ExecutorService takeExecutor() {
         var result = executor;
         executor = null;
-        pending.remove(this);
-        clear();
+        cleanable = null;
         return result;
     }
 
     void collected() {
         collected = true;
-        pending.remove(this);
         if (calls == 0 && executor != null) {
             scheduleShutdown();
         }
@@ -79,7 +73,7 @@ final class ExecutorCleanup extends WeakReference<Object> {
 
     private void scheduleShutdown() {
         var service = takeExecutor();
-        // Shutdown can acquire a lock. Neither delegated calls nor the queue worker should wait for it.
+        // A Cleaner callback has no green-thread context. Pool shutdown may lock, so only start a thread here.
         cleanupThread(service::shutdown).start();
     }
 
@@ -92,31 +86,5 @@ final class ExecutorCleanup extends WeakReference<Object> {
         thread.setContextClassLoader(null);
         thread.setDaemon(true);
         return thread;
-    }
-
-    private static void processQueue() {
-        while (!pending.isEmpty()) {
-            try {
-                processNext();
-            } catch (InterruptedException e) {
-                // Explicit shutdown of the last registration wakes the worker so it can exit.
-            }
-        }
-        worker = null;
-    }
-
-    private static void processNext() throws InterruptedException {
-        ExecutorCleanup ref;
-        if (PlatformDetector.isC()) {
-            // C supports poll(), but not blocking ReferenceQueue.remove().
-            ref = (ExecutorCleanup) queue.poll();
-            if (ref == null) {
-                Thread.sleep(100);
-                return;
-            }
-        } else {
-            ref = (ExecutorCleanup) queue.remove();
-        }
-        ref.collected();
     }
 }

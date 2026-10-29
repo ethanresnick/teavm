@@ -108,9 +108,9 @@ public class TThread extends TObject implements TRunnable {
             group = creator.group;
             priority = creator.priority;
             daemon = creator.daemon;
-            contextClassLoader = creator.contextClassLoader;
-            contextClassLoaderSet = creator.contextClassLoaderSet;
             if (inheritThreadLocals) {
+                contextClassLoader = creator.contextClassLoader;
+                contextClassLoaderSet = creator.contextClassLoaderSet;
                 inherited = TInheritableThreadLocal.snapshot();
             }
         }
@@ -131,11 +131,7 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public TThread(TThreadGroup group, TRunnable target, String name) {
-        this(target, name, false);
-        if (group != null) {
-            this.group = group;
-            priority = Math.min(currentThread.priority, group.getMaxPriority());
-        }
+        this(group, target, name, 0, true);
     }
 
     public TThread(TThreadGroup group, TRunnable target, String name, long stackSize) {
