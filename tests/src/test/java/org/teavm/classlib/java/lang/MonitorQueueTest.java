@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.lang;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
@@ -64,4 +65,48 @@ public class MonitorQueueTest {
         reader.join();
         assertTrue(progressed);
     }
+
+    @Test
+    @SkipJVM
+    public void queuedThreadsRunBeforeReleasedOwnerReacquires() throws InterruptedException {
+        for (int threadCount : new int[] { 1, 2, 5 }) {
+            Object monitor = new Object();
+            int[] entered = new int[1];
+            Thread[] threads = new Thread[threadCount];
+            synchronized (monitor) {
+                for (int i = 0; i < threads.length; ++i) {
+                    threads[i] = new Thread(() -> {
+                        synchronized (monitor) {
+                            synchronized (monitor) {
+                                ++entered[0];
+                                // Keep the acquisition async and hold the monitor across a suspension.
+                                try {
+                                    Thread.sleep(1);
+                                } catch (InterruptedException e) {
+                                    return;
+                                }
+                            }
+                        }
+                    });
+                    threads[i].start();
+                }
+                // Each cooperative thread reaches its blocked acquisition before this timer resumes.
+                Thread.sleep(50);
+                synchronized (monitor) {
+                    // Reentry by the owner must still succeed with other threads queued.
+                    assertEquals(0, entered[0]);
+                }
+            }
+            int beforeReacquiring;
+            synchronized (monitor) {
+                beforeReacquiring = entered[0];
+            }
+            for (Thread thread : threads) {
+                thread.join();
+            }
+            assertEquals(threadCount, beforeReacquiring);
+            assertEquals(threadCount, entered[0]);
+        }
+    }
+
 }
