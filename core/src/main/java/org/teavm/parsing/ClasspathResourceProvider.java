@@ -29,9 +29,15 @@ import org.teavm.parsing.resource.ResourceProvider;
 
 public class ClasspathResourceProvider implements ResourceProvider {
     private ClassLoader classLoader;
+    private boolean includeSystemModules;
 
     public ClasspathResourceProvider(ClassLoader classLoader) {
+        this(classLoader, true);
+    }
+
+    public ClasspathResourceProvider(ClassLoader classLoader, boolean includeSystemModules) {
         this.classLoader = classLoader;
+        this.includeSystemModules = includeSystemModules;
     }
 
     @Override
@@ -41,15 +47,18 @@ public class ClasspathResourceProvider implements ResourceProvider {
             if (enumeration == null) {
                 return Collections.emptyIterator();
             }
+            var resources = Collections.list(enumeration).stream()
+                    .filter(url -> includeSystemModules || !url.getProtocol().equals("jrt"))
+                    .iterator();
             return new Iterator<>() {
                 @Override
                 public boolean hasNext() {
-                    return enumeration.hasMoreElements();
+                    return resources.hasNext();
                 }
 
                 @Override
                 public Resource next() {
-                    var elem = enumeration.nextElement();
+                    var elem = resources.next();
                     return new Resource() {
                         @Override
                         public InputStream open() {
@@ -65,7 +74,7 @@ public class ClasspathResourceProvider implements ResourceProvider {
                             if (classLoader == null) {
                                 return null;
                             }
-                            URL url = classLoader.getResource(name);
+                            URL url = elem;
                             if (url == null) {
                                 return null;
                             }
