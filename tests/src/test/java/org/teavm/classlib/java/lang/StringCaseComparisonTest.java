@@ -121,6 +121,24 @@ public class StringCaseComparisonTest {
     }
 
     @Test
+    public void extremeRegionBoundsMatchWideArithmetic() {
+        int[] values = { Integer.MIN_VALUE, -3, -1, 0, 1, 3, 4, Integer.MAX_VALUE };
+        String value = "aaa";
+        for (int offset : values) {
+            for (int otherOffset : values) {
+                for (int length : values) {
+                    boolean expected = offset >= 0 && otherOffset >= 0
+                            && (long) offset + length <= value.length()
+                            && (long) otherOffset + length <= value.length();
+                    assertEquals(expected, value.regionMatches(offset, value, otherOffset, length));
+                    assertEquals(expected, value.regionMatches(true, offset, value, otherOffset, length));
+                    assertEquals(expected, value.regionMatches(false, offset, value, otherOffset, length));
+                }
+            }
+        }
+    }
+
+    @Test
     public void supplementaryOrderingMatchesJdk() {
         // Match OpenJDK 21/25 code-point ordering despite the Javadoc wording about folded compareTo.
         assertTrue("\ud801\udc00".compareToIgnoreCase("\ue000") > 0);

@@ -288,8 +288,17 @@ public final class TString extends TObject implements TSerializable, TComparable
         for (int i = 0; i < count; i++) {
             int a = charactersGet(start + i);
             int b = other.charactersGet(otherStart + i);
-            if (a == b && !TCharacter.isSurrogate((char) a)) {
-                continue;
+            if (a == b) {
+                if (!TCharacter.isSurrogate((char) a)) {
+                    continue;
+                }
+                if (TCharacter.isHighSurrogate((char) a) && i + 1 < count) {
+                    char next = charactersGet(start + i + 1);
+                    if (TCharacter.isLowSurrogate(next) && next == other.charactersGet(otherStart + i + 1)) {
+                        i++;
+                        continue;
+                    }
+                }
             }
             if (a < 128 && b < 128) {
                 if (a >= 'A' && a <= 'Z') {
@@ -338,6 +347,11 @@ public final class TString extends TObject implements TSerializable, TComparable
         return c;
     }
 
+    private static boolean regionOutOfBounds(int offset, int length, int size) {
+        // Callers reject negative offsets, so each branch uses arithmetic that cannot overflow.
+        return length >= 0 ? offset > size - length : offset + length > size;
+    }
+
     public boolean startsWith(TString prefix, int toffset) {
         if (toffset + prefix.length() > length()) {
             return false;
@@ -361,16 +375,16 @@ public final class TString extends TObject implements TSerializable, TComparable
         if (!ignoreCase) {
             return regionMatches(toffset, other, ooffset, len);
         }
-        if (toffset < 0 || ooffset < 0 || (long) toffset + len > length()
-                || (long) ooffset + len > other.length()) {
+        if (toffset < 0 || ooffset < 0 || regionOutOfBounds(toffset, len, length())
+                || regionOutOfBounds(ooffset, len, other.length())) {
             return false;
         }
         return compareIgnoringCase(toffset, toffset + len, other, ooffset, ooffset + len) == 0;
     }
 
     public boolean regionMatches(int toffset, TString other, int ooffset, int len) {
-        if (toffset < 0 || ooffset < 0 || (long) toffset + len > length()
-                || (long) ooffset + len > other.length()) {
+        if (toffset < 0 || ooffset < 0 || regionOutOfBounds(toffset, len, length())
+                || regionOutOfBounds(ooffset, len, other.length())) {
             return false;
         }
         for (int i = 0; i < len; ++i) {
