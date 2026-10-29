@@ -95,6 +95,10 @@ public class TThread extends TObject implements TRunnable {
     }
 
     private TThread(TRunnable target, String name, boolean defaultName) {
+        this(target, name, defaultName, true);
+    }
+
+    private TThread(TRunnable target, String name, boolean defaultName, boolean inheritThreadLocals) {
         this.name = defaultName ? null : Objects.requireNonNull(name);
         this.target = target;
         id = nextId++;
@@ -104,9 +108,11 @@ public class TThread extends TObject implements TRunnable {
             group = creator.group;
             priority = creator.priority;
             daemon = creator.daemon;
-            contextClassLoader = creator.contextClassLoader;
-            contextClassLoaderSet = creator.contextClassLoaderSet;
-            inherited = TInheritableThreadLocal.snapshot();
+            if (inheritThreadLocals) {
+                contextClassLoader = creator.contextClassLoader;
+                contextClassLoaderSet = creator.contextClassLoaderSet;
+                inherited = TInheritableThreadLocal.snapshot();
+            }
         }
         // Only public construction reaches the lazy group holder, never the main-thread initializer.
         priority = Math.min(priority, getThreadGroup().getMaxPriority());
@@ -125,15 +131,19 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public TThread(TThreadGroup group, TRunnable target, String name) {
-        this(target, name, false);
-        if (group != null) {
-            this.group = group;
-            priority = Math.min(currentThread.priority, group.getMaxPriority());
-        }
+        this(group, target, name, 0, true);
     }
 
     public TThread(TThreadGroup group, TRunnable target, String name, long stackSize) {
         this(group, target, name);
+    }
+
+    public TThread(TThreadGroup group, TRunnable target, String name, long stackSize, boolean inheritThreadLocals) {
+        this(target, name, false, inheritThreadLocals);
+        if (group != null) {
+            this.group = group;
+            priority = Math.min(currentThread.priority, group.getMaxPriority());
+        }
     }
 
     public final TThreadGroup getThreadGroup() {
