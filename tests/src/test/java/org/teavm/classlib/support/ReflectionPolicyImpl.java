@@ -30,6 +30,7 @@ public class ReflectionPolicyImpl extends SimpleReflectionPolicy {
                 .reflectableMembers(withAnnotation(Reflectable.class))
                 .reflectableMethods(withReturnType(SerializedLambda.class).and(named("writeReplace")));
 
+        selectClass("org.teavm.classlib.java.lang.ReflectiveInitializationTest$ToInitialize").foundByName();
         selectClass("org.teavm.classlib.java.lang.TestObject").foundByName();
         selectClass("org.teavm.classlib.java.lang.ClassReflectionAPITest$FoundLate").foundByName();
         // ThreadTest simulates constructor-free allocation without exposing these fields in production.

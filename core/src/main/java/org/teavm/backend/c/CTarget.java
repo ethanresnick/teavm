@@ -129,6 +129,7 @@ import org.teavm.dependency.DependencyAnalyzer;
 import org.teavm.dependency.DependencyListener;
 import org.teavm.interop.Address;
 import org.teavm.interop.Platforms;
+import org.teavm.model.CallLocation;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ClassHolderTransformer;
 import org.teavm.model.ClassReader;
@@ -415,6 +416,13 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         asyncMethods = new HashSet<>(asyncFinder.getAsyncMethods());
         asyncMethods.addAll(asyncFinder.getAsyncFamilyMethods());
         hasThreads = asyncFinder.hasAsyncMethods();
+        for (var entry : List.of("initialize", "initializeField", "initializeEnum", "initializeConstructor")) {
+            var method = new MethodReference(ClassInfo.class, entry, void.class);
+            if (asyncMethods.contains(method)) {
+                controller.getDiagnostics().error(new CallLocation(method),
+                        "The C backend does not support reflective initialization of a class that can suspend");
+            }
+        }
     }
 
     @Override

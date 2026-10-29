@@ -301,8 +301,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.BOOLEAN) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Boolean.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -316,8 +318,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.BYTE) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Byte.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -331,8 +335,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.SHORT) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Short.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -346,8 +352,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.CHAR) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Character.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -361,8 +369,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.INT) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Integer.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -376,8 +386,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.LONG) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Long.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -391,8 +403,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.FLOAT) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Float.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -406,8 +420,10 @@ public class TField extends TAccessibleObject implements TMember {
             throw new IllegalArgumentException();
         }
         if (fieldInfo.type().classInfo().primitiveKind() == ClassInfo.PrimitiveKind.DOUBLE) {
+            initClass();
             fieldInfo.write(obj, value);
         } else if (fieldInfo.type().classInfo().classObject() == Double.class) {
+            initClass();
             fieldInfo.write(obj, (Object) value);
         } else {
             throw new IllegalArgumentException();
@@ -427,7 +443,7 @@ public class TField extends TAccessibleObject implements TMember {
 
     private void initClass() {
         if ((fieldInfo.modifiers() & ModifiersInfo.STATIC) != 0) {
-            declaringClass.initialize();
+            declaringClass.initializeForField();
         }
     }
 

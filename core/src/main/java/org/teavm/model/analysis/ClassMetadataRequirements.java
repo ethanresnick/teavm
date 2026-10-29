@@ -21,6 +21,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.teavm.dependency.DependencyInfo;
 import org.teavm.dependency.MethodDependencyInfo;
@@ -197,9 +198,12 @@ public class ClassMetadataRequirements {
                 Object[].class));
         if (enumConstantsDep != null && enumConstantsDep.isUsed()) {
             hasEnumConstants = true;
+            hasClassInit = true;
             var types = enumConstantsDep.getVariable(0).getClassValueNode().getTypes();
             for (var type : types) {
-                requirements.computeIfAbsent(type, k -> new ClassInfo()).enumConstants = true;
+                var info = requirements.computeIfAbsent(type, k -> new ClassInfo());
+                info.enumConstants = true;
+                info.classInit = true;
             }
         }
 
@@ -246,12 +250,14 @@ public class ClassMetadataRequirements {
             hasNewInstance = true;
         }
 
-        var classInit = dependencyInfo.getMethod(new MethodReference(Class.class, "initialize", void.class));
-        if (classInit != null && classInit.isUsed()) {
-            hasClassInit = true;
-            var types = classInit.getVariable(0).getClassValueNode().getTypes();
-            for (var type : types) {
-                requirements.computeIfAbsent(type, k -> new ClassInfo()).classInit = true;
+        for (var entry : List.of("initialize", "initializeForField", "initializeForConstructor")) {
+            var classInit = dependencyInfo.getMethod(new MethodReference(Class.class, entry, void.class));
+            if (classInit != null && classInit.isUsed()) {
+                hasClassInit = true;
+                var types = classInit.getVariable(0).getClassValueNode().getTypes();
+                for (var type : types) {
+                    requirements.computeIfAbsent(type, k -> new ClassInfo()).classInit = true;
+                }
             }
         }
 

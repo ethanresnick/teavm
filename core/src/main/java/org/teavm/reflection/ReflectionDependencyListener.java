@@ -119,8 +119,14 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
     private MethodReference getClassAnnotations = new MethodReference(Class.class, "getDeclaredAnnotations",
             Annotation[].class);
     private final List<MethodDependency> reachedForNames = new ArrayList<>();
-    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, Boolean.class,
+    private MethodReference forName = new MethodReference(Class.class, "forName", String.class, boolean.class,
             ClassLoader.class, Class.class);
+    private MethodReference lookupClass = new MethodReference(Class.class, "lookupClass", String.class, Class.class);
+    private MethodReference forKnownName = new MethodReference(Class.class, "forKnownName", Class.class,
+            boolean.class, ClassLoader.class, Class.class);
+    private MethodReference lookupKnownClass = new MethodReference(Class.class, "lookupKnownClass", Class.class,
+            ClassLoader.class, Class.class);
+    private MethodReference knownName = new MethodReference(Class.class, "knownName", Class.class, String.class);
     private MethodReference classNewInstance = new MethodReference(Class.class, "newInstance", Object.class);
     private MethodReference forNameShort = new MethodReference(Class.class, "forName", String.class, Class.class);
     private MethodReference fieldGetType = new MethodReference(Field.class, "getType", Class.class);
@@ -406,7 +412,24 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
                     }
                 }
             });
-        } else if (method.getReference().equals(forName) || method.getReference().equals(forNameShort)) {
+        } else if (method.getReference().equals(forKnownName)
+                || method.getReference().equals(lookupKnownClass)) {
+            method.getVariable(1).getClassValueNode().connect(method.getResult().getClassValueNode());
+        } else if (method.getReference().equals(knownName)) {
+            method.getVariable(1).getClassValueNode().addConsumer(type -> {
+                var valueType = type.getValueType();
+                while (valueType instanceof ValueType.Array) {
+                    valueType = ((ValueType.Array) valueType).getItemType();
+                }
+                if (valueType instanceof ValueType.Object) {
+                    var name = ((ValueType.Object) valueType).getClassName();
+                    if (classesFoundByName.add(name)) {
+                        markFoundByName(name);
+                    }
+                }
+            });
+        } else if (method.getReference().equals(forName) || method.getReference().equals(forNameShort)
+                || method.getReference().equals(lookupClass)) {
             reachedForNames.add(method);
             method.getResult().propagate(agent.getType(ValueType.object("java.lang.Class")));
             for (var className : classesFoundByName) {

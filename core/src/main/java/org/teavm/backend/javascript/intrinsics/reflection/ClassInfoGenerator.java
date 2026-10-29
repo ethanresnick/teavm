@@ -70,6 +70,9 @@ public class ClassInfoGenerator implements Injector, Generator {
                 context.writeExpr(context.getArgument(1));
                 context.getWriter().append("]");
                 break;
+            case "initializeConstructor":
+            case "initializeField":
+            case "initializeEnum":
             case "initialize":
                 context.writeExpr(context.getArgument(0));
                 context.getWriter().append("[").appendFunction("$rt_meta").append("].clinit()");
