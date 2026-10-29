@@ -741,17 +741,6 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
      */
 
     /**
-     * If there is a security manager, makes sure caller has
-     * permission to shut down threads in general (see shutdownPerm).
-     * If this passes, additionally makes sure the caller is allowed
-     * to interrupt each worker thread. This might not be true even if
-     * first check passed, if the SecurityManager treats some threads
-     * specially.
-     */
-    private void checkShutdownAccess() {
-    }
-
-    /**
      * Interrupts all threads, even if active. Ignores SecurityExceptions
      * (in which case some threads may remain uninterrupted).
      */
@@ -1371,7 +1360,6 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
         final TReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            checkShutdownAccess();
             advanceRunState(SHUTDOWN);
             interruptIdleWorkers();
             onShutdown(); // hook for TScheduledThreadPoolExecutor
@@ -1403,7 +1391,6 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
         final TReentrantLock mainLock = this.mainLock;
         mainLock.lock();
         try {
-            checkShutdownAccess();
             advanceRunState(STOP);
             interruptWorkers();
             tasks = drainQueue();
@@ -1637,7 +1624,7 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
      */
     public void allowCoreThreadTimeOut(boolean value) {
         if (value && keepAliveTime <= 0)
-            throw new IllegalArgumentException("Core threads must have nonzero keep alive times");
+            throw new IllegalArgumentException();
         if (value != allowCoreThreadTimeOut) {
             allowCoreThreadTimeOut = value;
             if (value)
@@ -1695,7 +1682,7 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
         if (time < 0)
             throw new IllegalArgumentException();
         if (time == 0 && allowsCoreThreadTimeOut())
-            throw new IllegalArgumentException("Core threads must have nonzero keep alive times");
+            throw new IllegalArgumentException();
         long keepAliveTime = unit.toNanos(time);
         long delta = keepAliveTime - this.keepAliveTime;
         this.keepAliveTime = keepAliveTime;
@@ -2052,9 +2039,7 @@ public class TThreadPoolExecutor extends AbstractExecutorService {
          * @throws TRejectedExecutionException always
          */
         public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
-            throw new TRejectedExecutionException("Task " + r.toString() +
-                                                 " rejected from " +
-                                                 e.toString());
+            throw new TRejectedExecutionException();
         }
     }
 

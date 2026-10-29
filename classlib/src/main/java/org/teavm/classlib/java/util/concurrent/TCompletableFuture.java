@@ -2850,6 +2850,7 @@ public class TCompletableFuture<T> implements Future<T>, CompletionStage<T> {
             this.delay = delay; this.unit = unit; this.executor = executor;
         }
         public void execute(Runnable r) {
+            Objects.requireNonNull(r);
             Delayer.delay(new TaskSubmitter(executor, r), delay, unit);
         }
     }
@@ -2891,7 +2892,7 @@ public class TCompletableFuture<T> implements Future<T>, CompletionStage<T> {
         final Future<?> f;
         Canceller(Future<?> f) { this.f = f; }
         public void accept(Object ignore, Throwable ex) {
-            if (ex == null && f != null && !f.isDone())
+            if (f != null && !f.isDone())
                 f.cancel(false);
         }
     }
@@ -2997,11 +2998,6 @@ public class TCompletableFuture<T> implements Future<T>, CompletionStage<T> {
     }
 
     static {
-        try {
-        } catch (RuntimeException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-
         // Reduce the risk of rare disastrous classloading in first call to
         // TLockSupport.park: https://bugs.openjdk.java.net/browse/JDK-8074773
         Class<?> ensureLoaded = TLockSupport.class;

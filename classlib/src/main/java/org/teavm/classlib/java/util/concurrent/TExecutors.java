@@ -17,7 +17,7 @@
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/Executors.java).
  * The port is mechanical: the package and the "T" prefix, and EmulSupport in place of Reference.reachabilityFence.
- * TeaVM has no ForkJoinPool, ThreadGroup or security manager checks; the edits for that are marked "TeaVM:".
+ * TeaVM has no ForkJoinPool or security manager checks; the edits for that are marked "TeaVM:".
  * The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
  */
 /*
@@ -30,8 +30,6 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static org.teavm.classlib.EmulSupport.reachabilityFence;
-import java.security.AccessControlException;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.Collection;
@@ -323,52 +321,6 @@ public class TExecutors {
     }
 
     /**
-     * Returns a thread factory used to create new threads that
-     * have the same permissions as the current thread.
-     * This factory creates threads with the same settings as {@link
-     * TExecutors#defaultThreadFactory}, additionally setting the
-     * AccessControlContext and contextClassLoader of new threads to
-     * be the same as the thread invoking this
-     * {@code privilegedThreadFactory} method.  A new
-     * {@code privilegedThreadFactory} can be created within an
-     * {@link AccessController#doPrivileged AccessController.doPrivileged}
-     * action setting the current thread's access control context to
-     * create threads with the selected permission settings holding
-     * within that action.
-     *
-     * <p>Note that while tasks running within such threads will have
-     * the same access control and class loader settings as the
-     * current thread, they need not have the same {@link
-     * java.lang.ThreadLocal} or {@link
-     * java.lang.InheritableThreadLocal} values. If necessary,
-     * particular values of thread locals can be set or reset before
-     * any task runs in {@link TThreadPoolExecutor} subclasses using
-     * {@link TThreadPoolExecutor#beforeExecute(Thread, Runnable)}.
-     * Also, if it is necessary to initialize worker threads to have
-     * the same InheritableThreadLocal settings as some other
-     * designated thread, you can create a custom ThreadFactory in
-     * which that thread waits for and services requests to create
-     * others that will inherit its values.
-     *
-     * @return a thread factory
-     * @throws AccessControlException if the current access control
-     * context does not have permission to both get and set context
-     * class loader
-     *
-     * @deprecated This method is only useful in conjunction with
-     *       {@linkplain SecurityManager the Security Manager}, which is
-     *       deprecated and subject to removal in a future release.
-     *       Consequently, this method is also deprecated and subject to
-     *       removal. There is no replacement for the Security Manager or this
-     *       method.
-     */
-    @Deprecated(since="17", forRemoval=true)
-    public static ThreadFactory privilegedThreadFactory() {
-        // TeaVM: no security manager checks and no context class loader to capture, so the default factory.
-        return defaultThreadFactory();
-    }
-
-    /**
      * Returns a {@link Callable} object that, when
      * called, runs the given task and returns the given result.  This
      * can be useful when applying methods requiring a
@@ -427,71 +379,6 @@ public class TExecutors {
             public Object call() throws Exception { return action.run(); }};
     }
 
-    /**
-     * Returns a {@link Callable} object that will, when called,
-     * execute the given {@code callable} under the current access
-     * control context. This method should normally be invoked within
-     * an {@link AccessController#doPrivileged AccessController.doPrivileged}
-     * action to create callables that will, if possible, execute
-     * under the selected permission settings holding within that
-     * action; or if not possible, throw an associated {@link
-     * AccessControlException}.
-     * @param callable the underlying task
-     * @param <T> the type of the callable's result
-     * @return a callable object
-     * @throws NullPointerException if callable null
-     *
-     * @deprecated This method is only useful in conjunction with
-     *       {@linkplain SecurityManager the Security Manager}, which is
-     *       deprecated and subject to removal in a future release.
-     *       Consequently, this method is also deprecated and subject to
-     *       removal. There is no replacement for the Security Manager or this
-     *       method.
-     */
-    @Deprecated(since="17", forRemoval=true)
-    public static <T> Callable<T> privilegedCallable(Callable<T> callable) {
-        if (callable == null)
-            throw new NullPointerException();
-        // TeaVM: no access control context to capture, so the task itself.
-        return callable;
-    }
-
-    /**
-     * Returns a {@link Callable} object that will, when called,
-     * execute the given {@code callable} under the current access
-     * control context, with the current context class loader as the
-     * context class loader. This method should normally be invoked
-     * within an
-     * {@link AccessController#doPrivileged AccessController.doPrivileged}
-     * action to create callables that will, if possible, execute
-     * under the selected permission settings holding within that
-     * action; or if not possible, throw an associated {@link
-     * AccessControlException}.
-     *
-     * @param callable the underlying task
-     * @param <T> the type of the callable's result
-     * @return a callable object
-     * @throws NullPointerException if callable null
-     * @throws AccessControlException if the current access control
-     * context does not have permission to both set and get context
-     * class loader
-     *
-     * @deprecated This method is only useful in conjunction with
-     *       {@linkplain SecurityManager the Security Manager}, which is
-     *       deprecated and subject to removal in a future release.
-     *       Consequently, this method is also deprecated and subject to
-     *       removal. There is no replacement for the Security Manager or this
-     *       method.
-     */
-    @Deprecated(since="17", forRemoval=true)
-    public static <T> Callable<T> privilegedCallableUsingCurrentClassLoader(Callable<T> callable) {
-        if (callable == null)
-            throw new NullPointerException();
-        // TeaVM: no security manager checks, access control context or context class loader to capture, so the task
-        // itself.
-        return callable;
-    }
-
     // Non-public classes supporting the public methods
 
     /**
@@ -520,16 +407,18 @@ public class TExecutors {
         private static final AtomicInteger poolNumber = new AtomicInteger(1);
         private final AtomicInteger threadNumber = new AtomicInteger(1);
         private final String namePrefix;
+        private final ThreadGroup group;
 
-        // TeaVM: no ThreadGroup, so no group field, and newThread uses the two-argument Thread constructor.
+        // TeaVM: no functional security manager; capture the creating thread's group.
         DefaultThreadFactory() {
+            group = Thread.currentThread().getThreadGroup();
             namePrefix = "pool-" +
                           poolNumber.getAndIncrement() +
                          "-thread-";
         }
 
         public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, namePrefix + threadNumber.getAndIncrement());
+            Thread t = new Thread(group, r, namePrefix + threadNumber.getAndIncrement());
             if (t.isDaemon())
                 t.setDaemon(false);
             if (t.getPriority() != Thread.NORM_PRIORITY)

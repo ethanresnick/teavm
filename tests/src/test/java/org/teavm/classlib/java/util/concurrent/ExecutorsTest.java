@@ -39,7 +39,6 @@
  *    not have
  * - testPrivilegedCallableWithPrivs: needs a SecurityManager and permissions (runWithPermissions), which TeaVM does
  *    not have
- * Changed: testDefaultThreadFactory no longer checks the thread group, because TeaVM has no ThreadGroup.
  * Removed: catch blocks for SecurityException, which only a SecurityManager throws.
  */
 
@@ -50,9 +49,6 @@ package org.teavm.classlib.java.util.concurrent;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-import java.security.AccessControlContext;
-import java.security.AccessControlException;
-import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
@@ -464,6 +460,46 @@ public class ExecutorsTest extends JSR166TestCase {
             Callable c = Executors.callable((PrivilegedExceptionAction) null);
             shouldThrow();
         } catch (NullPointerException success) {}
+    }
+
+    // Executors.defaultThreadFactory: the factory captures its creator's group, and caps normal priority
+    // at that group's maximum.
+    // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html
+    @Test
+    public void testFactoryCapturesCreatorGroup() throws InterruptedException {
+        ThreadGroup creatorGroup = new ThreadGroup("factory-creator");
+        ThreadGroup callerGroup = new ThreadGroup("factory-caller");
+        creatorGroup.setMaxPriority(3);
+        callerGroup.setMaxPriority(2);
+        java.util.concurrent.ThreadFactory[] factory = new java.util.concurrent.ThreadFactory[1];
+        Thread creator = new Thread(creatorGroup, new CheckedRunnable() {
+            public void realRun() {
+                factory[0] = Executors.defaultThreadFactory();
+            }
+        });
+        creator.start();
+        creator.join();
+        Thread[] child = new Thread[1];
+        ThreadGroup[] runningGroup = new ThreadGroup[1];
+        Thread caller = new Thread(callerGroup, new CheckedRunnable() {
+            public void realRun() {
+                child[0] = factory[0].newThread(new CheckedRunnable() {
+                    public void realRun() {
+                        runningGroup[0] = Thread.currentThread().getThreadGroup();
+                    }
+                });
+            }
+        });
+        caller.setDaemon(true);
+        caller.start();
+        caller.join();
+        assertNotNull(child[0]);
+        assertSame(creatorGroup, child[0].getThreadGroup());
+        assertEquals(3, child[0].getPriority());
+        assertFalse(child[0].isDaemon());
+        child[0].start();
+        child[0].join();
+        assertSame(creatorGroup, runningGroup[0]);
     }
 
 }

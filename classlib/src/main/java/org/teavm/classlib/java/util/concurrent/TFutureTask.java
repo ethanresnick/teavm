@@ -210,11 +210,11 @@ public class TFutureTask<V> implements RunnableFuture<V> {
                 V result = (V) outcome;
                 return result;
             case FAILED:
-                throw new IllegalStateException("Task completed with exception");
+                throw new IllegalStateException();
             case CANCELLED:
-                throw new IllegalStateException("Task was cancelled");
+                throw new IllegalStateException();
             default:
-                throw new IllegalStateException("Task has not completed");
+                throw new IllegalStateException();
         }
     }
 
@@ -222,25 +222,21 @@ public class TFutureTask<V> implements RunnableFuture<V> {
     public Throwable exceptionNow() {
         switch (state()) {    // Future.State
             case SUCCESS:
-                throw new IllegalStateException("Task completed with a result");
+                throw new IllegalStateException();
             case FAILED:
                 Object x = outcome;
                 return (Throwable) x;
             case CANCELLED:
-                throw new IllegalStateException("Task was cancelled");
+                throw new IllegalStateException();
             default:
-                throw new IllegalStateException("Task has not completed");
+                throw new IllegalStateException();
         }
     }
 
     @Override
     public State state() {
         int s = state;
-        while (s == COMPLETING) {
-            // waiting for transition to NORMAL or EXCEPTIONAL
-            Thread.yield();
-            s = state;
-        }
+        // TeaVM: set and setException cannot suspend between COMPLETING and the terminal state.
         switch (s) {
             case NORMAL:
                 return State.SUCCESS;
@@ -591,11 +587,6 @@ public class TFutureTask<V> implements RunnableFuture<V> {
     }
 
     static {
-        try {
-        } catch (RuntimeException e) {
-            throw new ExceptionInInitializerError(e);
-        }
-
         // Reduce the risk of rare disastrous classloading in first call to
         // TLockSupport.park: https://bugs.openjdk.java.net/browse/JDK-8074773
         Class<?> ensureLoaded = TLockSupport.class;

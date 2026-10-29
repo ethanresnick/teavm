@@ -61,9 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
-import org.teavm.junit.TestPlatform;
 
 
 @TeaVMTest
@@ -695,8 +693,6 @@ public class ScheduledExecutorTest extends JSR166TestCase {
      * purge eventually removes cancelled tasks from the queue
      */
     @Test
-    // The retry loop requires preemption; cooperative backends cannot run the worker while it spins.
-    @SkipPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC, TestPlatform.C})
     public void testPurge() throws InterruptedException {
         final ScheduledFuture[] tasks = new ScheduledFuture[5];
         final Runnable releaser = new Runnable() { public void run() {
@@ -718,6 +714,8 @@ public class ScheduledExecutorTest extends JSR166TestCase {
                 long count = p.getTaskCount();
                 if (count == max)
                     return;
+                // TeaVM: permit the worker to reach an interference-free point before retrying.
+                spinWait();
             } while (millisElapsedSince(startTime) < LONG_DELAY_MS);
             fail("Purge failed to remove cancelled tasks");
         }

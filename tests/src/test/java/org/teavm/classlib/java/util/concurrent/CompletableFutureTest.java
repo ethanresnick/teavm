@@ -3715,13 +3715,13 @@ public class CompletableFutureTest extends JSR166TestCase {
      */
     @Test
     public void testDelayedExecutor() {
-        testInParallel(() -> testDelayedExecutor(null, null),
-                       () -> testDelayedExecutor(null, 1),
-                       () -> testDelayedExecutor(new ThreadExecutor(), 1),
-                       () -> testDelayedExecutor(new ThreadExecutor(), 1));
+        testInParallel(() -> checkDelayedExecutor(null, null),
+                       () -> checkDelayedExecutor(null, 1),
+                       () -> checkDelayedExecutor(new ThreadExecutor(), 1),
+                       () -> checkDelayedExecutor(new ThreadExecutor(), 1));
     }
 
-    public void testDelayedExecutor(Executor executor, Integer v) throws Exception {
+    public void checkDelayedExecutor(Executor executor, Integer v) throws Exception {
         long timeoutMillis = timeoutMillis();
         // Use an "unreasonably long" long timeout to catch lingering threads
         long longTimeoutMillis = 1000 * 60 * 60 * 24;
