@@ -128,14 +128,57 @@ public class MissingClassTypeTest {
         check(CastToMissing.class);
     }
 
-    @Test
-    public void nonNullCastToMissingClass() throws IOException {
-        check(NonNullCastToMissing.class);
+    @ParameterizedTest
+    @MethodSource("missingTypeOperations")
+    public void nonNullCastToMissingClass(String backend, TeaVMOptimizationLevel level) throws IOException {
+        check(NonNullCastToMissing.class, backend, level);
     }
 
-    @Test
-    public void instanceOfMissingClass() throws IOException {
-        check(InstanceOfMissing.class);
+    @ParameterizedTest
+    @MethodSource("missingTypeOperations")
+    public void instanceOfMissingClass(String backend, TeaVMOptimizationLevel level) throws IOException {
+        check(InstanceOfMissing.class, backend, level);
+    }
+
+    @ParameterizedTest
+    @MethodSource("missingTypeOperations")
+    public void nullInstanceOfMissingClass(String backend, TeaVMOptimizationLevel level) throws IOException {
+        check(NullInstanceOfMissing.class, backend, level);
+    }
+
+    private static List<Arguments> missingTypeOperations() {
+        var cases = new ArrayList<Arguments>();
+        for (var backend : List.of("js", "wasm-gc", "c")) {
+            for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
+                cases.add(Arguments.of(backend, level));
+            }
+        }
+        return cases;
+    }
+
+    private void check(Class<?> entry, String backend, TeaVMOptimizationLevel level) throws IOException {
+        var dir = entry.getSimpleName() + "-" + backend + "-" + level.name().toLowerCase();
+        switch (backend) {
+            case "js":
+                assumeTrue(jsNeeded);
+                build(new JavaScriptTarget(), entry, level, dir, "test.js");
+                browserRunner.runTest(new BrowserRunDescriptor(dir, "tests/" + dir + "/test.js", false, List.of(),
+                        null, false));
+                break;
+            case "wasm-gc":
+                assumeTrue(wasmGCNeeded);
+                var target = new WasmGCTarget();
+                target.setObfuscated(false);
+                build(target, entry, level, dir, "test.wasm");
+                browserRunner.runTest(new BrowserRunDescriptor(dir,
+                        "resources/org/teavm/wasm-integration/missing-class/launcher.js", false, List.of(),
+                        dir + "/test.wasm", false));
+                break;
+            default:
+                assumeTrue(cNeeded);
+                runC(entry, dir, level);
+                break;
+        }
     }
 
     @Test
@@ -254,13 +297,13 @@ public class MissingClassTypeTest {
                     null, false));
         }
         if (cNeeded) {
-            runC(entry, name + "-c");
+            runC(entry, name + "-c", TeaVMOptimizationLevel.SIMPLE);
         }
     }
 
     // C has no validation step, but must compile the program and run it to a normal exit.
-    private static void runC(Class<?> entry, String dir) throws IOException {
-        build(new CTarget(new CNameProvider()), entry, TeaVMOptimizationLevel.SIMPLE, dir, "");
+    private static void runC(Class<?> entry, String dir, TeaVMOptimizationLevel level) throws IOException {
+        build(new CTarget(new CNameProvider()), entry, level, dir, "");
         var outputDir = new File(targetFile, dir);
         try {
             var compile = new ProcessBuilder(new File(cCompiler).getAbsolutePath()).directory(outputDir)
@@ -510,10 +553,15 @@ public class MissingClassTypeTest {
 
     public static class InstanceOfMissing {
         public static void main(String[] args) {
-            Object value = args.length > 100 ? null : new IOException("known");
+            Object value = new IOException("known");
             if (value instanceof MissingException) {
                 throw new AssertionError("A value cannot be an instance of a missing class");
             }
+        }
+    }
+
+    public static class NullInstanceOfMissing {
+        public static void main(String[] args) {
             Object nullValue = Source.make();
             if (nullValue instanceof MissingException) {
                 throw new AssertionError("Null cannot be an instance of a missing class");
