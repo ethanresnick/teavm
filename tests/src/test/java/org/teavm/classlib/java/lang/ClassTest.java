@@ -464,6 +464,8 @@ public class ClassTest {
     @Test
     @SkipPlatform(TestPlatform.C)
     public void forNameWaitsForSuspendingInitializer() throws Exception {
+        // Class.forName(String) Javadoc: a call causes the named class to be initialized.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html#forName(java.lang.String)
         ForNameInitializerLog.value = "";
         Class.forName("org.teavm.classlib.java.lang.ClassTest$SuspendingForNameInitializer");
         assertEquals("started;finished;", ForNameInitializerLog.value);
