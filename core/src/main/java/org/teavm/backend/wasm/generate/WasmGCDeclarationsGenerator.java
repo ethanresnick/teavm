@@ -127,6 +127,11 @@ public class WasmGCDeclarationsGenerator {
         methodGenerator.setTypeMapper(classGenerator.typeMapper);
     }
 
+    public void setJspi(boolean jspi) {
+        methodGenerator.setJspi(jspi);
+        classGenerator.setJspi(jspi);
+    }
+
     public void setCompactMode(boolean compactMode) {
         methodGenerator.setCompactMode(compactMode);
         classGenerator.setCompactMode(compactMode);

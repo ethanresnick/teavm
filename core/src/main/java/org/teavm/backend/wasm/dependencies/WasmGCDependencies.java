@@ -17,6 +17,7 @@ package org.teavm.backend.wasm.dependencies;
 
 import java.util.Arrays;
 import java.util.List;
+import org.teavm.backend.wasm.WasmGCJspi;
 import org.teavm.backend.wasm.WasmRuntime;
 import org.teavm.backend.wasm.generate.methods.WasmGCMethodGenerator;
 import org.teavm.backend.wasm.runtime.WasmGCSupport;
@@ -165,6 +166,11 @@ public class WasmGCDependencies {
                 .propagate(1, Fiber.class)
                 .use();
         analyzer.linkMethod(new MethodReference(Fiber.class, "current", Fiber.class)).use();
+        if (Boolean.parseBoolean(analyzer.extensionEnvironment().property(WasmGCJspi.PROPERTY))) {
+            analyzer.linkMethod(new MethodReference(Fiber.class, "jspiRun", Fiber.class, void.class))
+                    .propagate(1, Fiber.class)
+                    .use();
+        }
         analyzer.linkMethod(new MethodReference(Thread.class, "setCurrentThread", Thread.class,
                 void.class)).use();
 

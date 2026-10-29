@@ -107,6 +107,7 @@ import org.teavm.vm.spi.TeaVMHostExtension;
 
 public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
     private TeaVMTargetController controller;
+    private boolean jspi;
     private NullCheckInsertion nullCheckInsertion;
     private DivisionCheckInsertion divisionCheckInsertion;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
@@ -215,12 +216,14 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
                 new BaseClassesTransformation(),
                 new ClassLoaderResourceTransformation(),
                 new ReferenceQueueTransformation(),
-                entryPointTransformation
+                entryPointTransformation,
+                new WasmGCJspi(() -> jspi)
         );
     }
 
     @Override
     public void contributeDependencies(DependencyAnalyzer dependencyAnalyzer) {
+        jspi = Boolean.parseBoolean(dependencyAnalyzer.extensionEnvironment().property(WasmGCJspi.PROPERTY));
         var deps = new WasmGCDependencies(dependencyAnalyzer);
         deps.contribute();
         deps.contributeStandardExports();
@@ -322,6 +325,7 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
         declarationsGenerator.setAsyncMethodFinder(asyncMethodFinder);
         declarationsGenerator.setFriendlyToDebugger(controller.isFriendlyToDebugger());
         declarationsGenerator.setCompactMode(compactMode);
+        declarationsGenerator.setJspi(WasmGCJspi.enabled(controller.getProperties()));
         var moduleGenerator = new WasmGCModuleGenerator(declarationsGenerator);
         var codeGenContext = createCodeGenContext(classes, declarationsGenerator,
                 asyncMethodFinder.getAsyncFamilyMethods());
@@ -417,6 +421,11 @@ public class WasmGCTarget implements TeaVMTarget, TeaVMWasmGCHost {
             Set<MethodReference> asyncSplitMethods
     ) {
         class ContextImpl extends BaseIntrinsicContributorContext implements WasmGCCodeGenContext {
+            @Override
+            public boolean jspi() {
+                return WasmGCJspi.enabled(controller.getProperties());
+            }
+
             ContextImpl() {
                 super(controller, generator.hierarchy, classes, asyncSplitMethods);
             }

@@ -140,6 +140,7 @@ export function defaults(
     consoleImports(imports);
     coreImports(imports, context);
     asyncImports(imports);
+    jspiImports(imports);
     jsoImports(imports, context, stringBuiltins);
     imports.teavmMath = Math;
     return {
@@ -148,6 +149,49 @@ export function defaults(
         },
         supplyStackDeobfuscator(deobfuscator: (addresses: number[]) => StackFrame[]) {
             context.stackDeobfuscator = deobfuscator;
+        }
+    };
+}
+
+// Keep the optional API local so runtimes without JSPI can still load coroutine modules.
+interface JspiAPI {
+    Suspending?: new (callback: (fiber: object) => Promise<void>) => WebAssembly.ImportValue;
+    promising?: (run: (fiber: object) => void) => (fiber: object) => Promise<void>;
+}
+
+function jspiImports(imports: Record<string, unknown>): void {
+    const api = WebAssembly as unknown as JspiAPI;
+    if (typeof api.Suspending !== "function" || typeof api.promising !== "function") {
+        const missing = () => {
+            throw new Error("This TeaVM module requires WebAssembly JavaScript Promise Integration (JSPI)");
+        };
+        imports.teavmJspi = { start: missing, park: missing, unpark: missing };
+        return;
+    }
+    const promising = api.promising;
+    const parked = new Map<object, () => void>();
+    const runners = new WeakMap<(fiber: object) => void, (fiber: object) => Promise<void>>();
+    imports.teavmJspi = {
+        start(fiber: object, run: (fiber: object) => void) {
+            let runner = runners.get(run);
+            if (runner === undefined) {
+                runner = promising(run);
+                runners.set(run, runner);
+            }
+            runner(fiber).catch(error => {
+                queueMicrotask(() => { throw error; });
+            });
+        },
+        park: new api.Suspending(fiber => new Promise<void>(resolve => {
+            parked.set(fiber, resolve);
+        })),
+        unpark(fiber: object) {
+            const resolve = parked.get(fiber);
+            if (resolve === undefined) {
+                throw new Error("Cannot resume a JSPI fiber that is not parked");
+            }
+            parked.delete(fiber);
+            resolve();
         }
     };
 }
