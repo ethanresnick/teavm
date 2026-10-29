@@ -102,7 +102,8 @@ public class TObject {
         if (o.monitor == null) {
            createMonitor(o);
         }
-        if (o.monitor.owner == null) {
+        if (o.monitor.owner == null
+                && (o.monitor.enteringThreads == null || o.monitor.enteringThreads.isEmpty())) {
             o.monitor.owner = TThread.currentThread();
         }
         if (o.monitor.owner != TThread.currentThread()) {
@@ -137,7 +138,8 @@ public class TObject {
             o.monitor.count += count;
             callback.complete(null);
             return;
-        } else if (o.monitor.owner == null) {
+        } else if (o.monitor.owner == null
+                && (o.monitor.enteringThreads == null || o.monitor.enteringThreads.isEmpty())) {
             o.monitor.owner = thread;
             TThread.setCurrentThread(thread);
             o.monitor.count += count;
