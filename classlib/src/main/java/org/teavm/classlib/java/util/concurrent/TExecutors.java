@@ -16,7 +16,7 @@
 /*
  * Ported from the public-domain jsr166 sources
  * (https://gee.cs.oswego.edu/dl/jsr166/src/main/java/util/concurrent/Executors.java).
- * The port is mechanical: the package and the "T" prefix, and EmulSupport in place of Reference.reachabilityFence.
+ * TeaVM uses cooperative threads and browser Cleaner cleanup in place of finalization.
  * TeaVM has no ForkJoinPool or security manager checks; the edits for that are marked "TeaVM:".
  * The jsr166 formatting is kept. See classlib/PORTED-CLASSES.md.
  */
@@ -29,7 +29,6 @@
 // CHECKSTYLE.OFF: LeftCurly|MethodParamPad|NeedBraces|OperatorWrap|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
 
-import static org.teavm.classlib.EmulSupport.reachabilityFence;
 import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.Collection;
@@ -45,6 +44,9 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.teavm.classlib.PlatformDetector;
+import org.teavm.jso.JSObject;
+import org.teavm.jso.core.JSObjects;
 
 /**
  * Factory and utility methods for {@link Executor}, {@link
@@ -135,7 +137,7 @@ public class TExecutors {
      * @return the newly created single-threaded Executor
      */
     public static ExecutorService newSingleThreadExecutor() {
-        return new FinalizableDelegatedExecutorService
+        return wrapSingleThreadExecutor
             (new TThreadPoolExecutor(1, 1,
                                     0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>()));
@@ -154,11 +156,17 @@ public class TExecutors {
      * @throws NullPointerException if threadFactory is null
      */
     public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
-        return new FinalizableDelegatedExecutorService
+        return wrapSingleThreadExecutor
             (new TThreadPoolExecutor(1, 1,
                                     0L, TimeUnit.MILLISECONDS,
                                     new LinkedBlockingQueue<Runnable>(),
                                     threadFactory));
+    }
+
+    private static ExecutorService wrapSingleThreadExecutor(ExecutorService executor) {
+        // C retains explicit lifecycle only: Cleaner is unavailable on that backend.
+        return PlatformDetector.isC() ? new DelegatedExecutorService(executor)
+                : new AutoShutdownDelegatedExecutorService(executor);
     }
 
     /**
@@ -436,83 +444,118 @@ public class TExecutors {
         private final ExecutorService e;
         DelegatedExecutorService(ExecutorService executor) { e = executor; }
         public void execute(Runnable command) {
+            beginCall();
             try {
                 e.execute(command);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
-        public void shutdown() { e.shutdown(); }
+        void beginCall() { }
+        void endCall() { }
+        public void shutdown() {
+            beginCall();
+            try {
+                e.shutdown();
+            } finally { endCall(); }
+        }
         public List<Runnable> shutdownNow() {
+            beginCall();
             try {
                 return e.shutdownNow();
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
+        // The auto-shutdown wrapper owns an exact TThreadPoolExecutor: these two queries only read ctl.
+        // They cannot allocate, suspend or call user code, so cleanup cannot run during either query.
         public boolean isShutdown() {
-            try {
-                return e.isShutdown();
-            } finally { reachabilityFence(this); }
+            return e.isShutdown();
         }
         public boolean isTerminated() {
-            try {
-                return e.isTerminated();
-            } finally { reachabilityFence(this); }
+            return e.isTerminated();
         }
         public boolean awaitTermination(long timeout, TimeUnit unit)
             throws InterruptedException {
+            beginCall();
             try {
                 return e.awaitTermination(timeout, unit);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public Future<?> submit(Runnable task) {
+            beginCall();
             try {
                 return e.submit(task);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> Future<T> submit(Callable<T> task) {
+            beginCall();
             try {
                 return e.submit(task);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> Future<T> submit(Runnable task, T result) {
+            beginCall();
             try {
                 return e.submit(task, result);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
             throws InterruptedException {
+            beginCall();
             try {
                 return e.invokeAll(tasks);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks,
                                              long timeout, TimeUnit unit)
             throws InterruptedException {
+            beginCall();
             try {
                 return e.invokeAll(tasks, timeout, unit);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
             throws InterruptedException, ExecutionException {
+            beginCall();
             try {
                 return e.invokeAny(tasks);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
         public <T> T invokeAny(Collection<? extends Callable<T>> tasks,
                                long timeout, TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
+            beginCall();
             try {
                 return e.invokeAny(tasks, timeout, unit);
-            } finally { reachabilityFence(this); }
+            } finally { endCall(); }
         }
     }
 
-    private static class FinalizableDelegatedExecutorService
+    // TeaVM does not run finalizers. The cleanup record owns the underlying pool, never this wrapper.
+    private static class AutoShutdownDelegatedExecutorService
             extends DelegatedExecutorService {
-        FinalizableDelegatedExecutorService(ExecutorService executor) {
+        // A Java object's JSO wrapper can be collected independently on Wasm GC.
+        private final JSObject lifetime = JSObjects.create();
+        private final ExecutorCleanup cleanup;
+
+        AutoShutdownDelegatedExecutorService(ExecutorService executor) {
             super(executor);
+            cleanup = new ExecutorCleanup(lifetime, executor);
         }
-        @SuppressWarnings({"deprecation", "removal"})
-        protected void finalize() {
+        @Override
+        void beginCall() { cleanup.beginCall(); }
+        @Override
+        void endCall() {
+            cleanup.endCall();
+            ExecutorCleanup.keepAlive(lifetime);
+        }
+        @Override
+        public void shutdown() {
             super.shutdown();
+            cleanup.cancel();
+        }
+        @Override
+        public List<Runnable> shutdownNow() {
+            List<Runnable> tasks = super.shutdownNow();
+            cleanup.cancel();
+            return tasks;
         }
     }
 
