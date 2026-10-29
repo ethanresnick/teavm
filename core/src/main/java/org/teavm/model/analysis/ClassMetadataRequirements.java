@@ -250,7 +250,7 @@ public class ClassMetadataRequirements {
             hasNewInstance = true;
         }
 
-        for (var entry : List.of("initialize", "initializeForField")) {
+        for (var entry : List.of("initialize", "initializeForField", "initializeForConstructor")) {
             var classInit = dependencyInfo.getMethod(new MethodReference(Class.class, entry, void.class));
             if (classInit != null && classInit.isUsed()) {
                 hasClassInit = true;

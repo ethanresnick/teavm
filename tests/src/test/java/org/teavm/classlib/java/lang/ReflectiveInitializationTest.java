@@ -49,6 +49,24 @@ public class ReflectiveInitializationTest {
     }
 
     @Test
+    public void successfulCustomLoaderStillRunsWithoutInitialization() throws Exception {
+        int[] calls = { 0 };
+        var loader = new ClassLoader(null) {
+            @Override
+            public Class<?> loadClass(String name) {
+                calls[0]++;
+                return ToInitialize.class;
+            }
+        };
+        assertEquals(ToInitialize.class, Class.forName(ToInitialize.class.getName(), false, loader));
+        assertEquals(1, calls[0]);
+        assertEquals(0, Initialization.counter);
+        assertEquals(ToInitialize.class, Class.forName(ToInitialize.class.getName(), true, loader));
+        assertEquals(2, calls[0]);
+        assertEquals(1, Initialization.counter);
+    }
+
+    @Test
     public void loaderAliasIsRejected() {
         var loader = new ClassLoader(null) {
             @Override
@@ -336,6 +354,10 @@ public class ReflectiveInitializationTest {
     public void primitiveNamesAreNotClasses() {
         assertThrows(ClassNotFoundException.class, () -> Class.forName(int.class.getName()));
         assertThrows(ClassNotFoundException.class, () -> Class.forName(void.class.getName()));
+        assertThrows(ClassNotFoundException.class,
+                () -> Class.forName(int.class.getName(), false, getClass().getClassLoader()));
+        assertThrows(ClassNotFoundException.class,
+                () -> Class.forName(void.class.getName(), false, getClass().getClassLoader()));
         var loader = new ClassLoader(null) {
             @Override
             public Class<?> loadClass(String name) {

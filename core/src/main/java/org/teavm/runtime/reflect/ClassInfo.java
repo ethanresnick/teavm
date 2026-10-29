@@ -120,6 +120,9 @@ public final class ClassInfo extends ReflectionInfo {
     @Intrinsified
     public native void initializeField();
 
+    @Intrinsified
+    public native void initializeConstructor();
+
     // Separate call-graph entry: unrelated async initializers must not make enum access suspendable.
     @Intrinsified
     public native void initializeEnum();

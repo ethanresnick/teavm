@@ -16,6 +16,7 @@
 package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
@@ -24,8 +25,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 import org.teavm.backend.c.CTarget;
 import org.teavm.backend.c.generate.CNameProvider;
+import org.teavm.backend.javascript.JavaScriptTarget;
+import org.teavm.backend.wasm.WasmGCTarget;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.model.MethodReference;
+import org.teavm.model.util.AsyncMethodFinder;
 
 public class ReflectiveInitializationCompilationTest {
     @Test
@@ -65,6 +69,46 @@ public class ReflectiveInitializationCompilationTest {
         }
     }
 
+    @Test
+    public void unrelatedInitializerDoesNotMakeConstructorReflectionSuspendable() {
+        var checks = new ArrayList<Executable>();
+        for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
+            for (boolean wasm : new boolean[] { false, true }) {
+                checks.add(() -> {
+                    var target = wasm ? new WasmGCTarget() : new JavaScriptTarget();
+                    var vm = compile(SyncConstructorProgram.class, level, target);
+                    assertTrue(vm.getProblemProvider().getSevereProblems().isEmpty());
+                    var finder = new AsyncMethodFinder(vm.getDependencyInfo().getCallGraph(), vm.getDependencyInfo());
+                    finder.find(vm.getWrittenClasses());
+                    assertAll(
+                            () -> assertTrue(finder.getAsyncMethods().contains(new MethodReference(Class.class,
+                                    "initialize", void.class)), "Unrelated initializer remains async"),
+                            () -> assertFalse(finder.getAsyncMethods().contains(new MethodReference(
+                                    java.lang.reflect.Constructor.class, "newInstance", Object[].class, Object.class)),
+                                    "Constructor.newInstance " + wasm + " " + level),
+                            () -> assertFalse(finder.getAsyncMethods().contains(new MethodReference(Class.class,
+                                    "newInstance", Object.class)), "Class.newInstance " + wasm + " " + level));
+                });
+            }
+        }
+        assertAll(checks);
+    }
+
+    public static class SyncConstructorProgram {
+        @SuppressWarnings("deprecation")
+        public static void main(String[] args) throws Exception {
+            Class.forName(AsyncTarget.class.getName());
+            System.out.println(SafeConstructed.class.getConstructor().newInstance());
+            System.out.println(SafeConstructed.class.newInstance());
+        }
+    }
+
+    public static class SafeConstructed {
+        @Reflectable
+        public SafeConstructed() {
+        }
+    }
+
     public static class LookupProgram {
         public static void main(String[] args) throws ClassNotFoundException {
             boolean initialize = false;
@@ -74,7 +118,11 @@ public class ReflectiveInitializationCompilationTest {
     }
 
     private TeaVM compile(Class<?> entryPoint, TeaVMOptimizationLevel level) {
-        var vm = new TeaVMBuilder(new CTarget(new CNameProvider())).build();
+        return compile(entryPoint, level, new CTarget(new CNameProvider()));
+    }
+
+    private TeaVM compile(Class<?> entryPoint, TeaVMOptimizationLevel level, TeaVMTarget target) {
+        var vm = new TeaVMBuilder(target).build();
         vm.installPlugins();
         vm.setEntryPoint(entryPoint.getName());
         vm.setOptimizationLevel(level);

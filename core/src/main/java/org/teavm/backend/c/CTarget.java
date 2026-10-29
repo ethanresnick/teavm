@@ -416,7 +416,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         asyncMethods = new HashSet<>(asyncFinder.getAsyncMethods());
         asyncMethods.addAll(asyncFinder.getAsyncFamilyMethods());
         hasThreads = asyncFinder.hasAsyncMethods();
-        for (var entry : List.of("initialize", "initializeField", "initializeEnum")) {
+        for (var entry : List.of("initialize", "initializeField", "initializeEnum", "initializeConstructor")) {
             var method = new MethodReference(ClassInfo.class, entry, void.class);
             if (asyncMethods.contains(method)) {
                 controller.getDiagnostics().error(new CallLocation(method),

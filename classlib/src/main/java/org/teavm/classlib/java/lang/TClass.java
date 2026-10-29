@@ -603,6 +603,12 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         classInfo.initializeField();
     }
 
+    // Constructor reflection must not inherit unrelated forName initializer suspension.
+    @PluggableDependency(ClassGenerator.class)
+    public void initializeForConstructor() {
+        classInfo.initializeConstructor();
+    }
+
     private static TString knownName(TClass<?> cls) {
         return (TString) (Object) cls.getName();
     }
@@ -661,6 +667,12 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     }
 
     private static TClass<?> lookupKnownClass(TClass<?> cls, TClassLoader loader) throws TClassNotFoundException {
+        if (loader == TClassLoader.getSystemClassLoader() && loader.getClass() == TSystemClassLoader.class) {
+            if (cls.isPrimitive()) {
+                throw new TClassNotFoundException();
+            }
+            return cls;
+        }
         if (!cls.isArray()) {
             return lookupClass(knownName(cls), loader);
         }
@@ -688,7 +700,7 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         if (instance == null) {
             throw new TInstantiationException();
         }
-        initialize();
+        initializeForConstructor();
         if (!classInfo.initializeNewInstance(instance)) {
             throw new TInstantiationException();
         }

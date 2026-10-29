@@ -131,6 +131,7 @@ public class ClassInfoIntrinsic implements Intrinsic {
                 context.writer().print(")");
                 break;
             }
+            case "initializeConstructor":
             case "initializeField":
             case "initializeEnum":
             case "initialize": {

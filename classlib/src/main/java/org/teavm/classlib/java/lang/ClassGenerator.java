@@ -33,6 +33,9 @@ public class ClassGenerator implements DependencyPlugin {
             case "initializeForField":
                 reachInitialize(agent, method, "initializeField", false);
                 break;
+            case "initializeForConstructor":
+                reachInitialize(agent, method, "initializeConstructor", false);
+                break;
             case "initialize":
                 reachInitialize(agent, method, "initialize", false);
                 break;
