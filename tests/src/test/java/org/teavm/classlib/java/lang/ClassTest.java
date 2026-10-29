@@ -462,6 +462,37 @@ public class ClassTest {
     }
 
     @Test
+    @SkipPlatform(TestPlatform.C)
+    public void forNameWaitsForSuspendingInitializer() throws Exception {
+        // Class.forName(String) Javadoc: a call causes the named class to be initialized.
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Class.html#forName(java.lang.String)
+        ForNameInitializerLog.value = "";
+        Class.forName("org.teavm.classlib.java.lang.ClassTest$SuspendingForNameInitializer");
+        assertEquals("started;finished;", ForNameInitializerLog.value);
+        // Keep the initializer reachable without letting a field read mask an early forName return.
+        assertEquals("initialized", SuspendingForNameInitializer.value);
+    }
+
+    public static class SuspendingForNameInitializer {
+        static String value;
+
+        static {
+            ForNameInitializerLog.value += "started;";
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            ForNameInitializerLog.value += "finished;";
+            value = "initialized";
+        }
+    }
+
+    static class ForNameInitializerLog {
+        static String value;
+    }
+
+    @Test
     public void failedInitializerThroughForNameIsNotRunAgain() throws Exception {
         // TeaVM finds a class by name only when the name is a constant at the call
         assertThrows(ExceptionInInitializerError.class, () -> Class.forName(

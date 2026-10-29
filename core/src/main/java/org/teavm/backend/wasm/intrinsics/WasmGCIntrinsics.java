@@ -106,6 +106,7 @@ public class WasmGCIntrinsics {
         bodyReg.registerIntrinsic(WasmGCSupport.class, new WasmGCStringPoolIntrinsic(ctx.module(), ctx.names()));
         bodyReg.registerIntrinsic(WeakReference.class, new WeakReferenceIntrinsic(ctx));
         bodyReg.registerIntrinsic(EventQueue.class, new EventQueueIntrinsic(ctx));
+        // TeaVM: Fiber's JSPI natives (FiberJspiIntrinsic).
         bodyReg.registerIntrinsic(Fiber.class, new FiberJspiIntrinsic(ctx));
     }
 
@@ -147,6 +148,7 @@ public class WasmGCIntrinsics {
                 ctx.dependency(), reflection, ctx.classes(), classInfoProvider, ctx.functions(),
                 ctx.typeMapper(), ctx.strings(), ctx.classInitInfo(), ctx.virtualTables(),
                 ctx::isAsyncMethod);
+        metadataGen.setJspi(ctx.jspi());
         metadataGen.generate();
         ctx.initializerRegistry().register(fn -> fn.getBody().builder().call(metadataGen.initFunction()));
         reg.registerIntrinsic(ClassInfo.class, new ClassInfoIntrinsic(classInfoProvider, ctx.functionTypes()));

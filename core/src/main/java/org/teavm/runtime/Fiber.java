@@ -16,7 +16,6 @@
 package org.teavm.runtime;
 
 import java.util.Arrays;
-import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.interop.StaticInit;
 import org.teavm.interop.Unmanaged;
@@ -250,10 +249,6 @@ public final class Fiber {
                     + "(perhaps, from native JS method). See https://teavm.org/docs/runtime/coroutines.html "
                     + "('Interaction with JavaScript' section)");
         }
-        // Keep the platform guard at each call site so dependency analysis can discard JSPI calls on C.
-        if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
-            return suspendOnJspiStack(fiber, Thread.currentThread(), call);
-        }
         if (fiber.isResuming()) {
             fiber.state = STATE_RUNNING;
             // Take the outcome of this call and clear it, so that it does not leak into a later call. Without
@@ -275,8 +270,11 @@ public final class Fiber {
             lastPendingCall.next = pendingCall;
         }
         lastPendingCall = pendingCall;
-
         pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
+        if (isJspi()) {
+            return suspendOnJspiStack(fiber, javaThread, call, pendingCall);
+        }
+
         // The call can run suspendable code that does not suspend. That code must see a running fiber,
         // otherwise it unwinds as if it suspended.
         call.run(pendingCall.callback);
@@ -297,70 +295,56 @@ public final class Fiber {
 
         @Override
         public void complete(Object result) {
-            if (Fiber.current == this.fiber) {
+            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
                 fiber.result = result;
                 fiber.isPendingResume = true;
                 removePendingCall();
             } else {
-                // jspi: begin
-                if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
-                    // The waiting fiber resumes in a microtask, after this code returns. It sets its own thread.
-                    Fiber fiber = this.fiber;
-                    this.fiber = null;
-                    javaThread = null;
-                    fiber.result = result;
-                    removePendingCall();
-                    jspiUnpark(fiber);
-                    return;
-                }
-                // jspi: end
-                // kafka-wasm patch: the resumed fiber runs nested inside this call, then this code goes on. Restore
-                // the completer's current thread afterwards. Upstream left it set to the resumed thread, so code that
-                // completes a callback on its own thread (Thread.interrupt of a thread blocked in
-                // ArrayBlockingQueue.take) then ran as the other thread: its currentThread and ThreadLocals.
+                // A coroutine callback resumes synchronously; retain its completing thread.
                 Thread former = Thread.currentThread();
-                setCurrentThread(javaThread);
+                if (!isJspi()) {
+                    setCurrentThread(javaThread);
+                }
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.result = result;
                 removePendingCall();
-                fiber.resume();
-                if (former != null && Thread.currentThread() != former) {
-                    setCurrentThread(former);
+                if (isJspi()) {
+                    jspiUnpark(fiber);
+                } else {
+                    fiber.resume();
+                    if (former != null && Thread.currentThread() != former) {
+                        setCurrentThread(former);
+                    }
                 }
             }
         }
 
         @Override
         public void error(Throwable e) {
-            if (Fiber.current == this.fiber) {
+            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
                 fiber.exception = e;
                 fiber.isPendingResume = true;
                 removePendingCall();
             } else {
-                // jspi: begin
-                if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
-                    Fiber fiber = this.fiber;
-                    this.fiber = null;
-                    javaThread = null;
-                    fiber.exception = e;
-                    removePendingCall();
-                    jspiUnpark(fiber);
-                    return;
-                }
-                // jspi: end
-                // kafka-wasm patch: restore the completer's current thread (see complete).
+                // A coroutine callback resumes synchronously; retain its completing thread.
                 Thread former = Thread.currentThread();
-                setCurrentThread(javaThread);
+                if (!isJspi()) {
+                    setCurrentThread(javaThread);
+                }
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.exception = e;
                 removePendingCall();
-                fiber.resume();
-                if (former != null && Thread.currentThread() != former) {
-                    setCurrentThread(former);
+                if (isJspi()) {
+                    jspiUnpark(fiber);
+                } else {
+                    fiber.resume();
+                    if (former != null && Thread.currentThread() != former) {
+                        setCurrentThread(former);
+                    }
                 }
             }
         }
@@ -382,39 +366,45 @@ public final class Fiber {
     static native void setCurrentThread(Thread thread);
 
     public static void start(FiberRunner runner, boolean daemon) {
-        // jspi: begin
-        if (PlatformDetector.isWebAssemblyGC() && jspiEnabled()) {
-            // The host runs jspiRun on a new stack (WebAssembly.promising). The call returns when the new fiber parks
-            // or ends; the caller's fiber is current again after it.
+        if (isJspi()) {
             Fiber fiber = new Fiber(runner, daemon);
             Fiber former = current;
             current = null;
-            jspiStart(fiber);
-            current = former;
+            try {
+                jspiStart(fiber);
+            } finally {
+                current = former;
+            }
             return;
         }
-        // jspi: end
         new Fiber(runner, daemon).start();
     }
 
-    // jspi: begin
     /**
-     * kafka-wasm, JSPI mode (WasmGCJspi): each fiber runs on its own stack, so a suspension does not unwind the
+     * JSPI mode (WasmGCJspi): each fiber runs on its own stack, so a suspension does not unwind the
      * Java stack. The @Async body runs first. When it completed the callback already (AsyncCallbackImpl saw this
      * fiber as current), the result is ready and nothing waits. Otherwise the fiber parks: jspiPark is a
      * WebAssembly.Suspending import, and the callback's jspiUnpark resolves its promise. The stack then resumes in a
      * microtask, and this method sets the current thread again, because the code that completed the callback does
      * not do that in this mode.
      */
-    private static Object suspendOnJspiStack(Fiber fiber, Thread javaThread, AsyncCall call) throws Throwable {
-        PendingCall pendingCall = new PendingCall(call, lastPendingCall);
-        if (lastPendingCall != null) {
-            lastPendingCall.next = pendingCall;
-        }
-        lastPendingCall = pendingCall;
-        pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
+    private static Object suspendOnJspiStack(Fiber fiber, Thread javaThread, AsyncCall call, PendingCall pendingCall)
+            throws Throwable {
         fiber.state = STATE_RUNNING;
-        call.run(pendingCall.callback);
+        try {
+            call.run(pendingCall.callback);
+        } catch (Throwable e) {
+            var callback = pendingCall.callback;
+            if (callback.pendingCall != null) {
+                callback.removePendingCall();
+            }
+            callback.fiber = null;
+            callback.javaThread = null;
+            fiber.isPendingResume = false;
+            fiber.result = null;
+            fiber.exception = null;
+            throw e;
+        }
         if (fiber.isPendingResume) {
             fiber.isPendingResume = false;
         } else {
@@ -435,14 +425,13 @@ public final class Fiber {
         return result;
     }
 
-    /** kafka-wasm, JSPI mode: the entry of a fiber's own stack. The host calls it through WebAssembly.promising. */
+    /** JSPI mode: the entry of a fiber's own stack. The host calls it through WebAssembly.promising. */
     static void jspiRun(Fiber fiber) {
         current = fiber;
         try {
             fiber.runner.run();
         } catch (Throwable e) {
-            // The host rethrows the exception from a microtask, and the process ends. Node then prints only
-            // "Exception [WebAssembly.Exception] {}", so print the Java exception first.
+            // Preserve the Java stack trace before the host reports the rejected Wasm invocation.
             reportEscaped(e);
             throw e;
         } finally {
@@ -455,16 +444,18 @@ public final class Fiber {
 
     private static void reportEscaped(Throwable e) {
         try {
-            System.err.println("kafka-wasm: an exception left a thread's runner; the process ends:");
+            System.err.println("TeaVM: uncaught exception in a fiber:");
             e.printStackTrace();
         } catch (Throwable ignored) {
             // The report must not replace the exception.
         }
     }
 
-    /** kafka-wasm: true when the module is built for JSPI (WasmGCJspi). A build-time constant. */
-    @org.teavm.interop.Intrinsified
-    private static native boolean jspiEnabled();
+    // The Wasm GC transformer replaces calls with this build's mode before dependency analysis.
+    @org.teavm.interop.PlatformMarker(org.teavm.interop.Platforms.WEBASSEMBLY_GC)
+    private static boolean isJspi() {
+        return false;
+    }
 
     @org.teavm.interop.Intrinsified
     private static native void jspiStart(Fiber fiber);
@@ -474,7 +465,7 @@ public final class Fiber {
 
     @org.teavm.interop.Intrinsified
     private static native void jspiUnpark(Fiber fiber);
-    // jspi: end
+
 
     static void startMain(String[] args) {
         start(() -> runMain(args), false);

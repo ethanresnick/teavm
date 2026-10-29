@@ -37,10 +37,12 @@ class TByteBufferWasmGC extends TByteBufferNative {
         super.release();
     }
 
+    // Wasm has no copy instruction between a GC array and linear memory. Pack eight bytes into each
+    // little-endian linear-memory access, then copy the tail byte by byte.
     @Override
     void copy(byte[] from, int fromOffset, Address to, int count) {
         var i = 0;
-        for (; i + 8 <= count; i += 8) {
+        for (; i <= count - 8; i += 8) {
             var o = fromOffset + i;
             long v = (from[o] & 0xFFL) | (from[o + 1] & 0xFFL) << 8 | (from[o + 2] & 0xFFL) << 16
                     | (from[o + 3] & 0xFFL) << 24 | (from[o + 4] & 0xFFL) << 32 | (from[o + 5] & 0xFFL) << 40
@@ -55,7 +57,7 @@ class TByteBufferWasmGC extends TByteBufferNative {
     @Override
     void copy(Address from, byte[] to, int toOffset, int count) {
         var i = 0;
-        for (; i + 8 <= count; i += 8) {
+        for (; i <= count - 8; i += 8) {
             long v = from.add(i).getLong();
             var o = toOffset + i;
             to[o] = (byte) v;

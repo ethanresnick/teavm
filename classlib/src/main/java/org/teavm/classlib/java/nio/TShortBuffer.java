@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Address;
 import org.teavm.jso.typedarrays.Int16Array;
@@ -42,6 +43,7 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
     }
 
     public static TShortBuffer wrap(short[] array, int offset, int length) {
+        Objects.checkFromIndexSize(offset, length, array.length);
         if (PlatformDetector.isJavaScript()) {
             var result = new TShortBufferOverTypedArray(0, array.length, false, Int16Array.fromJavaArray(array), array);
             result.position = offset;
@@ -81,9 +83,7 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
     abstract void putElement(int index, short value);
 
     public TShortBuffer get(short[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
         if (length > remaining()) {
             throw new TBufferUnderflowException();
         }
@@ -93,9 +93,8 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
     }
 
     public TShortBuffer get(int index, short[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        Objects.checkFromIndexSize(index, length, limit());
         getImpl(index, dst, offset, length);
         return this;
     }
@@ -114,6 +113,9 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
+        if (src == this) {
+            throw new IllegalArgumentException();
+        }
         var elementsToTransfer = src.remaining();
         if (remaining() < elementsToTransfer) {
             throw new TBufferOverflowException();
@@ -128,9 +130,8 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.limit());
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
@@ -144,9 +145,7 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
         if (remaining() < length) {
             throw new TBufferOverflowException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
         putImpl(position, src, offset, length);
         position += length;
         return this;
@@ -156,9 +155,8 @@ public abstract class TShortBuffer extends TBuffer implements Comparable<TShortB
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }

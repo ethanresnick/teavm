@@ -87,6 +87,8 @@ import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.intrinsic.IntrinsicProvider;
 
 public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
+    private boolean jspi;
+
     public static final MethodReference FAILED_INITIALIZER = new MethodReference(WasmGCSupport.class,
             "failedInitializer", void.class);
     public static final MethodReference INITIALIZER_ERROR = new MethodReference(WasmGCSupport.class,
@@ -126,6 +128,10 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
     private Set<MethodReference> asyncMethods = Set.of();
     private Set<MethodReference> asyncSplitMethods = Set.of();
     private CoroutineTransformation coroutineTransformation;
+
+    public void setJspi(boolean jspi) {
+        this.jspi = jspi;
+    }
 
     public WasmGCMethodGenerator(
             WasmModule module,
@@ -334,7 +340,7 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             WasmFunction function) {
         intrinsic.apply(method, function);
         // JSPI mode (WasmGCJspi): a suspension switches stacks, so no function is transformed.
-        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+        if (jspi) {
             return;
         }
         var isSuspend = asyncMethods.contains(method);
@@ -405,17 +411,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
                 inferredType = new PreciseValueType(ValueType.object("java.lang.Object"), false);
             }
             preciseTypes[i] = inferredType;
-            nonNullableVars[i] = !isSuspend && inferredType.isArrayUnwrap;
+            nonNullableVars[i] = (!isSuspend || jspi) && inferredType.isArrayUnwrap;
         }
-        if (!isSuspend) {
-            calculateNonNullableVars(nonNullableVars, ast);
-        }
-        // The coroutine transformation saves and restores every local, so a suspendable method gets nullable
-        // locals. JSPI mode does not transform, so such a method gets the same non-nullable locals as any other.
-        if (isSuspend && org.teavm.backend.wasm.WasmGCJspi.enabled()) {
-            for (var i = firstVar; i < ast.getVariables().size(); ++i) {
-                nonNullableVars[i] = preciseTypes[i].isArrayUnwrap;
-            }
+        if (!isSuspend || jspi) {
             calculateNonNullableVars(nonNullableVars, ast);
         }
 
@@ -454,7 +452,7 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             wrapInitializerFailure(method, function);
         }
 
-        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+        if (jspi) {
             return;
         }
         if (isSuspend) {

@@ -17,7 +17,6 @@ package org.teavm.classlib.java.lang.reflect;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -31,18 +30,12 @@ import org.teavm.junit.TestPlatform;
  * Enum.valueOf. JLS 12.4.2: if the initializer throws, the first use throws ExceptionInInitializerError and every
  * later use of the class throws NoClassDefFoundError.
  * <p>
- * The tests with an async initializer pause in it, so it suspends. The C backend does not support async methods in
- * reflection (see MethodTest.asyncReflection). Each test has classes of its own, since a class is initialized once.
+ * The tests with an async initializer pause in it, so it suspends. The C backend does not support suspending
+ * class initializers. Each test has classes of its own, since a class is initialized once.
  */
 @TeaVMTest
 @EachTestCompiledSeparately
 public class ReflectiveClassInitializationTest {
-    // Field.get and Field.set, Constructor.newInstance, Class.newInstance, Class.forName and Enum.valueOf initialize
-    // the class through ClassInfo.initialize, which AsyncMethodFinder never marks async, so the call is not a
-    // suspend point. When the initializer suspends, JS hangs (Field, forName) and Wasm GC loses the rest of the
-    // initializer or traps. Static Method.invoke is fixed: the method initializes its class itself.
-    static final String ASYNC_INITIALIZE_GAP = "Known gap: reflective initialization does not suspend";
-
     static void pause() {
         try {
             Thread.sleep(1);
@@ -215,7 +208,6 @@ public class ReflectiveClassInitializationTest {
     // Field.get and Field.set
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void staticFieldGetOfAsyncInitializer() throws Exception {
         var field = FieldGetOfAsyncInitializer.class.getDeclaredField("value");
@@ -236,7 +228,6 @@ public class ReflectiveClassInitializationTest {
     }
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void staticFieldSetOfAsyncInitializer() throws Exception {
         var field = FieldSetOfAsyncInitializer.class.getDeclaredField("value");
@@ -258,7 +249,6 @@ public class ReflectiveClassInitializationTest {
     }
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void staticFieldOfFailingAsyncInitializer() throws Exception {
         var field = FieldOfFailingAsyncInitializer.class.getDeclaredField("value");
@@ -303,7 +293,6 @@ public class ReflectiveClassInitializationTest {
     // Constructor.newInstance
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void constructorOfAsyncInitializer() throws Exception {
         var constructor = ConstructorOfAsyncInitializer.class.getDeclaredConstructor();
@@ -330,7 +319,6 @@ public class ReflectiveClassInitializationTest {
     }
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void constructorOfFailingAsyncInitializer() throws Exception {
         var constructor = ConstructorOfFailingAsyncInitializer.class.getDeclaredConstructor();
@@ -381,7 +369,6 @@ public class ReflectiveClassInitializationTest {
     // Class.newInstance
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     @SuppressWarnings("deprecation")
     public void classNewInstanceOfAsyncInitializer() throws Exception {
@@ -430,7 +417,6 @@ public class ReflectiveClassInitializationTest {
     static int forNameByClassNameInitializations;
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void forNameOfAsyncInitializer() throws Exception {
         Class.forName("org.teavm.classlib.java.lang.reflect.ReflectiveClassInitializationTest$"
@@ -452,7 +438,6 @@ public class ReflectiveClassInitializationTest {
 
     // The name comes from getName here, not from a string constant
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void forNameByClassNameOfAsyncInitializer() throws Exception {
         Class.forName(ForNameByClassNameOfAsyncInitializer.class.getName());
@@ -472,7 +457,6 @@ public class ReflectiveClassInitializationTest {
     }
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void forNameOfFailingAsyncInitializer() {
         // TeaVM finds a class by name only when the name is a constant at the call
@@ -500,7 +484,6 @@ public class ReflectiveClassInitializationTest {
     // Enum.valueOf reads the enum constants through Class.getEnumConstants
 
     @Test
-    @Disabled(ASYNC_INITIALIZE_GAP)
     @SkipPlatform(TestPlatform.C)
     public void enumValueOfAsyncInitializer() {
         assertEquals("B", Enum.valueOf(EnumOfAsyncInitializer.class, "B").name());

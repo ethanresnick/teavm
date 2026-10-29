@@ -107,7 +107,6 @@ import org.teavm.backend.c.intrinsic.reflection.StringInfoIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.TypeVariableInfoIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.TypeVariableReferenceIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.WildcardTypeInfoIntrinsic;
-import org.teavm.backend.c.runtime.CResources;
 import org.teavm.backend.c.transform.CFileSystemTransformer;
 import org.teavm.backend.c.transform.ClassInitFailureTransformer;
 import org.teavm.backend.c.transform.ClassLoaderCResourceTransformation;
@@ -130,6 +129,7 @@ import org.teavm.dependency.DependencyAnalyzer;
 import org.teavm.dependency.DependencyListener;
 import org.teavm.interop.Address;
 import org.teavm.interop.Platforms;
+import org.teavm.model.CallLocation;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ClassHolderTransformer;
 import org.teavm.model.ClassReader;
@@ -393,9 +393,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         dependencyAnalyzer.linkClass(CallSite.class.getName());
         dependencyAnalyzer.linkClass(CallSiteLocation.class.getName());
 
-        dependencyAnalyzer.linkMethod(new MethodReference(CResources.class, "create",
-                String.class, int.class, int.class, CResources.Resource.class)).use();
-
         dependencyAnalyzer.addDependencyListener(new ExceptionHandlingDependencyListener());
         dependencyAnalyzer.addDependencyListener(new StringsDependencyListener());
         dependencyAnalyzer.addDependencyListener(new BufferDependencyListener());
@@ -419,6 +416,13 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         asyncMethods = new HashSet<>(asyncFinder.getAsyncMethods());
         asyncMethods.addAll(asyncFinder.getAsyncFamilyMethods());
         hasThreads = asyncFinder.hasAsyncMethods();
+        for (var entry : List.of("initialize", "initializeField", "initializeEnum", "initializeConstructor")) {
+            var method = new MethodReference(ClassInfo.class, entry, void.class);
+            if (asyncMethods.contains(method)) {
+                controller.getDiagnostics().error(new CallLocation(method),
+                        "The C backend does not support reflective initialization of a class that can suspend");
+            }
+        }
     }
 
     @Override

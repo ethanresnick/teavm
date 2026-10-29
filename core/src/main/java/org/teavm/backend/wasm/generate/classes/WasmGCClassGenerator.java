@@ -81,6 +81,8 @@ import org.teavm.runtime.reflect.ClassInfo;
 import org.teavm.runtime.reflect.ModifiersInfo;
 
 public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInitializerContributor {
+    private boolean jspi;
+
     private static final MethodDescriptor CLINIT_METHOD_DESC = new MethodDescriptor("<clinit>", ValueType.VOID);
     private static final MethodDescriptor CLONE_METHOD_DESC = new MethodDescriptor("clone",
             ValueType.object("java.lang.Object"));
@@ -135,6 +137,10 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
     private WasmGCSystemFunctionGenerator systemFunctions;
     private boolean compactMode;
     private WasmGCReflectionGenerator reflectionGenerator;
+
+    public void setJspi(boolean jspi) {
+        this.jspi = jspi;
+    }
 
     public WasmGCClassGenerator(WasmModule module, ClassReaderSource classSource,
             ClassReaderSource originalClassSource, ClassHierarchy hierarchy, DependencyInfo dependencyInfo,
@@ -1932,7 +1938,7 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
         var suspend = asyncSplitMethods.contains(method.getReference());
         body.getLocal(localVar).call(functionProvider.forInstanceMethod(method.getReference()), suspend);
         // JSPI mode (WasmGCJspi): no coroutine transformation.
-        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
+        if (jspi) {
             return instantiator;
         }
         if (suspend) {

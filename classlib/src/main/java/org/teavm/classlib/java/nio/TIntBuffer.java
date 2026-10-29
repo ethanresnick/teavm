@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Address;
 import org.teavm.jso.typedarrays.Int32Array;
@@ -42,6 +43,7 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
     }
 
     public static TIntBuffer wrap(int[] array, int offset, int length) {
+        Objects.checkFromIndexSize(offset, length, array.length);
         if (PlatformDetector.isJavaScript()) {
             var result = new TIntBufferOverTypedArray(0, array.length, false, Int32Array.fromJavaArray(array), array);
             result.position = offset;
@@ -81,9 +83,7 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
     abstract void putElement(int index, int value);
 
     public TIntBuffer get(int[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
         if (length > remaining()) {
             throw new TBufferUnderflowException();
         }
@@ -93,9 +93,8 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
     }
 
     public TIntBuffer get(int index, int[] dst, int offset, int length) {
-        if (length < 0 || offset < 0 || offset + length > dst.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, dst.length);
+        Objects.checkFromIndexSize(index, length, limit());
         getImpl(index, dst, offset, length);
         return this;
     }
@@ -114,9 +113,8 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (index < 0 || index > limit() || offset < 0 || offset + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.limit());
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }
@@ -130,6 +128,9 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
     public TIntBuffer put(TIntBuffer src) {
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
+        }
+        if (src == this) {
+            throw new IllegalArgumentException();
         }
         var elementsToTransfer = src.remaining();
         if (remaining() < elementsToTransfer) {
@@ -148,9 +149,7 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
         if (remaining() < length) {
             throw new TBufferOverflowException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
         putImpl(position, src, offset, length);
         position += length;
         return this;
@@ -160,9 +159,8 @@ public abstract class TIntBuffer extends TBuffer implements Comparable<TIntBuffe
         if (isReadOnly()) {
             throw new TReadOnlyBufferException();
         }
-        if (length < 0 || offset < 0 || offset + length > src.length || index < 0 || index + length > capacity()) {
-            throw new IndexOutOfBoundsException();
-        }
+        Objects.checkFromIndexSize(offset, length, src.length);
+        Objects.checkFromIndexSize(index, length, limit());
         putImpl(index, src, offset, length);
         return this;
     }

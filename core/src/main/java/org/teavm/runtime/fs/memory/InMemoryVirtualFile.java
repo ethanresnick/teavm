@@ -63,7 +63,7 @@ public class InMemoryVirtualFile extends AbstractInMemoryVirtualFile {
             {
                 if (append) {
                     pos = size;
-                } else if (writable) {
+                } else if (writable && !readable) {
                     size = 0;
                 }
             }
@@ -122,6 +122,11 @@ public class InMemoryVirtualFile extends AbstractInMemoryVirtualFile {
 
             @Override
             public void flush() {
+            }
+
+            @Override
+            public void sync() {
+                // This file system has no persistent storage.
             }
         };
     }

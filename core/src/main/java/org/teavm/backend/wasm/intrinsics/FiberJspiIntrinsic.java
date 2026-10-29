@@ -15,20 +15,12 @@
  */
 package org.teavm.backend.wasm.intrinsics;
 
-import org.teavm.backend.wasm.WasmGCJspi;
 import org.teavm.backend.wasm.model.WasmFunction;
 import org.teavm.backend.wasm.model.WasmLocal;
-import org.teavm.backend.wasm.model.instruction.WasmUnreachable;
 import org.teavm.model.MethodReference;
 import org.teavm.runtime.Fiber;
 
-/**
- * kafka-wasm: the bodies of Fiber's JSPI natives. jspiEnabled is a build-time constant. jspiStart, jspiPark, and
- * jspiUnpark call the host imports teavmJspi.start(fiber, run), teavmJspi.park(fiber), and teavmJspi.unpark(fiber).
- * The host wraps park with WebAssembly.Suspending and calls run (Fiber.jspiRun) through WebAssembly.promising
- * (kafka-wasm: installJspi in js/teavm-imports.mjs). In coroutine mode the three bodies are unreachable: Fiber checks
- * jspiEnabled first, but they stay reachable, and that build links neither the imports nor Fiber.jspiRun.
- */
+/** Implements the fiber operations supplied by the JavaScript Promise Integration runtime. */
 public class FiberJspiIntrinsic implements WasmGCBodyIntrinsic {
     private final WasmGCCodeGenContext context;
     private WasmFunction startImport;
@@ -43,17 +35,6 @@ public class FiberJspiIntrinsic implements WasmGCBodyIntrinsic {
     public void apply(MethodReference method, WasmFunction function) {
         var fiberType = context.classInfoProvider().getClassInfo(Fiber.class.getName()).getType();
         var body = function.getBody().builder();
-        if (method.getName().equals("jspiEnabled")) {
-            body.i32Const(WasmGCJspi.enabled() ? 1 : 0);
-            return;
-        }
-        if (!WasmGCJspi.enabled()) {
-            // The coroutine build never calls these (Fiber checks jspiEnabled first), but they stay reachable. Emit
-            // no host import and no reference to Fiber.jspiRun, which that build does not link.
-            function.add(new WasmLocal(fiberType, "fiber"));
-            function.getBody().add(new WasmUnreachable());
-            return;
-        }
         switch (method.getName()) {
             case "jspiStart": {
                 var fiber = new WasmLocal(fiberType, "fiber");
@@ -88,7 +69,7 @@ public class FiberJspiIntrinsic implements WasmGCBodyIntrinsic {
                 break;
             }
             default:
-                throw new IllegalArgumentException(method.toString());
+                throw new IllegalArgumentException();
         }
     }
 

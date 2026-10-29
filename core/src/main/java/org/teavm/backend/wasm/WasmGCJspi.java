@@ -16,38 +16,71 @@
 package org.teavm.backend.wasm;
 
 import java.util.Properties;
+import java.util.function.BooleanSupplier;
+import org.teavm.model.ClassHolder;
+import org.teavm.model.ClassHolderTransformer;
+import org.teavm.model.ClassHolderTransformerContext;
+import org.teavm.model.instructions.IntegerConstantInstruction;
+import org.teavm.model.instructions.InvokeInstruction;
+import org.teavm.model.optimization.ConstantConditionElimination;
+import org.teavm.model.optimization.GlobalValueNumbering;
+import org.teavm.model.optimization.UnreachableBasicBlockEliminator;
+import org.teavm.runtime.Fiber;
 
 /**
- * kafka-wasm: selects the JSPI mode of the Wasm GC backend. In this mode each green thread (Fiber) runs on its own
- * stack, which the host creates with WebAssembly.promising, and a suspension parks that stack through a
- * WebAssembly.Suspending import. The generator then skips the coroutine transformation.
- *
- * <p>The mode is opt-in; kafka-wasm enables it in its Maven configuration. The TeaVM property
- * {@value #PROPERTY} (a build's {@code <properties>}) selects it for
- * one build; without it, the JVM system property of the same name selects it for every build of the JVM. The value
- * "false" selects the coroutine transformation.
- *
- * <p>The setting is static: WasmGCTarget.setController sets it for each build. TeaVM calls setController after
- * the dependency analysis, so code that runs during the analysis must not depend on the mode (it may still see the
- * previous build's mode). Builds that run at the same time in one JVM (Maven -T) must not choose different modes.
+ * Selects JavaScript Promise Integration with the per-build property {@code teavm.wasm.jspi=true}.
+ * The default uses coroutine transformation. JSPI builds require the host's WebAssembly.Suspending and
+ * WebAssembly.promising APIs; the standard Wasm GC JavaScript runtime supplies the fiber imports.
  */
-public final class WasmGCJspi {
+public final class WasmGCJspi implements ClassHolderTransformer {
     public static final String PROPERTY = "teavm.wasm.jspi";
-    private static volatile String buildValue;
 
-    private WasmGCJspi() {
+    private final BooleanSupplier enabled;
+
+    public WasmGCJspi(BooleanSupplier enabled) {
+        this.enabled = enabled;
     }
 
-    /** Called by WasmGCTarget when a build starts. */
-    public static void configure(Properties properties) {
-        buildValue = properties.getProperty(PROPERTY);
-    }
-
-    public static boolean enabled() {
-        String value = buildValue;
-        if (value == null) {
-            value = System.getProperty(PROPERTY);
+    @Override
+    public void transformClass(ClassHolder cls, ClassHolderTransformerContext context) {
+        if (!cls.getName().equals(Fiber.class.getName())
+                && !cls.getName().startsWith(Fiber.class.getName() + "$")) {
+            return;
         }
-        return value != null && value.trim().equalsIgnoreCase("true");
+        context.getIncrementalCache().setNoCache(cls.getName());
+        for (var method : cls.getMethods()) {
+            var program = method.getProgram();
+            if (program == null) {
+                continue;
+            }
+            boolean changed = false;
+            for (var block : program.getBasicBlocks()) {
+                for (var instruction : block) {
+                    if (instruction instanceof InvokeInstruction) {
+                        var invoke = (InvokeInstruction) instruction;
+                        if (invoke.getMethod().getClassName().equals(Fiber.class.getName())
+                                && invoke.getMethod().getName().equals("isJspi")) {
+                            var constant = new IntegerConstantInstruction();
+                            constant.setConstant(enabled.getAsBoolean() ? 1 : 0);
+                            constant.setReceiver(invoke.getReceiver());
+                            constant.setLocation(invoke.getLocation());
+                            invoke.replace(constant);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+            if (changed) {
+                do {
+                    changed = new GlobalValueNumbering(true).optimize(program)
+                            | new ConstantConditionElimination().optimize(method.getDescriptor(), program);
+                    new UnreachableBasicBlockEliminator().optimize(program);
+                } while (changed);
+            }
+        }
+    }
+
+    public static boolean enabled(Properties properties) {
+        return Boolean.parseBoolean(properties.getProperty(PROPERTY, "false"));
     }
 }

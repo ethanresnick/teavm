@@ -62,7 +62,7 @@ public class TConstructor<T> extends TExecutable implements TMember {
             throw new TIllegalArgumentException();
         }
         validateArgs(initargs);
-        declaringClass.initialize();
+        declaringClass.initializeForConstructor();
 
         var instance = declaringClass.getClassInfo().newInstance();
         methodInfo.call(instance, initargs);

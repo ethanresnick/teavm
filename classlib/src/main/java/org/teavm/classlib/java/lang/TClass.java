@@ -554,7 +554,7 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
 
         Object[] data = enumConstantsCache;
         if (data == null) {
-            initialize();
+            classInfo.initializeEnum();
             var count = classInfo.enumConstantCount();
             data = (Object[]) classInfo.newArrayInstance(count);
             for (var i = 0; i < count; ++i) {
@@ -578,6 +578,10 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     }
 
     public static TClass<?> forName(TString name) throws TClassNotFoundException {
+        return forName(name, true, TClassLoader.getSystemClassLoader());
+    }
+
+    static TClass<?> lookupClass(TString name) throws TClassNotFoundException {
         if (nameMap == null) {
             fillNameMap();
         }
@@ -588,8 +592,25 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         return result;
     }
 
+    @PluggableDependency(ClassGenerator.class)
     public void initialize() {
         classInfo.initialize();
+    }
+
+    // Keep field access independent of the classes reached by general reflective initialization.
+    @PluggableDependency(ClassGenerator.class)
+    public void initializeForField() {
+        classInfo.initializeField();
+    }
+
+    // Constructor reflection must not inherit unrelated forName initializer suspension.
+    @PluggableDependency(ClassGenerator.class)
+    public void initializeForConstructor() {
+        classInfo.initializeConstructor();
+    }
+
+    private static TString knownName(TClass<?> cls) {
+        return (TString) (Object) cls.getName();
     }
 
     private static void fillNameMap() {
@@ -607,28 +628,61 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     @SuppressWarnings("unused")
     public static TClass<?> forName(TString name, boolean initialize, TClassLoader loader)
             throws TClassNotFoundException {
-        TClass<?> c = loader == null ? TClassLoader.findBootstrapClassOrNull((String) (Object) name)
-                : loader.loadClass((String) (Object) name);
-        // A loader may return a class under another name (an alias); forName rejects it.
-        if (c == null || !c.getName().equals((String) (Object) name)) {
-            throw new TClassNotFoundException();
-        }
+        var result = lookupClass(name, loader);
         if (initialize) {
-            c.initialize();
+            result.initialize();
         }
-        return c;
+        return result;
     }
 
-    // Used by ReflectionTransformer for a constant name: preserve loader behavior and class-value flow.
-    public static TClass<?> forNameWithClass(TClass<?> cls, boolean initialize, TClassLoader loader)
-            throws TClassNotFoundException {
-        String name = cls.getName();
-        TClass<?> loaded = loader == null ? TClassLoader.findBootstrapClassOrNull(name) : loader.loadClass(name);
-        if (loaded != cls) {
+    private static TClass<?> lookupClass(TString name, TClassLoader loader) throws TClassNotFoundException {
+        String className = (String) (Object) name;
+        if (className.startsWith("[")) {
             throw new TClassNotFoundException();
         }
-        if (initialize) {
+        // Use ClassLoader's existing compiled-platform bootstrap approximation.
+        TClass<?> result = loader != null ? loader.loadClass(className)
+                : TClassLoader.findBootstrapClassOrNull(className);
+        if (result == null || result.isPrimitive() || !result.getName().equals(className)) {
+            throw new TClassNotFoundException();
+        }
+        return result;
+    }
+
+    private static TClass<?> initializeKnownClass(TClass<?> cls) throws TClassNotFoundException {
+        if (cls.isPrimitive()) {
+            throw new TClassNotFoundException();
+        }
+        if (!cls.isArray()) {
             cls.initialize();
+        }
+        return cls;
+    }
+
+    // The compiler supplies an exact class value for constant names and Class.getName expressions.
+    private static TClass<?> forKnownName(TClass<?> cls, boolean initialize, TClassLoader loader)
+            throws TClassNotFoundException {
+        var result = lookupKnownClass(cls, loader);
+        return initialize ? initializeKnownClass(result) : result;
+    }
+
+    private static TClass<?> lookupKnownClass(TClass<?> cls, TClassLoader loader) throws TClassNotFoundException {
+        if (loader == TClassLoader.getSystemClassLoader() && loader.getClass() == TSystemClassLoader.class) {
+            if (cls.isPrimitive()) {
+                throw new TClassNotFoundException();
+            }
+            return cls;
+        }
+        if (!cls.isArray()) {
+            return lookupClass(knownName(cls), loader);
+        }
+        var component = cls;
+        while (component.isArray()) {
+            component = component.getComponentType();
+        }
+        if (!component.isPrimitive()) {
+            // Loading an array consults the loader for its leaf component, without initializing it.
+            lookupClass(knownName(component), loader);
         }
         return cls;
     }
@@ -646,7 +700,7 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
         if (instance == null) {
             throw new TInstantiationException();
         }
-        initialize();
+        initializeForConstructor();
         if (!classInfo.initializeNewInstance(instance)) {
             throw new TInstantiationException();
         }

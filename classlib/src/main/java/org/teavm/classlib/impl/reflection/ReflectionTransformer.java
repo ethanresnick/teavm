@@ -43,6 +43,7 @@ import org.teavm.model.instructions.AssignInstruction;
 import org.teavm.model.instructions.ClassConstantInstruction;
 import org.teavm.model.instructions.ConstructInstruction;
 import org.teavm.model.instructions.GetFieldInstruction;
+import org.teavm.model.instructions.IntegerConstantInstruction;
 import org.teavm.model.instructions.InvocationType;
 import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.RaiseInstruction;
@@ -62,7 +63,8 @@ public class ReflectionTransformer implements ClassHolderTransformer {
             "newUpdater", Class.class, String.class, AtomicIntegerFieldUpdater.class);
     private static final MethodReference newLongUpdaterMethod = new MethodReference(AtomicLongFieldUpdater.class,
             "newUpdater", Class.class, String.class, AtomicLongFieldUpdater.class);
-    private static final MethodReference initMethod = new MethodReference(Class.class, "initialize", void.class);
+    private static final MethodReference initMethod = new MethodReference(Class.class, "initializeKnownClass",
+            Class.class, Class.class);
 
     private Map<String, String> updaterClasses = new HashMap<>();
 
@@ -71,6 +73,7 @@ public class ReflectionTransformer implements ClassHolderTransformer {
     private int[] nameRepresentatives;
     private String[] stringConstantsByClasses;
     private ValueType[] classConstantsByClasses;
+    private boolean[] zeroConstantsByClasses;
     private boolean hasTruncatedBlocks;
 
     @Override
@@ -124,6 +127,7 @@ public class ReflectionTransformer implements ClassHolderTransformer {
         var nameIndexes = new int[program.variableCount()];
         var stringConstants = new String[program.variableCount()];
         var classConstants = new ValueType[program.variableCount()];
+        var zeroConstants = new boolean[program.variableCount()];
         Arrays.fill(nameIndexes, -1);
 
         for (BasicBlock block : program.getBasicBlocks()) {
@@ -138,6 +142,9 @@ public class ReflectionTransformer implements ClassHolderTransformer {
                 } else if (instruction instanceof StringConstantInstruction) {
                     StringConstantInstruction stringConstant = (StringConstantInstruction) instruction;
                     stringConstants[stringConstant.getReceiver().getIndex()] = stringConstant.getConstant();
+                } else if (instruction instanceof IntegerConstantInstruction) {
+                    var constant = (IntegerConstantInstruction) instruction;
+                    zeroConstants[constant.getReceiver().getIndex()] = constant.getConstant() == 0;
                 } else if (instruction instanceof ClassConstantInstruction) {
                     var classConstant = (ClassConstantInstruction) instruction;
                     classConstants[classConstant.getReceiver().getIndex()] = classConstant.getConstant();
@@ -152,9 +159,11 @@ public class ReflectionTransformer implements ClassHolderTransformer {
         Arrays.fill(nameRepresentatives, -1);
         stringConstantsByClasses = new String[varSet.size()];
         classConstantsByClasses = new ValueType[varSet.size()];
+        zeroConstantsByClasses = new boolean[varSet.size()];
 
         for (int i = 0; i < program.variableCount(); i++) {
             int varClass = varSet.find(i);
+            zeroConstantsByClasses[varClass] |= zeroConstants[i];
             if (nameIndexes[i] >= 0) {
                 nameRepresentatives[varClass] = varSet.find(nameIndexes[i]);
             }
@@ -172,12 +181,15 @@ public class ReflectionTransformer implements ClassHolderTransformer {
             nameRepresentatives = null;
             stringConstantsByClasses = null;
             classConstantsByClasses = null;
+            zeroConstantsByClasses = null;
         }
     }
 
     private void transformForName(Program program, InvokeInstruction invoke, ClassHolderTransformerContext context) {
         var hierarchy = context.getHierarchy();
         prepare(program);
+        boolean lookupOnly = invoke.getMethod().equals(forNameMethod)
+                && zeroConstantsByClasses[varSet.find(invoke.getArguments().get(1).getIndex())];
 
         Variable representative;
 
@@ -187,46 +199,82 @@ public class ReflectionTransformer implements ClassHolderTransformer {
         if (nameIndex >= 0) {
             representative = program.variableAt(nameIndex);
         } else if (constant != null) {
-            if (hierarchy.getClassSource().get(constant) == null || !filterClassName(constant)) {
+            var type = classNameType(constant, hierarchy);
+            if (type == null) {
+                if (invoke.getMethod().equals(forNameMethod) || constant.startsWith("[")) {
+                    if (lookupOnly) {
+                        transformLookupOnly(invoke);
+                    }
+                    return;
+                }
                 emitException(invoke, ClassNotFoundException.class);
                 return;
             } else {
                 ClassConstantInstruction classConstant = new ClassConstantInstruction();
-                classConstant.setConstant(ValueType.object(constant));
+                classConstant.setConstant(type);
                 classConstant.setReceiver(program.createVariable());
                 classConstant.setLocation(invoke.getLocation());
                 invoke.insertPrevious(classConstant);
                 representative = classConstant.getReceiver();
             }
         } else {
+            if (lookupOnly) {
+                transformLookupOnly(invoke);
+            }
             return;
         }
 
-        // Keep loader validation while carrying the known class into dependency analysis. A bare class
-        // constant is not enough to retain its name metadata or its initializer for a runtime lookup.
         if (invoke.getMethod().equals(forNameMethod)) {
-            invoke.setMethod(new MethodReference(Class.class, "forNameWithClass", Class.class,
-                    boolean.class, ClassLoader.class, Class.class));
-            invoke.setArguments(representative, invoke.getArguments().get(1), invoke.getArguments().get(2));
+            // Preserve the loader call and runtime flag, including component loading for array names.
+            if (lookupOnly) {
+                invoke.setMethod(new MethodReference(Class.class, "lookupKnownClass", Class.class,
+                        ClassLoader.class, Class.class));
+                invoke.setArguments(representative, invoke.getArguments().get(2));
+            } else {
+                invoke.setMethod(new MethodReference(Class.class, "forKnownName", Class.class, boolean.class,
+                        ClassLoader.class, Class.class));
+                invoke.setArguments(representative, invoke.getArguments().get(1), invoke.getArguments().get(2));
+            }
             return;
         }
 
-        InvokeInstruction initInvoke = new InvokeInstruction();
-        initInvoke.setLocation(invoke.getLocation());
-        initInvoke.setType(InvocationType.SPECIAL);
-        initInvoke.setMethod(initMethod);
-        initInvoke.setInstance(representative);
-        invoke.insertPrevious(initInvoke);
+        invoke.setMethod(initMethod);
+        invoke.setArguments(representative);
+    }
 
-        if (invoke.getReceiver() == null) {
-            invoke.delete();
-        } else {
-            AssignInstruction assign = new AssignInstruction();
-            assign.setLocation(invoke.getLocation());
-            assign.setAssignee(representative);
-            assign.setReceiver(invoke.getReceiver());
-            invoke.replace(assign);
+    private void transformLookupOnly(InvokeInstruction invoke) {
+        invoke.setMethod(new MethodReference(Class.class, "lookupClass", String.class, ClassLoader.class, Class.class));
+        invoke.setArguments(invoke.getArguments().get(0), invoke.getArguments().get(2));
+    }
+
+    private ValueType classNameType(String name, ClassHierarchy hierarchy) {
+        int dimensions = 0;
+        while (dimensions < name.length() && name.charAt(dimensions) == '[') {
+            ++dimensions;
         }
+        if (dimensions > 255 || dimensions == name.length()) {
+            return null;
+        }
+        ValueType type;
+        String component = name.substring(dimensions);
+        if (dimensions == 0) {
+            type = ValueType.object(component);
+        } else if (component.startsWith("L") && component.endsWith(";") && component.length() > 2) {
+            component = component.substring(1, component.length() - 1);
+            type = ValueType.object(component);
+        } else if (component.length() == 1 && "ZBSCIJFD".indexOf(component.charAt(0)) >= 0) {
+            type = ValueType.parse(component);
+        } else {
+            return null;
+        }
+        if (type instanceof ValueType.Object
+                && (!filterClassName(component) || hierarchy.getClassSource().get(component) == null)) {
+            return null;
+        }
+        while (dimensions-- > 0) {
+            type = ValueType.arrayOf(type);
+        }
+        return type;
     }
 
     private void transformRefUpdater(Program program, InvokeInstruction invoke,

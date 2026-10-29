@@ -28,7 +28,7 @@ class TSystemClassLoader extends TClassLoader {
     // The system loader sees every class that the compiled program kept.
     @Override
     protected TClass<?> loadClass(String name, boolean resolve) throws TClassNotFoundException {
-        return TClass.forName((TString) (Object) name);
+        return TClass.lookupClass((TString) (Object) name);
     }
 
     // The system loader's resources are the ones embedded in the program.

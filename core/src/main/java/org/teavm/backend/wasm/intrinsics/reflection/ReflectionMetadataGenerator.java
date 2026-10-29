@@ -69,6 +69,8 @@ import org.teavm.reflection.ReflectionDependencyListener;
 import org.teavm.runtime.reflect.ClassReflectionInfo;
 
 public class ReflectionMetadataGenerator {
+    private boolean jspi;
+
     private WasmGCNameProvider names;
     private WasmModule module;
     private WasmFunctionTypes functionTypes;
@@ -90,6 +92,10 @@ public class ReflectionMetadataGenerator {
     private WasmFunction referenceWriterConverter;
 
     private WasmFunction initFunction;
+
+    public void setJspi(boolean jspi) {
+        this.jspi = jspi;
+    }
 
     public ReflectionMetadataGenerator(WasmGCNameProvider names, WasmModule module, WasmFunctionTypes functionTypes,
             DependencyInfo dependencies, ReflectionDependencyListener reflection, ListableClassReaderSource classes,
@@ -946,11 +952,7 @@ public class ReflectionMetadataGenerator {
             boxIfNecessary(body, method.getResultType());
         }
 
-        // JSPI mode (WasmGCJspi): no coroutine transformation.
-        if (org.teavm.backend.wasm.WasmGCJspi.enabled()) {
-            return function;
-        }
-        if (async) {
+        if (async && !jspi) {
             var transformation = new CoroutineTransformation(functionTypes, functions, classInfoProvider);
             transformation.transform(function);
         }
