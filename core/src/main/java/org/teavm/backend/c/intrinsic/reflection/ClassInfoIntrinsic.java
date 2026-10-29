@@ -131,6 +131,8 @@ public class ClassInfoIntrinsic implements Intrinsic {
                 context.writer().print(")");
                 break;
             }
+            case "initializeField":
+            case "initializeEnum":
             case "initialize": {
                 context.includes().includePath("core.h");
                 context.writer().print("teavm_initializeClassDefault((TeaVM_Class*) ");

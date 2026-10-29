@@ -15,22 +15,27 @@
  */
 package org.teavm.classlib.java.lang;
 
+import java.util.HashSet;
 import org.teavm.dependency.DependencyAgent;
 import org.teavm.dependency.DependencyPlugin;
 import org.teavm.dependency.MethodDependency;
 import org.teavm.model.CallLocation;
 import org.teavm.model.ElementModifier;
-import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
+import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.runtime.reflect.ClassInfo;
 
 public class ClassGenerator implements DependencyPlugin {
-    private static final MethodDescriptor CLINIT = new MethodDescriptor("<clinit>", void.class);
-
     @Override
     public void methodReached(DependencyAgent agent, MethodDependency method) {
         switch (method.getReference().getName()) {
+            case "initializeForField":
+                reachInitialize(agent, method, "initializeField", false);
+                break;
+            case "initialize":
+                reachInitialize(agent, method, "initialize", false);
+                break;
             case "getSuperclass":
                 reachGetSuperclass(agent, method);
                 break;
@@ -70,6 +75,37 @@ public class ClassGenerator implements DependencyPlugin {
                 break;
             }
         }
+    }
+
+    private void reachInitialize(DependencyAgent agent, MethodDependency method, String entry, boolean enumsOnly) {
+        var intrinsic = new MethodReference(ClassInfo.class, entry, void.class);
+        var location = new CallLocation(intrinsic);
+        var thrownNode = agent.linkMethod(intrinsic).getThrown();
+        thrownNode.connect(method.getThrown());
+        var initializers = new HashSet<MethodReference>();
+        method.getVariable(0).getClassValueNode().addConsumer(type -> {
+            if (!(type.getValueType() instanceof ValueType.Object)) {
+                return;
+            }
+            var className = ((ValueType.Object) type.getValueType()).getClassName();
+            var cls = agent.getClassSource().get(className);
+            if (cls == null || enumsOnly && !cls.hasModifier(ElementModifier.ENUM)) {
+                return;
+            }
+            // The actual indirect call lives in ClassInfo.initialize. Its call-graph edge also lets the async
+            // finder mark the intrinsic when one of the reachable initializers can suspend.
+            agent.linkClass(className).initClass(location);
+            ImplicitExceptions.readInitializers(agent.getClassSource(), className, initializer -> {
+                if (!initializers.add(initializer)) {
+                    return;
+                }
+                var thrown = agent.linkMethod(initializer).getThrown();
+                thrown.connect(thrownNode);
+                thrown.addConsumer(typeThrown ->
+                        ImplicitExceptions.readInitializerFailure(agent.getClassHierarchy(), typeThrown.getValueType(),
+                                error -> thrownNode.propagate(agent.getType(ValueType.object(error)))));
+            });
+        });
     }
 
     private void reachGetSuperclass(DependencyAgent agent, MethodDependency method) {
@@ -116,6 +152,7 @@ public class ClassGenerator implements DependencyPlugin {
     }
 
     private void reachGetEnumConstants(DependencyAgent agent, MethodDependency method) {
+        reachInitialize(agent, method, "initializeEnum", true);
         method.getResult().propagate(agent.getType(ValueType.parse(Enum[].class)));
         method.getVariable(0).getClassValueNode().addConsumer(t -> {
             if (!(t.getValueType() instanceof ValueType.Object)) {
@@ -127,9 +164,6 @@ public class ClassGenerator implements DependencyPlugin {
             }
             if (!cls.hasModifier(ElementModifier.ENUM)) {
                 return;
-            }
-            if (cls.getMethod(CLINIT) != null) {
-                agent.linkMethod(new MethodReference(cls.getName(), CLINIT)).use();
             }
             for (var field : cls.getFields()) {
                 if (field.hasModifier(ElementModifier.STATIC) && field.hasModifier(ElementModifier.FINAL)) {

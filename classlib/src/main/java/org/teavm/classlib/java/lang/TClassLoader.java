@@ -104,7 +104,7 @@ public abstract class TClassLoader extends TObject {
             return null;
         }
         try {
-            return TClass.forName((TString) (Object) name);
+            return TClass.lookupClass((TString) (Object) name);
         } catch (TClassNotFoundException e) {
             return null;
         }

@@ -109,6 +109,8 @@ public class ClassInfoIntrinsic implements WasmGCInlineIntrinsic {
                         classInfoType.putItemIndex(), args, 0);
                 break;
             }
+            case "initializeField":
+            case "initializeEnum":
             case "initialize": {
                 var block = builder.block();
                 fieldAccess(invocation, context, block, ClassInfoStruct::initializerIndex);
