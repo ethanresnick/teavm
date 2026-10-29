@@ -129,6 +129,16 @@ public class MissingClassTypeTest {
     }
 
     @Test
+    public void nonNullCastToMissingClass() throws IOException {
+        check(NonNullCastToMissing.class);
+    }
+
+    @Test
+    public void instanceOfMissingClass() throws IOException {
+        check(InstanceOfMissing.class);
+    }
+
+    @Test
     public void arraysOfMissingClass() throws IOException {
         check(ArraysOfMissing.class);
     }
@@ -482,6 +492,31 @@ public class MissingClassTypeTest {
                 System.out.println("cast ok");
             } catch (ClassCastException e) {
                 System.out.println("cast CCE");
+            }
+        }
+    }
+
+    public static class NonNullCastToMissing {
+        public static void main(String[] args) {
+            Object value = new IOException("known");
+            try {
+                Sinks.takeMissing((MissingException) value);
+            } catch (ClassCastException e) {
+                return;
+            }
+            throw new AssertionError("A non-null value cannot have a missing type");
+        }
+    }
+
+    public static class InstanceOfMissing {
+        public static void main(String[] args) {
+            Object value = args.length > 100 ? null : new IOException("known");
+            if (value instanceof MissingException) {
+                throw new AssertionError("A value cannot be an instance of a missing class");
+            }
+            Object nullValue = Source.make();
+            if (nullValue instanceof MissingException) {
+                throw new AssertionError("Null cannot be an instance of a missing class");
             }
         }
     }
