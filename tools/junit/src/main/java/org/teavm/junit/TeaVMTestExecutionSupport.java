@@ -414,7 +414,7 @@ final class TeaVMTestExecutionSupport {
 
         return vm -> {
             var properties = new Properties();
-            applyProperties(method.getDeclaringClass(), properties);
+            applyProperties(testClass, properties);
             vm.setProperties(properties);
             new TestEntryPointTransformerForSingleMethod(methodHolder.getReference(), testClass.getName(), plans)
                     .install(vm);

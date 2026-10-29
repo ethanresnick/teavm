@@ -87,6 +87,8 @@ import org.teavm.runtime.ClassInitializationLock;
 import org.teavm.vm.intrinsic.IntrinsicProvider;
 
 public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
+    private boolean jspi;
+
     public static final MethodReference FAILED_INITIALIZER = new MethodReference(WasmGCSupport.class,
             "failedInitializer", void.class);
     public static final MethodReference INITIALIZER_ERROR = new MethodReference(WasmGCSupport.class,
@@ -126,6 +128,10 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
     private Set<MethodReference> asyncMethods = Set.of();
     private Set<MethodReference> asyncSplitMethods = Set.of();
     private CoroutineTransformation coroutineTransformation;
+
+    public void setJspi(boolean jspi) {
+        this.jspi = jspi;
+    }
 
     public WasmGCMethodGenerator(
             WasmModule module,
@@ -333,6 +339,10 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
     private void generateCustomMethodBody(WasmGCBodyIntrinsic intrinsic, MethodReference method,
             WasmFunction function) {
         intrinsic.apply(method, function);
+        // JSPI mode (WasmGCJspi): a suspension switches stacks, so no function is transformed.
+        if (jspi) {
+            return;
+        }
         var isSuspend = asyncMethods.contains(method);
         if (isSuspend) {
             if (coroutineTransformation == null) {
@@ -401,9 +411,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
                 inferredType = new PreciseValueType(ValueType.object("java.lang.Object"), false);
             }
             preciseTypes[i] = inferredType;
-            nonNullableVars[i] = !isSuspend && inferredType.isArrayUnwrap;
+            nonNullableVars[i] = (!isSuspend || jspi) && inferredType.isArrayUnwrap;
         }
-        if (!isSuspend) {
+        if (!isSuspend || jspi) {
             calculateNonNullableVars(nonNullableVars, ast);
         }
 
@@ -442,6 +452,9 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
             wrapInitializerFailure(method, function);
         }
 
+        if (jspi) {
+            return;
+        }
         if (isSuspend) {
             if (coroutineTransformation == null) {
                 coroutineTransformation = new CoroutineTransformation(functionTypes, this, classInfoProvider);

@@ -28,6 +28,10 @@ import org.teavm.backend.wasm.vtable.WasmGCVirtualTableProvider;
 import org.teavm.vm.intrinsic.IntrinsicContributorContext;
 
 public interface WasmGCCodeGenContext extends IntrinsicContributorContext {
+    default boolean jspi() {
+        return false;
+    }
+
     WasmModule module();
 
     WasmFunctionTypes functionTypes();
