@@ -86,7 +86,16 @@ public class TSecretKeySpec implements KeySpec, SecretKey {
             return false;
         }
         var secret = (SecretKey) other;
-        return canonicalAlgorithm(algorithm).equalsIgnoreCase(canonicalAlgorithm(secret.getAlgorithm()))
-                && MessageDigest.isEqual(key, secret.getEncoded());
+        if (!canonicalAlgorithm(algorithm).equalsIgnoreCase(canonicalAlgorithm(secret.getAlgorithm()))) {
+            return false;
+        }
+        byte[] otherEncoding = secret.getEncoded();
+        try {
+            return MessageDigest.isEqual(key, otherEncoding);
+        } finally {
+            if (otherEncoding != null) {
+                Arrays.fill(otherEncoding, (byte) 0);
+            }
+        }
     }
 }

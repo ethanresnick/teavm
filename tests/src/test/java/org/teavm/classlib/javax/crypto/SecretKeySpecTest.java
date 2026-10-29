@@ -125,6 +125,27 @@ public class SecretKeySpecTest {
         }
     }
 
+    @Test
+    public void comparisonClearsTemporaryEncoding() {
+        // OpenJDK 21/25 clear the other encoding, including arrays exposed by foreign SecretKey implementations.
+        for (String algorithm : new String[] { "AES", "TripleDES" }) {
+            var key = new SecretKeySpec(new byte[] { 7, 8 }, algorithm);
+            String alias = algorithm.equals("AES") ? "aes" : "DESede";
+            for (byte[] encoded : new byte[][] { { 7, 8 }, { 7, 9 }, { 7 }, {} }) {
+                boolean expected = java.util.Arrays.equals(new byte[] { 7, 8 }, encoded);
+                assertEquals(expected, key.equals(new RawKey(alias, encoded)));
+                assertArrayEquals(new byte[encoded.length], encoded);
+                assertArrayEquals(new byte[] { 7, 8 }, key.getEncoded());
+            }
+            byte[] unmatched = { 7, 8 };
+            assertNotEquals(key, new RawKey("unrelated", unmatched));
+            assertArrayEquals(new byte[] { 7, 8 }, unmatched);
+            assertNotEquals(key, new RawKey(alias, null));
+            assertEquals(key, key);
+            assertArrayEquals(new byte[] { 7, 8 }, key.getEncoded());
+        }
+    }
+
     private static class RawKey implements SecretKey {
         private final String algorithm;
         private final byte[] bytes;

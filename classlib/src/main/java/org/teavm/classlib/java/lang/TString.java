@@ -283,13 +283,14 @@ public final class TString extends TObject implements TSerializable, TComparable
     }
 
     private int compareIgnoringCase(int start, int end, TString other, int otherStart, int otherEnd) {
+        // Match OpenJDK supplementary ordering by comparing folded code-point values.
         int count = TMath.min(end - start, otherEnd - otherStart);
         for (int i = 0; i < count; i++) {
-            char a = charactersGet(start + i);
-            char b = other.charactersGet(otherStart + i);
-            if (a != b || TCharacter.isSurrogate(a)) {
-                a = foldedCharAt(start + i, start, end);
-                b = other.foldedCharAt(otherStart + i, otherStart, otherEnd);
+            int a = charactersGet(start + i);
+            int b = other.charactersGet(otherStart + i);
+            if (a != b || TCharacter.isSurrogate((char) a)) {
+                a = foldedCodePointAt(start + i, start, end);
+                b = other.foldedCodePointAt(otherStart + i, otherStart, otherEnd);
                 if (a != b) {
                     return a - b;
                 }
@@ -298,7 +299,7 @@ public final class TString extends TObject implements TSerializable, TComparable
         return (end - start) - (otherEnd - otherStart);
     }
 
-    private char foldedCharAt(int index, int start, int end) {
+    private int foldedCodePointAt(int index, int start, int end) {
         char c = charactersGet(index);
         if (c < 128) {
             return c >= 'A' && c <= 'Z' ? (char) (c + ('a' - 'A')) : c;
@@ -308,16 +309,16 @@ public final class TString extends TObject implements TSerializable, TComparable
             char next = charactersGet(index + 1);
             if (TCharacter.isLowSurrogate(next)) {
                 int folded = TCharacter.toLowerCase(TCharacter.toUpperCase(TCharacter.toCodePoint(c, next)));
-                return TCharacter.highSurrogate(folded);
+                return folded;
             }
         } else if (TCharacter.isLowSurrogate(c) && index > start) {
             char previous = charactersGet(index - 1);
             if (TCharacter.isHighSurrogate(previous)) {
                 int folded = TCharacter.toLowerCase(TCharacter.toUpperCase(TCharacter.toCodePoint(previous, c)));
-                return TCharacter.lowSurrogate(folded);
+                return folded;
             }
         }
-        return TCharacter.toLowerCase(TCharacter.toUpperCase(c));
+        return TCharacter.toLowerCase(TCharacter.toUpperCase((int) c));
     }
 
     public boolean startsWith(TString prefix, int toffset) {

@@ -19,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
-import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -106,12 +105,10 @@ public class StringCaseComparisonTest {
     }
 
     @Test
-    @SkipJVM
-    public void foldedOrderingRetainsUtf16LexicographicOrder() {
-        // Java SE 21 specifies the sign of compareTo on folded strings (UTF-16 code units).
-        // JDK 25 differs for supplementary/BMP ordering; this tests the specified TeaVM behavior.
-        assertTrue("\ud801\udc00".compareToIgnoreCase("\ue000") < 0);
-        assertTrue("\ue000".compareToIgnoreCase("\ud801\udc28") > 0);
+    public void supplementaryOrderingMatchesJdk() {
+        // Match OpenJDK 21/25 code-point ordering despite the Javadoc wording about folded compareTo.
+        assertTrue("\ud801\udc00".compareToIgnoreCase("\ue000") > 0);
+        assertTrue("\ue000".compareToIgnoreCase("\ud801\udc28") < 0);
         assertTrue("\ud801\udc00".compareToIgnoreCase("\ud801") > 0);
         assertTrue("\ud801x".compareToIgnoreCase("\ud801\udc28") < 0);
     }
@@ -137,15 +134,15 @@ public class StringCaseComparisonTest {
     }
 
     @Test
-    @SkipJVM
-    public void comparisonsMatchFoldedUtf16Sequences() {
+    public void comparisonsMatchFoldedCodePointSequences() {
         String[] values = { "", "ABC", "abc", "AbD", "\u03c2", "\u03c3", "\u0131", "I", "\ue000",
                 "\ud801", "\udc00", "\ud801\udc00", "\ud801\udc28", "\ud801x", "x\ud801\udc28y" };
         for (String first : values) {
             for (String second : values) {
                 String a = fold(first);
                 String b = fold(second);
-                assertEquals(Integer.signum(a.compareTo(b)), Integer.signum(first.compareToIgnoreCase(second)));
+                assertEquals(Integer.signum(compareCodePoints(a, b)),
+                        Integer.signum(first.compareToIgnoreCase(second)));
                 assertEquals(a.equals(b), first.equalsIgnoreCase(second));
                 for (int start = 0; start <= first.length(); start++) {
                     for (int otherStart = 0; otherStart <= second.length(); otherStart++) {
@@ -159,6 +156,10 @@ public class StringCaseComparisonTest {
                 }
             }
         }
+    }
+
+    private static int compareCodePoints(String first, String second) {
+        return java.util.Arrays.compare(first.codePoints().toArray(), second.codePoints().toArray());
     }
 
     private static String fold(String value) {
