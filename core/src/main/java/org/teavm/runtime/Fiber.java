@@ -265,26 +265,21 @@ public final class Fiber {
         // Thread.currentThread() can be suspendable (it can initialize Thread). Suspendable code reads the fiber's
         // state, so it must not run while the fiber resumes.
         Thread javaThread = Thread.currentThread();
-        if (isJspi()) {
-            return suspendOnJspiStack(fiber, javaThread, call);
-        }
-        PendingCall pendingCall = registerPendingCall(fiber, javaThread, call);
-
-        // The call can run suspendable code that does not suspend. That code must see a running fiber,
-        // otherwise it unwinds as if it suspended.
-        call.run(pendingCall.callback);
-        fiber.state = STATE_SUSPENDING;
-        return null;
-    }
-
-    private static PendingCall registerPendingCall(Fiber fiber, Thread javaThread, AsyncCall call) {
         PendingCall pendingCall = new PendingCall(call, lastPendingCall);
         if (lastPendingCall != null) {
             lastPendingCall.next = pendingCall;
         }
         lastPendingCall = pendingCall;
         pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
-        return pendingCall;
+        if (isJspi()) {
+            return suspendOnJspiStack(fiber, javaThread, call, pendingCall);
+        }
+
+        // The call can run suspendable code that does not suspend. That code must see a running fiber,
+        // otherwise it unwinds as if it suspended.
+        call.run(pendingCall.callback);
+        fiber.state = STATE_SUSPENDING;
+        return null;
     }
 
     static class AsyncCallbackImpl implements AsyncCallback<Object> {
@@ -383,8 +378,8 @@ public final class Fiber {
      * microtask, and this method sets the current thread again, because the code that completed the callback does
      * not do that in this mode.
      */
-    private static Object suspendOnJspiStack(Fiber fiber, Thread javaThread, AsyncCall call) throws Throwable {
-        PendingCall pendingCall = registerPendingCall(fiber, javaThread, call);
+    private static Object suspendOnJspiStack(Fiber fiber, Thread javaThread, AsyncCall call, PendingCall pendingCall)
+            throws Throwable {
         fiber.state = STATE_RUNNING;
         try {
             call.run(pendingCall.callback);
