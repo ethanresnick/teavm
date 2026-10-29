@@ -189,7 +189,10 @@ public class TDeflater implements TAutoCloseable {
     // This runs only when no input is available (avail_in == 0), so the buffer holds only data that the stream has
     // already read (at most one block), and params() cannot compress new input with the old function.
     private void flushAndSetParams() {
-        byte[] out = flushFully(JZlib.Z_PARTIAL_FLUSH);
+        // A partial flush can leave enough bits that the next stored-block header takes six bytes.
+        // jzlib reserves only five bytes in its pending buffer for that header. Align before switching
+        // to stored blocks so a full-size block cannot overrun the pending buffer.
+        byte[] out = flushFully(compressLevel == NO_COMPRESSION ? JZlib.Z_SYNC_FLUSH : JZlib.Z_PARTIAL_FLUSH);
         // params() repeats the flush, which now finds nothing to do; any output still goes to out.
         setParams();
         hold(out);
