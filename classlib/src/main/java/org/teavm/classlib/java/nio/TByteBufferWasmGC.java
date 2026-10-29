@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.interop.Address;
 import org.teavm.jso.JSObject;
 
@@ -75,9 +76,10 @@ class TByteBufferWasmGC extends TByteBufferNative {
     }
 
     @Override
-    public TByteBuffer slice() {
-        var newData = address.add(position);
-        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset + position, base, newData, remaining(), readOnly);
+    public TByteBuffer slice(int index, int length) {
+        Objects.checkFromIndexSize(index, length, limit);
+        var newData = address.add(index);
+        var result = new TByteBufferWasmGC(gcRef, array, arrayOffset + index, base, newData, length, readOnly);
         result.position = 0;
         result.limit = result.capacity();
         result.order = TByteOrder.BIG_ENDIAN;
