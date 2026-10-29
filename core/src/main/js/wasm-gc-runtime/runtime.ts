@@ -141,14 +141,20 @@ export function defaults(
     coreImports(imports, context);
     asyncImports(imports);
     let jspi: unknown;
+    let jspiInitialized = false;
     Object.defineProperty(imports, "teavmJspi", {
         configurable: true,
         enumerable: true,
         get() {
-            return jspi ??= jspiImports();
+            if (!jspiInitialized) {
+                jspi = jspiImports();
+                jspiInitialized = true;
+            }
+            return jspi;
         },
         set(value: unknown) {
             jspi = value;
+            jspiInitialized = true;
         }
     });
     jsoImports(imports, context, stringBuiltins);

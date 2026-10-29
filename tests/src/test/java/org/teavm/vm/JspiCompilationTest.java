@@ -25,6 +25,11 @@ import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.teavm.backend.wasm.WasmGCTarget;
+import org.teavm.cache.CacheStatus;
+import org.teavm.cache.InMemoryProgramCache;
+import org.teavm.cache.InMemorySymbolTable;
+import org.teavm.model.MethodReference;
+import org.teavm.model.ReferenceCache;
 
 public class JspiCompilationTest {
     @Test
@@ -37,12 +42,42 @@ public class JspiCompilationTest {
         }
     }
 
+    @Test
+    public void changingModeInvalidatesCachedFiberPrograms() {
+        for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
+            var cache = new CountingCache();
+            var disabled = compile("false", level, cache);
+            assertFalse(importsJspi(disabled));
+            assertTrue(importsJspi(compile("true", level, cache)));
+            assertArrayEquals(disabled, compile("false", level, cache));
+            assertTrue(cache.hits > 0);
+        }
+    }
+
     private boolean importsJspi(byte[] module) {
         return new String(module, StandardCharsets.ISO_8859_1).contains("teavmJspi");
     }
 
     private byte[] compile(String jspi, TeaVMOptimizationLevel level) {
+        return compile(jspi, level, null);
+    }
+
+    private byte[] compile(String jspi, TeaVMOptimizationLevel level, CountingCache cache) {
         var vm = new TeaVMBuilder(new WasmGCTarget()).build();
+        if (cache != null) {
+            vm.setProgramCache(cache);
+            vm.setCacheStatus(new CacheStatus() {
+                @Override
+                public boolean isStaleClass(String className) {
+                    return false;
+                }
+
+                @Override
+                public boolean isStaleMethod(MethodReference method) {
+                    return false;
+                }
+            });
+        }
         vm.installPlugins();
         vm.setEntryPoint(Program.class.getName());
         vm.setOptimizationLevel(level);
@@ -59,7 +94,28 @@ public class JspiCompilationTest {
         }, "test.wasm");
         assertTrue(vm.getProblemProvider().getSevereProblems().isEmpty(),
                 () -> vm.getProblemProvider().getSevereProblems().toString());
+        if (cache != null) {
+            cache.commit();
+        }
         return files.get("test.wasm").toByteArray();
+    }
+
+    private static class CountingCache extends InMemoryProgramCache {
+        int hits;
+
+        CountingCache() {
+            super(new ReferenceCache(), new InMemorySymbolTable(), new InMemorySymbolTable(),
+                    new InMemorySymbolTable());
+        }
+
+        @Override
+        public org.teavm.model.Program get(MethodReference method, CacheStatus status) {
+            var program = super.get(method, status);
+            if (program != null) {
+                ++hits;
+            }
+            return program;
+        }
     }
 
     public static class Program {

@@ -74,6 +74,17 @@ try {
     assert.deepEqual(custom.teavmJspi, { custom: true });
     assert.equal(suspending, 2);
 
+    for (const value of [null, undefined]) {
+        const overridden = imports();
+        overridden.teavmJspi = value;
+        assert.equal(overridden.teavmJspi, value);
+        assert.equal(overridden.teavmJspi, value);
+        const initialized = imports();
+        initialized.teavmJspi;
+        initialized.teavmJspi = value;
+        assert.equal(initialized.teavmJspi, value);
+    }
+
     for (const missing of ["Suspending", "promising", "both"]) {
         api.Suspending = missing === "Suspending" || missing === "both" ? undefined : function() {};
         api.promising = missing === "promising" || missing === "both" ? undefined : () => {};
