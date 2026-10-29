@@ -779,8 +779,6 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     }
 
     public TPackage getPackage() {
-        // kafka-wasm patch: upstream kept the last dot, so the name was "a.b." where the JDK gives "a.b". As in the
-        // JDK, an array or a primitive type has no package, and a class in the unnamed package has the package "".
         if (isArray() || isPrimitive()) {
             return null;
         }

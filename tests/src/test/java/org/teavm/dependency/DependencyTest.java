@@ -103,6 +103,11 @@ public class DependencyTest {
     }
 
     @Test
+    public void localImplicitExceptionPrecision() {
+        doTest();
+    }
+
+    @Test
     public void arrays() {
         doTest();
     }
@@ -174,7 +179,8 @@ public class DependencyTest {
             var expectedTypes = assertion.expectedTypes.clone();
             Arrays.sort(actualTypes, Comparator.comparing(Object::toString));
             Arrays.sort(expectedTypes, Comparator.comparing(Object::toString));
-            Assertions.assertArrayEquals(expectedTypes, actualTypes, "Assertion at " + assertion.location);
+            Assertions.assertArrayEquals(expectedTypes, actualTypes, "Assertion at " + assertion.location
+                    + ", expected: " + Arrays.toString(expectedTypes) + ", actual: " + Arrays.toString(actualTypes));
 
             if (!classInference.isOverflow(assertion.value)) {
                 var actualTypeSet = new HashSet<>(Arrays.asList(classInference.typesOf(assertion.value)));

@@ -118,6 +118,7 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
             Annotation[].class);
     private MethodReference getClassAnnotations = new MethodReference(Class.class, "getDeclaredAnnotations",
             Annotation[].class);
+    private final List<MethodDependency> reachedForNames = new ArrayList<>();
     private MethodReference forName = new MethodReference(Class.class, "forName", String.class, boolean.class,
             ClassLoader.class, Class.class);
     private MethodReference classNewInstance = new MethodReference(Class.class, "newInstance", Object.class);
@@ -215,25 +216,16 @@ public class ReflectionDependencyListener extends AbstractDependencyListener {
                 if (reflectionSuppliers.stream().anyMatch(s -> s.isClassFoundByName(reflectionContext, className))) {
                     if (classesFoundByName.add(className)) {
                         agent.linkClass(className);
-                        // kafka-wasm patch: a class found by name after start() must also get name metadata,
-                        // or Class.forName cannot see it at run time, and must flow out of every forName call
-                        // that was reached before it was found. Upstream did both only for classes found
-                        // before start(), and that set is always empty.
                         markFoundByName(className);
                     }
                 }
             }
         });
 
-        if (!classesFoundByName.isEmpty()) {
-            for (var className : classesFoundByName) {
-                markFoundByName(className);
-            }
+        for (var className : classesFoundByName) {
+            markFoundByName(className);
         }
     }
-
-    // kafka-wasm patch: the forName calls reached so far, so classes found later can flow out of them.
-    private final List<MethodDependency> reachedForNames = new ArrayList<>();
 
     private void markFoundByName(String className) {
         var getName = agent.linkMethod(new MethodReference(Class.class, "getName", String.class));

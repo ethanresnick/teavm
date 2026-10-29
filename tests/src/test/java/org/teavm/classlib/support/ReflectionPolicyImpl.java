@@ -31,6 +31,7 @@ public class ReflectionPolicyImpl extends SimpleReflectionPolicy {
                 .reflectableMethods(withReturnType(SerializedLambda.class).and(named("writeReplace")));
 
         selectClass("org.teavm.classlib.java.lang.TestObject").foundByName();
+        selectClass("org.teavm.classlib.java.lang.ClassReflectionAPITest$FoundLate").foundByName();
 
         selectClasses(withAnnotation(Proxiable.class))
                 .proxyable()

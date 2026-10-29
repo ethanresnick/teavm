@@ -91,6 +91,29 @@ public final class TSystem extends TObject {
         return null;
     }
 
+    public static String mapLibraryName(String libname) {
+        if (libname == null) {
+            throw new NullPointerException();
+        }
+        if (PlatformDetector.isC()) {
+            switch (libraryNamePlatform()) {
+                case 1:
+                    return libname + ".dll";
+                case 2:
+                    return "lib" + libname + ".dylib";
+                default:
+                    break;
+            }
+        }
+        // Browser targets have no native library loader; use the Unix naming convention.
+        return "lib" + libname + ".so";
+    }
+
+    @Import(name = "teavm_libraryNamePlatform")
+    @RuntimeInclude("core.h")
+    @Unmanaged
+    private static native int libraryNamePlatform();
+
     public static TSecurityManager getSecurityManager() {
         return new TSecurityManager();
     }
@@ -353,13 +376,6 @@ public final class TSystem extends TObject {
             throw new NullPointerException();
         }
         throw new UnsatisfiedLinkError();
-    }
-
-    public static String mapLibraryName(String libname) {
-        if (libname == null) {
-            throw new NullPointerException();
-        }
-        return "lib" + libname + ".so";
     }
 
     public static String getenv(String name) {

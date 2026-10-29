@@ -33,8 +33,15 @@ import org.teavm.extension.introspect.IntrospectProjection;
 import org.teavm.extension.introspect.IntrospectTypeVariable;
 import org.teavm.extension.introspect.IntrospectWorld;
 import org.teavm.extension.introspect.Introspection;
+import org.teavm.model.AccessLevel;
 import org.teavm.model.ClassHierarchy;
+import org.teavm.model.ClassHolder;
+import org.teavm.model.ElementHolder;
+import org.teavm.model.ElementModifier;
+import org.teavm.model.FieldHolder;
+import org.teavm.model.MethodHolder;
 import org.teavm.model.ReferenceCache;
+import org.teavm.model.ValueType;
 import org.teavm.parsing.ClasspathClassHolderSource;
 import org.teavm.parsing.ClasspathResourceProvider;
 
@@ -47,6 +54,93 @@ public class IntrospectionTest {
         var classHolderSource = new ClasspathClassHolderSource(resourceProvider, new ReferenceCache(),
                 classLoader);
         world = new Introspection(new ClassHierarchy(classHolderSource), classLoader);
+    }
+
+    @Test
+    public void generatedMethodModifiersMatchReflection() {
+        var type = world.findClass(GeneratedMethods.class);
+        int bridges = 0;
+        int syntheticBodies = 0;
+        for (var method : GeneratedMethods.class.getDeclaredMethods()) {
+            var introspected = type.methods().stream()
+                    .filter(candidate -> candidate.name().equals(method.getName())
+                            && candidate.returnType().name().equals(method.getReturnType().getName()))
+                    .findFirst().orElseThrow();
+            assertEquals(method.getModifiers(), introspected.modifiers());
+            if (method.isBridge()) {
+                bridges++;
+            } else if (method.isSynthetic()) {
+                syntheticBodies++;
+            }
+        }
+        assertEquals(1, bridges);
+        assertEquals(1, syntheticBodies);
+    }
+
+    @Test
+    public void generatedFieldModifiersMatchReflection() {
+        var type = world.findClass(GeneratedFields.class);
+        int syntheticFields = 0;
+        for (var field : GeneratedFields.class.getDeclaredFields()) {
+            assertEquals(field.getModifiers(), type.declaredField(field.getName()).modifiers());
+            if (field.isSynthetic()) {
+                syntheticFields++;
+            }
+        }
+        assertEquals(1, syntheticFields);
+        assertEquals(0, type.modifiers() & 0x1040);
+    }
+
+    @Test
+    public void generatedModifiersPreserveOtherFlags() {
+        // JVMS 4.1, 4.5 and 4.6: ACC_SYNTHETIC is 0x1000 for all three
+        // declarations; 0x0040 is ACC_BRIDGE for methods and ACC_VOLATILE for fields.
+        for (var level : AccessLevel.values()) {
+            for (var synthetic : new boolean[] { false, true }) {
+                for (var extra : new boolean[] { false, true }) {
+                    var cls = new ClassHolder("SyntheticClass");
+                    var field = new FieldHolder("field");
+                    var method = new MethodHolder("method", ValueType.VOID);
+                    for (ElementHolder element : List.of(cls, field, method)) {
+                        element.setLevel(level);
+                        element.getModifiers().add(ElementModifier.STATIC);
+                        int original = Introspection.getModifiers(element);
+                        if (synthetic) {
+                            element.getModifiers().add(ElementModifier.SYNTHETIC);
+                        }
+                        if (extra) {
+                            element.getModifiers().add(element == method ? ElementModifier.BRIDGE
+                                    : element == field ? ElementModifier.VOLATILE : ElementModifier.FINAL);
+                        }
+                        int expected = original | (synthetic ? 0x1000 : 0);
+                        if (extra) {
+                            expected |= element == cls ? Modifier.FINAL : 0x0040;
+                        }
+                        assertEquals(expected, Introspection.getModifiers(element));
+                    }
+                }
+            }
+        }
+    }
+
+    public class GeneratedFields {
+        public volatile int value;
+        public transient int transientValue;
+
+        public IntrospectionTest outer() {
+            return IntrospectionTest.this;
+        }
+    }
+
+    public static class GeneratedMethods implements java.util.function.Supplier<String> {
+        @Override
+        public String get() {
+            return "value";
+        }
+
+        public Runnable action() {
+            return () -> get();
+        }
     }
 
     @Test

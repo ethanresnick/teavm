@@ -700,6 +700,8 @@ abstract class TAbstractCharClass extends TSpecialToken {
 
         static LazyCharClass digit = new LazyDigit();
 
+        // Optional columns contain the canonical block name and its historical name.
+        // Renamed blocks retain the constant identifier derived from the historical name.
         static final Object[][] contents = {
                 { "Lower", new LazyLower() }, //$NON-NLS-1$
                 { "Upper", new LazyUpper() }, //$NON-NLS-1$
@@ -736,21 +738,24 @@ abstract class TAbstractCharClass extends TSpecialToken {
                 { "S", new LazyNonSpace() }, //$NON-NLS-1$
                 { "d", digit }, //$NON-NLS-1$
                 { "D", new LazyNonDigit() }, //$NON-NLS-1$
-                { "BasicLatin", new LazyRange(0x0000, 0x007F) }, //$NON-NLS-1$
-                { "Latin-1Supplement", new LazyRange(0x0080, 0x00FF) }, //$NON-NLS-1$
-                { "LatinExtended-A", new LazyRange(0x0100, 0x017F) }, //$NON-NLS-1$
-                { "LatinExtended-B", new LazyRange(0x0180, 0x024F) }, //$NON-NLS-1$
-                { "IPAExtensions", new LazyRange(0x0250, 0x02AF) }, //$NON-NLS-1$
-                { "SpacingModifierLetters", new LazyRange(0x02B0, 0x02FF) }, //$NON-NLS-1$
-                { "CombiningDiacriticalMarks", new LazyRange(0x0300, 0x036F) }, //$NON-NLS-1$
-                { "Greek", new LazyRange(0x0370, 0x03FF) }, //$NON-NLS-1$
+                { "BasicLatin", new LazyRange(0x0000, 0x007F), "Basic Latin" }, //$NON-NLS-1$
+                { "Latin-1Supplement", new LazyRange(0x0080, 0x00FF), "Latin-1 Supplement" }, //$NON-NLS-1$
+                { "LatinExtended-A", new LazyRange(0x0100, 0x017F), "Latin Extended-A" }, //$NON-NLS-1$
+                { "LatinExtended-B", new LazyRange(0x0180, 0x024F), "Latin Extended-B" }, //$NON-NLS-1$
+                { "IPAExtensions", new LazyRange(0x0250, 0x02AF), "IPA Extensions" }, //$NON-NLS-1$
+                { "SpacingModifierLetters", new LazyRange(0x02B0, 0x02FF), "Spacing Modifier Letters" }, //$NON-NLS-1$
+                { "CombiningDiacriticalMarks", new LazyRange(0x0300, 0x036F),
+                        "Combining Diacritical Marks" }, //$NON-NLS-1$
+                { "Greek", new LazyRange(0x0370, 0x03FF), "Greek and Coptic", "Greek" }, //$NON-NLS-1$
                 { "Cyrillic", new LazyRange(0x0400, 0x04FF) }, //$NON-NLS-1$
-                { "CyrillicSupplement", new LazyRange(0x0500, 0x052F) }, //$NON-NLS-1$
+                { "CyrillicSupplement", new LazyRange(0x0500, 0x052F),
+                        "Cyrillic Supplement",
+                        "Cyrillic Supplementary" }, //$NON-NLS-1$
                 { "Armenian", new LazyRange(0x0530, 0x058F) }, //$NON-NLS-1$
                 { "Hebrew", new LazyRange(0x0590, 0x05FF) }, //$NON-NLS-1$
                 { "Arabic", new LazyRange(0x0600, 0x06FF) }, //$NON-NLS-1$
                 { "Syriac", new LazyRange(0x0700, 0x074F) }, //$NON-NLS-1$
-                { "ArabicSupplement", new LazyRange(0x0750, 0x077F) }, //$NON-NLS-1$
+                { "ArabicSupplement", new LazyRange(0x0750, 0x077F), "Arabic Supplement" }, //$NON-NLS-1$
                 { "Thaana", new LazyRange(0x0780, 0x07BF) }, //$NON-NLS-1$
                 { "Devanagari", new LazyRange(0x0900, 0x097F) }, //$NON-NLS-1$
                 { "Bengali", new LazyRange(0x0980, 0x09FF) }, //$NON-NLS-1$
@@ -767,12 +772,12 @@ abstract class TAbstractCharClass extends TSpecialToken {
                 { "Tibetan", new LazyRange(0x0F00, 0x0FFF) }, //$NON-NLS-1$
                 { "Myanmar", new LazyRange(0x1000, 0x109F) }, //$NON-NLS-1$
                 { "Georgian", new LazyRange(0x10A0, 0x10FF) }, //$NON-NLS-1$
-                { "HangulJamo", new LazyRange(0x1100, 0x11FF) }, //$NON-NLS-1$
+                { "HangulJamo", new LazyRange(0x1100, 0x11FF), "Hangul Jamo" }, //$NON-NLS-1$
                 { "Ethiopic", new LazyRange(0x1200, 0x137F) }, //$NON-NLS-1$
-                { "EthiopicSupplement", new LazyRange(0x1380, 0x139F) }, //$NON-NLS-1$
+                { "EthiopicSupplement", new LazyRange(0x1380, 0x139F), "Ethiopic Supplement" }, //$NON-NLS-1$
                 { "Cherokee", new LazyRange(0x13A0, 0x13FF) }, //$NON-NLS-1$
                 { "UnifiedCanadianAboriginalSyllabics", //$NON-NLS-1$
-                        new LazyRange(0x1400, 0x167F) },
+                        new LazyRange(0x1400, 0x167F), "Unified Canadian Aboriginal Syllabics" },
                 { "Ogham", new LazyRange(0x1680, 0x169F) }, //$NON-NLS-1$
                 { "Runic", new LazyRange(0x16A0, 0x16FF) }, //$NON-NLS-1$
                 { "Tagalog", new LazyRange(0x1700, 0x171F) }, //$NON-NLS-1$
@@ -782,88 +787,102 @@ abstract class TAbstractCharClass extends TSpecialToken {
                 { "Khmer", new LazyRange(0x1780, 0x17FF) }, //$NON-NLS-1$
                 { "Mongolian", new LazyRange(0x1800, 0x18AF) }, //$NON-NLS-1$
                 { "Limbu", new LazyRange(0x1900, 0x194F) }, //$NON-NLS-1$
-                { "TaiLe", new LazyRange(0x1950, 0x197F) }, //$NON-NLS-1$
-                { "NewTaiLue", new LazyRange(0x1980, 0x19DF) }, //$NON-NLS-1$
-                { "KhmerSymbols", new LazyRange(0x19E0, 0x19FF) }, //$NON-NLS-1$
+                { "TaiLe", new LazyRange(0x1950, 0x197F), "Tai Le" }, //$NON-NLS-1$
+                { "NewTaiLue", new LazyRange(0x1980, 0x19DF), "New Tai Lue" }, //$NON-NLS-1$
+                { "KhmerSymbols", new LazyRange(0x19E0, 0x19FF), "Khmer Symbols" }, //$NON-NLS-1$
                 { "Buginese", new LazyRange(0x1A00, 0x1A1F) }, //$NON-NLS-1$
-                { "PhoneticExtensions", new LazyRange(0x1D00, 0x1D7F) }, //$NON-NLS-1$
-                { "PhoneticExtensionsSupplement", new LazyRange(0x1D80, 0x1DBF) }, //$NON-NLS-1$
+                { "PhoneticExtensions", new LazyRange(0x1D00, 0x1D7F), "Phonetic Extensions" }, //$NON-NLS-1$
+                { "PhoneticExtensionsSupplement", new LazyRange(0x1D80, 0x1DBF),
+                        "Phonetic Extensions Supplement" }, //$NON-NLS-1$
                 { "CombiningDiacriticalMarksSupplement", //$NON-NLS-1$
-                        new LazyRange(0x1DC0, 0x1DFF) },
-                { "LatinExtendedAdditional", new LazyRange(0x1E00, 0x1EFF) }, //$NON-NLS-1$
-                { "GreekExtended", new LazyRange(0x1F00, 0x1FFF) }, //$NON-NLS-1$
-                { "GeneralPunctuation", new LazyRange(0x2000, 0x206F) }, //$NON-NLS-1$
-                { "SuperscriptsandSubscripts", new LazyRange(0x2070, 0x209F) }, //$NON-NLS-1$
-                { "CurrencySymbols", new LazyRange(0x20A0, 0x20CF) }, //$NON-NLS-1$
-                { "CombiningMarksforSymbols", new LazyRange(0x20D0, 0x20FF) }, //$NON-NLS-1$
-                { "LetterlikeSymbols", new LazyRange(0x2100, 0x214F) }, //$NON-NLS-1$
-                { "NumberForms", new LazyRange(0x2150, 0x218F) }, //$NON-NLS-1$
+                        new LazyRange(0x1DC0, 0x1DFF), "Combining Diacritical Marks Supplement" },
+                { "LatinExtendedAdditional", new LazyRange(0x1E00, 0x1EFF), "Latin Extended Additional" }, //$NON-NLS-1$
+                { "GreekExtended", new LazyRange(0x1F00, 0x1FFF), "Greek Extended" }, //$NON-NLS-1$
+                { "GeneralPunctuation", new LazyRange(0x2000, 0x206F), "General Punctuation" }, //$NON-NLS-1$
+                { "SuperscriptsandSubscripts", new LazyRange(0x2070, 0x209F),
+                        "Superscripts and Subscripts" }, //$NON-NLS-1$
+                { "CurrencySymbols", new LazyRange(0x20A0, 0x20CF), "Currency Symbols" }, //$NON-NLS-1$
+                { "CombiningMarksforSymbols", new LazyRange(0x20D0, 0x20FF),
+                        "Combining Diacritical Marks for Symbols",
+                        "Combining Marks for Symbols" }, //$NON-NLS-1$
+                { "LetterlikeSymbols", new LazyRange(0x2100, 0x214F), "Letterlike Symbols" }, //$NON-NLS-1$
+                { "NumberForms", new LazyRange(0x2150, 0x218F), "Number Forms" }, //$NON-NLS-1$
                 { "Arrows", new LazyRange(0x2190, 0x21FF) }, //$NON-NLS-1$
-                { "MathematicalOperators", new LazyRange(0x2200, 0x22FF) }, //$NON-NLS-1$
-                { "MiscellaneousTechnical", new LazyRange(0x2300, 0x23FF) }, //$NON-NLS-1$
-                { "ControlPictures", new LazyRange(0x2400, 0x243F) }, //$NON-NLS-1$
-                { "OpticalCharacterRecognition", new LazyRange(0x2440, 0x245F) }, //$NON-NLS-1$
-                { "EnclosedAlphanumerics", new LazyRange(0x2460, 0x24FF) }, //$NON-NLS-1$
-                { "BoxDrawing", new LazyRange(0x2500, 0x257F) }, //$NON-NLS-1$
-                { "BlockElements", new LazyRange(0x2580, 0x259F) }, //$NON-NLS-1$
-                { "GeometricShapes", new LazyRange(0x25A0, 0x25FF) }, //$NON-NLS-1$
-                { "MiscellaneousSymbols", new LazyRange(0x2600, 0x26FF) }, //$NON-NLS-1$
+                { "MathematicalOperators", new LazyRange(0x2200, 0x22FF), "Mathematical Operators" }, //$NON-NLS-1$
+                { "MiscellaneousTechnical", new LazyRange(0x2300, 0x23FF), "Miscellaneous Technical" }, //$NON-NLS-1$
+                { "ControlPictures", new LazyRange(0x2400, 0x243F), "Control Pictures" }, //$NON-NLS-1$
+                { "OpticalCharacterRecognition", new LazyRange(0x2440, 0x245F),
+                        "Optical Character Recognition" }, //$NON-NLS-1$
+                { "EnclosedAlphanumerics", new LazyRange(0x2460, 0x24FF), "Enclosed Alphanumerics" }, //$NON-NLS-1$
+                { "BoxDrawing", new LazyRange(0x2500, 0x257F), "Box Drawing" }, //$NON-NLS-1$
+                { "BlockElements", new LazyRange(0x2580, 0x259F), "Block Elements" }, //$NON-NLS-1$
+                { "GeometricShapes", new LazyRange(0x25A0, 0x25FF), "Geometric Shapes" }, //$NON-NLS-1$
+                { "MiscellaneousSymbols", new LazyRange(0x2600, 0x26FF), "Miscellaneous Symbols" }, //$NON-NLS-1$
                 { "Dingbats", new LazyRange(0x2700, 0x27BF) }, //$NON-NLS-1$
                 { "MiscellaneousMathematicalSymbols-A", //$NON-NLS-1$
-                        new LazyRange(0x27C0, 0x27EF) },
-                { "SupplementalArrows-A", new LazyRange(0x27F0, 0x27FF) }, //$NON-NLS-1$
-                { "BraillePatterns", new LazyRange(0x2800, 0x28FF) }, //$NON-NLS-1$
-                { "SupplementalArrows-B", new LazyRange(0x2900, 0x297F) }, //$NON-NLS-1$
+                        new LazyRange(0x27C0, 0x27EF), "Miscellaneous Mathematical Symbols-A" },
+                { "SupplementalArrows-A", new LazyRange(0x27F0, 0x27FF), "Supplemental Arrows-A" }, //$NON-NLS-1$
+                { "BraillePatterns", new LazyRange(0x2800, 0x28FF), "Braille Patterns" }, //$NON-NLS-1$
+                { "SupplementalArrows-B", new LazyRange(0x2900, 0x297F), "Supplemental Arrows-B" }, //$NON-NLS-1$
                 { "MiscellaneousMathematicalSymbols-B", //$NON-NLS-1$
-                        new LazyRange(0x2980, 0x29FF) },
+                        new LazyRange(0x2980, 0x29FF), "Miscellaneous Mathematical Symbols-B" },
                 { "SupplementalMathematicalOperators", //$NON-NLS-1$
-                        new LazyRange(0x2A00, 0x2AFF) },
+                        new LazyRange(0x2A00, 0x2AFF), "Supplemental Mathematical Operators" },
                 { "MiscellaneousSymbolsandArrows", //$NON-NLS-1$
-                        new LazyRange(0x2B00, 0x2BFF) },
+                        new LazyRange(0x2B00, 0x2BFF), "Miscellaneous Symbols and Arrows" },
                 { "Glagolitic", new LazyRange(0x2C00, 0x2C5F) }, //$NON-NLS-1$
                 { "Coptic", new LazyRange(0x2C80, 0x2CFF) }, //$NON-NLS-1$
-                { "GeorgianSupplement", new LazyRange(0x2D00, 0x2D2F) }, //$NON-NLS-1$
+                { "GeorgianSupplement", new LazyRange(0x2D00, 0x2D2F), "Georgian Supplement" }, //$NON-NLS-1$
                 { "Tifinagh", new LazyRange(0x2D30, 0x2D7F) }, //$NON-NLS-1$
-                { "EthiopicExtended", new LazyRange(0x2D80, 0x2DDF) }, //$NON-NLS-1$
-                { "SupplementalPunctuation", new LazyRange(0x2E00, 0x2E7F) }, //$NON-NLS-1$
-                { "CJKRadicalsSupplement", new LazyRange(0x2E80, 0x2EFF) }, //$NON-NLS-1$
-                { "KangxiRadicals", new LazyRange(0x2F00, 0x2FDF) }, //$NON-NLS-1$
+                { "EthiopicExtended", new LazyRange(0x2D80, 0x2DDF), "Ethiopic Extended" }, //$NON-NLS-1$
+                { "SupplementalPunctuation", new LazyRange(0x2E00, 0x2E7F), "Supplemental Punctuation" }, //$NON-NLS-1$
+                { "CJKRadicalsSupplement", new LazyRange(0x2E80, 0x2EFF), "CJK Radicals Supplement" }, //$NON-NLS-1$
+                { "KangxiRadicals", new LazyRange(0x2F00, 0x2FDF), "Kangxi Radicals" }, //$NON-NLS-1$
                 { "IdeographicDescriptionCharacters", //$NON-NLS-1$
-                        new LazyRange(0x2FF0, 0x2FFF) },
-                { "CJKSymbolsandPunctuation", new LazyRange(0x3000, 0x303F) }, //$NON-NLS-1$
+                        new LazyRange(0x2FF0, 0x2FFF), "Ideographic Description Characters" },
+                { "CJKSymbolsandPunctuation", new LazyRange(0x3000, 0x303F),
+                        "CJK Symbols and Punctuation" }, //$NON-NLS-1$
                 { "Hiragana", new LazyRange(0x3040, 0x309F) }, //$NON-NLS-1$
                 { "Katakana", new LazyRange(0x30A0, 0x30FF) }, //$NON-NLS-1$
                 { "Bopomofo", new LazyRange(0x3100, 0x312F) }, //$NON-NLS-1$
-                { "HangulCompatibilityJamo", new LazyRange(0x3130, 0x318F) }, //$NON-NLS-1$
+                { "HangulCompatibilityJamo", new LazyRange(0x3130, 0x318F), "Hangul Compatibility Jamo" }, //$NON-NLS-1$
                 { "Kanbun", new LazyRange(0x3190, 0x319F) }, //$NON-NLS-1$
-                { "BopomofoExtended", new LazyRange(0x31A0, 0x31BF) }, //$NON-NLS-1$
-                { "CJKStrokes", new LazyRange(0x31C0, 0x31EF) }, //$NON-NLS-1$
-                { "KatakanaPhoneticExtensions", new LazyRange(0x31F0, 0x31FF) }, //$NON-NLS-1$
-                { "EnclosedCJKLettersandMonths", new LazyRange(0x3200, 0x32FF) }, //$NON-NLS-1$
-                { "CJKCompatibility", new LazyRange(0x3300, 0x33FF) }, //$NON-NLS-1$
+                { "BopomofoExtended", new LazyRange(0x31A0, 0x31BF), "Bopomofo Extended" }, //$NON-NLS-1$
+                { "CJKStrokes", new LazyRange(0x31C0, 0x31EF), "CJK Strokes" }, //$NON-NLS-1$
+                { "KatakanaPhoneticExtensions", new LazyRange(0x31F0, 0x31FF),
+                        "Katakana Phonetic Extensions" }, //$NON-NLS-1$
+                { "EnclosedCJKLettersandMonths", new LazyRange(0x3200, 0x32FF),
+                        "Enclosed CJK Letters and Months" }, //$NON-NLS-1$
+                { "CJKCompatibility", new LazyRange(0x3300, 0x33FF), "CJK Compatibility" }, //$NON-NLS-1$
                 { "CJKUnifiedIdeographsExtensionA", //$NON-NLS-1$
-                        new LazyRange(0x3400, 0x4DB5) },
-                { "YijingHexagramSymbols", new LazyRange(0x4DC0, 0x4DFF) }, //$NON-NLS-1$
-                { "CJKUnifiedIdeographs", new LazyRange(0x4E00, 0x9FFF) }, //$NON-NLS-1$
-                { "YiSyllables", new LazyRange(0xA000, 0xA48F) }, //$NON-NLS-1$
-                { "YiRadicals", new LazyRange(0xA490, 0xA4CF) }, //$NON-NLS-1$
-                { "ModifierToneLetters", new LazyRange(0xA700, 0xA71F) }, //$NON-NLS-1$
-                { "SylotiNagri", new LazyRange(0xA800, 0xA82F) }, //$NON-NLS-1$
-                { "HangulSyllables", new LazyRange(0xAC00, 0xD7A3) }, //$NON-NLS-1$
-                { "HighSurrogates", new LazyRange(0xD800, 0xDB7F) }, //$NON-NLS-1$
-                { "HighPrivateUseSurrogates", new LazyRange(0xDB80, 0xDBFF) }, //$NON-NLS-1$
-                { "LowSurrogates", new LazyRange(0xDC00, 0xDFFF) }, //$NON-NLS-1$
-                { "PrivateUseArea", new LazyRange(0xE000, 0xF8FF) }, //$NON-NLS-1$
-                { "CJKCompatibilityIdeographs", new LazyRange(0xF900, 0xFAFF) }, //$NON-NLS-1$
-                { "AlphabeticPresentationForms", new LazyRange(0xFB00, 0xFB4F) }, //$NON-NLS-1$
-                { "ArabicPresentationForms-A", new LazyRange(0xFB50, 0xFDFF) }, //$NON-NLS-1$
-                { "VariationSelectors", new LazyRange(0xFE00, 0xFE0F) }, //$NON-NLS-1$
-                { "VerticalForms", new LazyRange(0xFE10, 0xFE1F) }, //$NON-NLS-1$
-                { "CombiningHalfMarks", new LazyRange(0xFE20, 0xFE2F) }, //$NON-NLS-1$
-                { "CJKCompatibilityForms", new LazyRange(0xFE30, 0xFE4F) }, //$NON-NLS-1$
-                { "SmallFormVariants", new LazyRange(0xFE50, 0xFE6F) }, //$NON-NLS-1$
-                { "ArabicPresentationForms-B", new LazyRange(0xFE70, 0xFEFF) }, //$NON-NLS-1$
-                { "HalfwidthandFullwidthForms", new LazyRange(0xFF00, 0xFFEF) }, //$NON-NLS-1$
+                        new LazyRange(0x3400, 0x4DB5), "CJK Unified Ideographs Extension A" },
+                { "YijingHexagramSymbols", new LazyRange(0x4DC0, 0x4DFF), "Yijing Hexagram Symbols" }, //$NON-NLS-1$
+                { "CJKUnifiedIdeographs", new LazyRange(0x4E00, 0x9FFF), "CJK Unified Ideographs" }, //$NON-NLS-1$
+                { "YiSyllables", new LazyRange(0xA000, 0xA48F), "Yi Syllables" }, //$NON-NLS-1$
+                { "YiRadicals", new LazyRange(0xA490, 0xA4CF), "Yi Radicals" }, //$NON-NLS-1$
+                { "ModifierToneLetters", new LazyRange(0xA700, 0xA71F), "Modifier Tone Letters" }, //$NON-NLS-1$
+                { "SylotiNagri", new LazyRange(0xA800, 0xA82F), "Syloti Nagri" }, //$NON-NLS-1$
+                { "HangulSyllables", new LazyRange(0xAC00, 0xD7A3), "Hangul Syllables" }, //$NON-NLS-1$
+                { "HighSurrogates", new LazyRange(0xD800, 0xDB7F), "High Surrogates" }, //$NON-NLS-1$
+                { "HighPrivateUseSurrogates", new LazyRange(0xDB80, 0xDBFF),
+                        "High Private Use Surrogates" }, //$NON-NLS-1$
+                { "LowSurrogates", new LazyRange(0xDC00, 0xDFFF), "Low Surrogates" }, //$NON-NLS-1$
+                { "PrivateUseArea", new LazyRange(0xE000, 0xF8FF), "Private Use Area" }, //$NON-NLS-1$
+                { "CJKCompatibilityIdeographs", new LazyRange(0xF900, 0xFAFF),
+                        "CJK Compatibility Ideographs" }, //$NON-NLS-1$
+                { "AlphabeticPresentationForms", new LazyRange(0xFB00, 0xFB4F),
+                        "Alphabetic Presentation Forms" }, //$NON-NLS-1$
+                { "ArabicPresentationForms-A", new LazyRange(0xFB50, 0xFDFF),
+                        "Arabic Presentation Forms-A" }, //$NON-NLS-1$
+                { "VariationSelectors", new LazyRange(0xFE00, 0xFE0F), "Variation Selectors" }, //$NON-NLS-1$
+                { "VerticalForms", new LazyRange(0xFE10, 0xFE1F), "Vertical Forms" }, //$NON-NLS-1$
+                { "CombiningHalfMarks", new LazyRange(0xFE20, 0xFE2F), "Combining Half Marks" }, //$NON-NLS-1$
+                { "CJKCompatibilityForms", new LazyRange(0xFE30, 0xFE4F), "CJK Compatibility Forms" }, //$NON-NLS-1$
+                { "SmallFormVariants", new LazyRange(0xFE50, 0xFE6F), "Small Form Variants" }, //$NON-NLS-1$
+                { "ArabicPresentationForms-B", new LazyRange(0xFE70, 0xFEFF),
+                        "Arabic Presentation Forms-B" }, //$NON-NLS-1$
+                { "HalfwidthandFullwidthForms", new LazyRange(0xFF00, 0xFFEF),
+                        "Halfwidth and Fullwidth Forms" }, //$NON-NLS-1$
                 { "all", new LazyRange(0x00, 0x10FFFF) }, //$NON-NLS-1$
                 { "Specials", new LazySpecialsBlock() }, //$NON-NLS-1$
                 { "Cn", new LazyCategory(Character.UNASSIGNED, true) },
@@ -916,30 +935,82 @@ abstract class TAbstractCharClass extends TSpecialToken {
                     return row[1];
                 }
             }
-            // kafka-wasm: the JDK finds a block (\p{InX}) with Character.UnicodeBlock.forName, which accepts the
-            // canonical name ("Basic Latin"), the constant name ("BASIC_LATIN"), and the form without spaces
-            // ("BasicLatin"), in any case. This table has only the form without spaces, so log4j's
-            // \P{InBasic_Latin} failed to compile. Blocks therefore also match ignoring case, spaces, underscores,
-            // and hyphens. This accepts a few spellings that the JDK rejects (for example "Basic-Latin").
-            String key = blockKey(name);
-            for (int i = 0; i < contents.length; ++i) {
-                Object[] row = contents[i];
-                boolean block = row[1] instanceof LazyRange || row[1] instanceof LazySpecialsBlock;
-                if (block && key.equals(blockKey((String) row[0]))) {
+            // UnicodeBlock.forName accepts canonical names, names without spaces, and constant identifiers.
+            // "all" is an existing extension, not a block, so its lookup must remain exact.
+            for (Object[] row : contents) {
+                boolean block = row[1] instanceof LazySpecialsBlock
+                        || row[1] instanceof LazyRange && !row[0].equals("all");
+                if (block && (matchesBlockName(name, (String) row[row.length > 2 ? 2 : 0], row.length <= 3)
+                        || row.length > 3 && matchesBlockName(name, (String) row[3], true))) {
                     return row[1];
                 }
             }
             throw new MissingResourceException("", "", name);
         }
-        private static String blockKey(String name) {
-            StringBuilder sb = new StringBuilder(name.length());
-            for (int i = 0; i < name.length(); ++i) {
-                char c = name.charAt(i);
-                if (c != ' ' && c != '_' && c != '-') {
-                    sb.append(Character.toUpperCase(c));
+
+        private static boolean matchesBlockName(String name, String canonical, boolean hasConstant) {
+            for (int form = 0; form < (hasConstant ? 3 : 2); ++form) {
+                int index = 0;
+                int expansion = 0;
+                for (int i = 0; i < canonical.length(); ++i) {
+                    char c = canonical.charAt(i);
+                    if (form == 1 && c == ' ') {
+                        continue;
+                    }
+                    if (form == 2 && (c == ' ' || c == '-')) {
+                        c = '_';
+                    }
+                    char actual = 0;
+                    if (expansion == 0) {
+                        if (index == name.length()) {
+                            index = -1;
+                            break;
+                        }
+                        char input = name.charAt(index++);
+                        expansion = input < 128 ? 0 : asciiUpperCaseExpansion(input);
+                        if (expansion == 0) {
+                            actual = Character.toUpperCase(input);
+                        }
+                    }
+                    if (expansion != 0) {
+                        actual = (char) (expansion & 0xFF);
+                        expansion >>>= 8;
+                    }
+                    if (actual != Character.toUpperCase(c)) {
+                        index = -1;
+                        break;
+                    }
+                }
+                if (index == name.length() && expansion == 0) {
+                    return true;
                 }
             }
-            return sb.toString();
+            return false;
         }
+
+        private static int asciiUpperCaseExpansion(char c) {
+            // Unicode SpecialCasing: the only full uppercase expansions consisting entirely of ASCII.
+            // Pack the first character in the low byte so the matcher can consume them without allocation.
+            switch (c) {
+                case '\u00DF':
+                    return 'S' | 'S' << 8;
+                case '\uFB00':
+                    return 'F' | 'F' << 8;
+                case '\uFB01':
+                    return 'F' | 'I' << 8;
+                case '\uFB02':
+                    return 'F' | 'L' << 8;
+                case '\uFB03':
+                    return 'F' | 'F' << 8 | 'I' << 16;
+                case '\uFB04':
+                    return 'F' | 'F' << 8 | 'L' << 16;
+                case '\uFB05':
+                case '\uFB06':
+                    return 'S' | 'T' << 8;
+                default:
+                    return 0;
+            }
+        }
+
     }
 }

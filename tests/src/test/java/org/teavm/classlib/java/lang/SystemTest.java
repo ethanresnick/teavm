@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
+import org.teavm.classlib.PlatformDetector;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -37,6 +38,31 @@ import org.teavm.junit.TeaVMTest;
 @TeaVMTest
 @EachTestCompiledSeparately
 public class SystemTest {
+    @Test
+    public void mapsLibraryNamesWithoutLoadingThem() {
+        // System.mapLibraryName Javadoc specifies a platform-dependent name, not library loading:
+        // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/System.html
+        String mapped = System.mapLibraryName("example");
+        assertTrue(mapped.equals("libexample.so") || mapped.equals("libexample.dylib")
+                || mapped.equals("example.dll"));
+        if (PlatformDetector.isJavaScript() || PlatformDetector.isWebAssemblyGC()) {
+            // TeaVM's browser convention is independent of the compiler host and browser OS.
+            assertEquals("libexample.so", mapped);
+        }
+        String prefix = mapped.startsWith("lib") ? "lib" : "";
+        String suffix = mapped.substring(prefix.length() + "example".length());
+        for (String name : new String[] { "", "x", "libx.so", "x.dll", "x.dylib", "../x", "/tmp/x",
+                "dir\\x", "with space", "\u03bb\u4e2d", "\ud83d\ude00" }) {
+            assertEquals(prefix + name + suffix, System.mapLibraryName(name));
+        }
+    }
+
+    @Test
+    public void rejectsNullLibraryName() {
+        // System.mapLibraryName specifies NullPointerException for a null name.
+        assertThrows(NullPointerException.class, () -> System.mapLibraryName(null));
+    }
+
     @Test
     public void copiesArray() {
         Object a = new Object();

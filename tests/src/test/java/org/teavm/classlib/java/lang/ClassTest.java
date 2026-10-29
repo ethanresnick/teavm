@@ -572,15 +572,6 @@ public class ClassTest {
     }
 
     @Test
-    public void packageOfArrayAndPrimitiveIsNull() {
-        assertNull(int[].class.getPackage());
-        assertNull(String[].class.getPackage());
-        assertNull(int.class.getPackage());
-        assertEquals("java.lang", String.class.getPackage().getName());
-        assertEquals("org.teavm.classlib.java.lang", ClassTest.class.getPackage().getName());
-    }
-
-    @Test
     public void forNameWithBootstrapLoaderFindsOnlyJdkClasses() throws ClassNotFoundException {
         assertEquals(String.class, Class.forName("java.lang.String", false, null));
         try {

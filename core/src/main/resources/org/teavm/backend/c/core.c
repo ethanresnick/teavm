@@ -141,3 +141,13 @@ TEAVM_FILL_ARRAY_F(teavm_fillLongArray, int64_t, int64_t)
 TEAVM_FILL_ARRAY_F(teavm_fillFloatArray, float, double)
 TEAVM_FILL_ARRAY_F(teavm_fillDoubleArray, double, double)
 
+
+int32_t teavm_libraryNamePlatform(void) {
+#if TEAVM_WINDOWS
+    return 1;
+#elif defined(__APPLE__)
+    return 2;
+#else
+    return 0;
+#endif
+}

@@ -152,9 +152,6 @@ public class Introspection implements IntrospectWorld {
         if (modifierSet.contains(ElementModifier.RECORD)) {
             modifiers |= RECORD;
         }
-        // kafka-wasm: the JVM's bits for synthetic members (0x1000) and bridge methods (0x0040), so a reflection
-        // policy can tell javac's lambda bodies, accessors, and bridges from source methods. Run-time reflection
-        // already reports both through ModifiersInfo.
         if (modifierSet.contains(ElementModifier.SYNTHETIC)) {
             modifiers |= 0x1000;
         }
