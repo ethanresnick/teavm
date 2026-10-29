@@ -15,6 +15,8 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
+
 class TByteBufferImpl extends TByteBuffer {
     private int capacity;
     private int start;
@@ -58,7 +60,13 @@ class TByteBufferImpl extends TByteBuffer {
 
     @Override
     public TByteBuffer slice() {
-        return new TByteBufferImpl(position + start, limit - position,  array, 0, limit - position,
+        return slice(position, remaining());
+    }
+
+    @Override
+    public TByteBuffer slice(int index, int length) {
+        Objects.checkFromIndexSize(index, length, limit);
+        return new TByteBufferImpl(index + start, length, array, 0, length,
                 direct, readOnly);
     }
 

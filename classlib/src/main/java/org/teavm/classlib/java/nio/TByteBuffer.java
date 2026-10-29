@@ -111,6 +111,8 @@ public abstract class TByteBuffer extends TBuffer implements TComparable<TByteBu
 
     public abstract TByteBuffer slice();
 
+    public abstract TByteBuffer slice(int index, int length);
+
     public abstract TByteBuffer duplicate();
 
     public abstract TByteBuffer asReadOnlyBuffer();

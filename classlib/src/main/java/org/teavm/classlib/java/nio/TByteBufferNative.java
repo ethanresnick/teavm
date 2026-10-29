@@ -15,6 +15,7 @@
  */
 package org.teavm.classlib.java.nio;
 
+import java.util.Objects;
 import org.teavm.backend.c.runtime.Memory;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.classlib.java.nio.file.TAddressBasedBuffer;
@@ -126,8 +127,14 @@ class TByteBufferNative extends TByteBuffer implements TArrayBufferViewProvider,
 
     @Override
     public TByteBuffer slice() {
-        var newData = address.add(position);
-        var result = new TByteBufferNative(gcRef, array, arrayOffset + position, base, newData, remaining(), readOnly);
+        return slice(position, remaining());
+    }
+
+    @Override
+    public TByteBuffer slice(int index, int length) {
+        Objects.checkFromIndexSize(index, length, limit);
+        var newData = address.add(index);
+        var result = new TByteBufferNative(gcRef, array, arrayOffset + index, base, newData, length, readOnly);
         result.position = 0;
         result.limit = result.capacity();
         result.order = TByteOrder.BIG_ENDIAN;
