@@ -17,18 +17,25 @@ package org.teavm.classlib.java.nio;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.InvalidMarkException;
 import java.nio.ReadOnlyBufferException;
 import org.junit.jupiter.api.Test;
+import org.teavm.classlib.support.GCSupport;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
 public class ByteBufferIndexedSliceTest {
+    // Java SE 21 ByteBuffer.slice(int, int): absolute index and shared content; independent state;
+    // position zero, limit/capacity length, undefined mark, BIG_ENDIAN order, same direct/read-only status.
+    // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/ByteBuffer.html#slice(int,int)
+
     @Test
     public void usesAbsoluteIndexAndPreservesSourceState() {
         for (boolean direct : new boolean[] { false, true }) {
@@ -153,6 +160,87 @@ public class ByteBufferIndexedSliceTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void exhaustsSmallRangesAndSourcePositions() {
+        // The specified range is bounded by limit, including an empty range at limit.
+        for (boolean direct : new boolean[] { false, true }) {
+            for (int limit = 0; limit <= 5; ++limit) {
+                for (int position = 0; position <= limit; ++position) {
+                    ByteBuffer source = buffer(direct).limit(limit).position(position).mark();
+                    for (int index = -1; index <= 6; ++index) {
+                        for (int length = -1; length <= 6; ++length) {
+                            int start = index;
+                            int size = length;
+                            if (index < 0 || length < 0 || index + length > limit) {
+                                assertThrows(IndexOutOfBoundsException.class, () -> source.slice(start, size));
+                            } else {
+                                ByteBuffer slice = source.slice(index, length);
+                                assertEquals(length, slice.capacity());
+                                assertEquals(length, slice.limit());
+                                assertEquals(0, slice.position());
+                                for (int i = 0; i < length; ++i) {
+                                    assertEquals(index + i, slice.get(i));
+                                }
+                            }
+                            assertEquals(position, source.position());
+                            assertEquals(limit, source.limit());
+                            source.reset();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    public void noArgumentSliceKeepsItsContract() {
+        // ByteBuffer.slice() starts at position and ends at limit, with the same new-view state.
+        for (boolean direct : new boolean[] { false, true }) {
+            for (boolean readOnly : new boolean[] { false, true }) {
+                ByteBuffer source = buffer(direct);
+                if (readOnly) {
+                    source = source.asReadOnlyBuffer();
+                }
+                source.position(3).mark().position(5).limit(9).order(ByteOrder.LITTLE_ENDIAN);
+                ByteBuffer slice = source.slice();
+                assertEquals(4, slice.capacity());
+                assertEquals(4, slice.limit());
+                assertEquals(0, slice.position());
+                assertEquals(5, slice.get(0));
+                assertEquals(ByteOrder.BIG_ENDIAN, slice.order());
+                assertEquals(direct, slice.isDirect());
+                assertEquals(readOnly, slice.isReadOnly());
+                assertThrows(InvalidMarkException.class, slice::reset);
+                source.reset();
+                assertEquals(3, source.position());
+                assertEquals(9, source.limit());
+            }
+        }
+    }
+
+    @Test
+    public void nestedDirectSliceRetainsStorageAcrossCollection() throws InterruptedException {
+        // Shared storage must survive after callers drop their parent references.
+        // Use an unrelated sentinel: implementations may retain any of the parent wrappers.
+        ByteBuffer[] retained = new ByteBuffer[1];
+        WeakReference<?>[] sentinels = new WeakReference<?>[1];
+        Thread creator = new Thread(() -> {
+            ByteBuffer parent = buffer(true).slice(3, 10);
+            retained[0] = parent.slice(3, 5);
+            sentinels[0] = new WeakReference<>(new Object());
+        });
+        creator.start();
+        creator.join();
+        GCSupport.tryToTriggerGC(sentinels[0]);
+        assertNull(sentinels[0].get());
+        ByteBuffer slice = retained[0];
+        for (int i = 0; i < slice.capacity(); ++i) {
+            assertEquals(i + 6, slice.get(i));
+        }
+        slice.putInt(0, 0x12345678);
+        assertEquals(0x12345678, slice.getInt(0));
     }
 
     private static ByteBuffer buffer(boolean direct) {

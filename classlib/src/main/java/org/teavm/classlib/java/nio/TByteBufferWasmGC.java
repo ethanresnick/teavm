@@ -76,11 +76,6 @@ class TByteBufferWasmGC extends TByteBufferNative {
     }
 
     @Override
-    public TByteBuffer slice() {
-        return slice(position, remaining());
-    }
-
-    @Override
     public TByteBuffer slice(int index, int length) {
         Objects.checkFromIndexSize(index, length, limit);
         var newData = address.add(index);
