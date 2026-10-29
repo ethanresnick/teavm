@@ -15,10 +15,13 @@
  */
 package org.teavm.vm;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.teavm.backend.c.CTarget;
 import org.teavm.backend.c.generate.CNameProvider;
 import org.teavm.classlib.support.Reflectable;
@@ -27,15 +30,20 @@ import org.teavm.model.MethodReference;
 public class ReflectiveInitializationCompilationTest {
     @Test
     public void cRejectsSuspendingReflectiveInitializer() {
+        var checks = new ArrayList<Executable>();
         for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
             for (var entry : List.of(AsyncProgram.class, AsyncFieldProgram.class, AsyncEnumProgram.class,
                     AsyncConstructorProgram.class, AsyncClassNewInstanceProgram.class)) {
-                var vm = compile(entry, level);
-                assertTrue(vm.getProblemProvider().getSevereProblems().stream().anyMatch(p ->
-                        p.getText().contains(
-                                "does not support reflective initialization of a class that can suspend")));
+                checks.add(() -> {
+                    var vm = compile(entry, level);
+                    assertTrue(vm.getProblemProvider().getSevereProblems().stream().anyMatch(p ->
+                            p.getText().contains(
+                                    "does not support reflective initialization of a class that can suspend")),
+                            entry.getSimpleName() + " " + level);
+                });
             }
         }
+        assertAll(checks);
     }
 
     @Test
