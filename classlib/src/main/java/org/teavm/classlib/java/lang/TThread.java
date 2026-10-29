@@ -15,6 +15,9 @@
  */
 package org.teavm.classlib.java.lang;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
@@ -24,14 +27,16 @@ import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 
 public class TThread extends TObject implements TRunnable {
+    // Intrusive links keep the main-thread initializer free of collection code and suspension points.
+    private static TThread liveHead;
+    private static TThread liveTail;
     private static TThread mainThread = new TThread("main", true);
     private static TThread currentThread = mainThread;
     private static int nextId = 1;
-    private static int activeCount = 1;
     private static UncaughtExceptionHandler defaultUncaughtExceptionHandler = new TDefaultUncaughtExceptionHandler();
     private UncaughtExceptionHandler uncaughtExceptionHandler;
     private long id;
-    private int priority;
+    private int priority = Thread.NORM_PRIORITY;
     private boolean daemon;
     private long timeSliceStart;
     private int yieldCount;
@@ -43,6 +48,10 @@ public class TThread extends TObject implements TRunnable {
     private String name;
     // As in the JDK, isAlive() is false before start().
     private boolean alive;
+    private boolean hasStarted;
+    private TThreadGroup group;
+    private TThread livePrev;
+    private TThread liveNext;
     /**
      * The InheritableThreadLocal values this thread takes from its creator, as pairs (instance, value), or null.
      * They are read when the thread is created, as in the JDK, and set when it starts: a ThreadLocal keys its
@@ -56,7 +65,7 @@ public class TThread extends TObject implements TRunnable {
     TRunnable target;
 
     public TThread() {
-        this(null, null);
+        this(null, null, true);
     }
 
     /**
@@ -69,27 +78,73 @@ public class TThread extends TObject implements TRunnable {
         this.name = name;
         id = nextId++;
         alive = true;
+        hasStarted = true;
+        addLive();
     }
 
     public TThread(String name) {
-        this(null, name);
+        this(null, name, false);
     }
 
     public TThread(TRunnable target) {
-        this(target, null);
+        this(target, null, true);
     }
 
     public TThread(TRunnable target, String name) {
-        this.name = name;
+        this(target, name, false);
+    }
+
+    private TThread(TRunnable target, String name, boolean defaultName) {
+        this.name = defaultName ? null : Objects.requireNonNull(name);
         this.target = target;
         id = nextId++;
         // As in the JDK, a new thread takes its creator's context class loader and inheritable thread locals.
         TThread creator = currentThread;
         if (creator != null) {
+            group = creator.group;
+            priority = creator.priority;
+            daemon = creator.daemon;
             contextClassLoader = creator.contextClassLoader;
             contextClassLoaderSet = creator.contextClassLoaderSet;
             inherited = TInheritableThreadLocal.snapshot();
         }
+        // Only public construction reaches the lazy group holder, never the main-thread initializer.
+        priority = Math.min(priority, getThreadGroup().getMaxPriority());
+    }
+
+    public TThread(TThreadGroup group, TRunnable target) {
+        this(target, null, true);
+        if (group != null) {
+            this.group = group;
+            priority = Math.min(currentThread.priority, group.getMaxPriority());
+        }
+    }
+
+    public TThread(TThreadGroup group, String name) {
+        this(group, null, name);
+    }
+
+    public TThread(TThreadGroup group, TRunnable target, String name) {
+        this(target, name, false);
+        if (group != null) {
+            this.group = group;
+            priority = Math.min(currentThread.priority, group.getMaxPriority());
+        }
+    }
+
+    public TThread(TThreadGroup group, TRunnable target, String name, long stackSize) {
+        this(group, target, name);
+    }
+
+    public final TThreadGroup getThreadGroup() {
+        if (!alive && hasStarted) {
+            return null;
+        }
+        return group != null ? group : ThreadGroupHolder.MAIN;
+    }
+
+    private static class ThreadGroupHolder {
+        static final TThreadGroup MAIN = TThreadGroup.createMainGroup();
     }
 
     public void setContextClassLoader(TClassLoader loader) {
@@ -105,7 +160,12 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public void start() {
+        if (hasStarted) {
+            throw new IllegalThreadStateException();
+        }
+        hasStarted = true;
         alive = true;
+        addLive();
         if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
             boolean daemon = this.daemon;
             if (!daemon) {
@@ -119,20 +179,30 @@ public class TThread extends TObject implements TRunnable {
 
     private void runThread() {
         try {
-            activeCount++;
             setCurrentThread(TThread.this);
             key = new Object();
             applyInherited();
             TThread.this.run();
         } catch (Throwable t) {
-            getUncaughtExceptionHandler().uncaughtException(this, t);
+            try {
+                getUncaughtExceptionHandler().uncaughtException(this, t);
+            } catch (Throwable ignored) {
+                // An exception thrown by an uncaught-exception handler is ignored by the VM.
+            }
         } finally {
             // Clear alive under finishedLock, before the notify, so join() sees both together.
-            synchronized (finishedLock) {
+            // Constructor-free instances, such as mocks, have no finishedLock.
+            var lock = finishedLock;
+            if (lock != null) {
+                synchronized (lock) {
+                    alive = false;
+                    lock.notifyAll();
+                }
+            } else {
                 alive = false;
-                finishedLock.notifyAll();
             }
-            activeCount--;
+            removeLive();
+            group = null;
             key = null;
             setCurrentThread(mainThread);
         }
@@ -172,11 +242,15 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public String getName() {
+        // Building this in the constructor would pull string code into the main-thread initializer.
+        if (name == null) {
+            name = "Thread-" + id;
+        }
         return name;
     }
 
     public void setName(String name) {
-        this.name = name;
+        this.name = Objects.requireNonNull(name);
     }
 
     public final boolean isDaemon() {
@@ -184,6 +258,9 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void setDaemon(boolean daemon) {
+        if (alive) {
+            throw new IllegalThreadStateException();
+        }
         this.daemon = daemon;
     }
 
@@ -256,9 +333,11 @@ public class TThread extends TObject implements TRunnable {
 
     public void interrupt() {
         interruptedFlag = true;
-        if (interruptHandler != null) {
-            interruptHandler.interrupted();
+        var handler = interruptHandler;
+        if (handler != null) {
+            // The callback can resume the thread, which can install a new handler before this call returns.
             interruptHandler = null;
+            handler.interrupted();
         }
     }
 
@@ -284,7 +363,75 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public static int activeCount() {
-        return activeCount;
+        return currentThread().getThreadGroup().activeCount();
+    }
+
+    public static int enumerate(TThread[] threads) {
+        return currentThread().getThreadGroup().enumerate(threads);
+    }
+
+    public static Map<TThread, TStackTraceElement[]> getAllStackTraces() {
+        int count = 0;
+        for (var thread = liveHead; thread != null; thread = thread.liveNext) {
+            if (thread.alive) {
+                ++count;
+            }
+        }
+        var threads = new TThread[count];
+        int index = 0;
+        for (var thread = liveHead; thread != null; thread = thread.liveNext) {
+            if (thread.alive) {
+                threads[index++] = thread;
+            }
+        }
+        // Overridden getStackTrace or hashCode methods can terminate threads and change the live list.
+        Map<TThread, TStackTraceElement[]> result = new HashMap<>();
+        for (var thread : threads) {
+            result.put(thread, thread.getStackTrace());
+        }
+        return result;
+    }
+
+    static int enumerate(TThreadGroup group, TThread[] threads, boolean recurse) {
+        int count = 0;
+        for (var thread = liveHead; thread != null; thread = thread.liveNext) {
+            var threadGroup = thread.getThreadGroup();
+            if (threadGroup == group || recurse && group.parentOf(threadGroup)) {
+                if (threads != null) {
+                    if (count == threads.length) {
+                        break;
+                    }
+                    threads[count] = thread;
+                }
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    private void addLive() {
+        livePrev = liveTail;
+        if (liveTail == null) {
+            liveHead = this;
+        } else {
+            liveTail.liveNext = this;
+        }
+        liveTail = this;
+    }
+
+    private void removeLive() {
+        if (livePrev == null) {
+            liveHead = liveNext;
+        } else {
+            livePrev.liveNext = liveNext;
+        }
+        if (liveNext == null) {
+            liveTail = livePrev;
+        } else {
+            liveNext.livePrev = livePrev;
+        }
+        livePrev = null;
+        liveNext = null;
     }
 
     public long getId() {
@@ -372,7 +519,13 @@ public class TThread extends TObject implements TRunnable {
     }
 
     public final void setPriority(int newPriority) {
-        this.priority = newPriority;
+        if (newPriority < Thread.MIN_PRIORITY || newPriority > Thread.MAX_PRIORITY) {
+            throw new IllegalArgumentException();
+        }
+        var threadGroup = getThreadGroup();
+        if (threadGroup != null) {
+            priority = Math.min(newPriority, threadGroup.getMaxPriority());
+        }
     }
 
     public final int getPriority() {
@@ -391,7 +544,7 @@ public class TThread extends TObject implements TRunnable {
         if (this.uncaughtExceptionHandler != null) {
             return this.uncaughtExceptionHandler;
         }
-        return defaultUncaughtExceptionHandler;
+        return getThreadGroup();
     }
     
     public void setUncaughtExceptionHandler(UncaughtExceptionHandler uncaughtExceptionHandler) {
