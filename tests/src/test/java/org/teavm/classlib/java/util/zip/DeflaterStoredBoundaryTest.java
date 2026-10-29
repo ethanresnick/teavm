@@ -63,23 +63,99 @@ public class DeflaterStoredBoundaryTest {
             } finally {
                 deflater.end();
             }
-            var inflater = new Inflater(nowrap);
-            try {
-                inflater.setInput(compressed.toByteArray());
-                byte[] actual = new byte[input.length + 1];
-                int count = 0;
-                int calls = 0;
-                while (!inflater.finished()) {
-                    assertTrue(++calls < 10000);
-                    int read = inflater.inflate(actual, count, actual.length - count);
-                    assertTrue(read > 0 || inflater.finished());
-                    count += read;
-                }
-                assertEquals(input.length, count);
-                assertArrayEquals(input, java.util.Arrays.copyOf(actual, count));
-            } finally {
-                inflater.end();
+            assertInflates(compressed.toByteArray(), input, nowrap);
+        }
+    }
+
+    @Test
+    public void storedBoundariesAcrossSeedsAndCompressionFunctions() throws Exception {
+        int[] lengths = { 32767, 32768, 65530, 65531, 65532, 65535, 65536, 120000 };
+        int[] levels = { 1, 3, 4, 6, 9, Deflater.DEFAULT_COMPRESSION };
+        for (boolean nowrap : new boolean[] { false, true }) {
+            for (int i = 0; i < lengths.length; ++i) {
+                checkTransitions(nowrap, levels[i % levels.length], i % 3, 1828 + i,
+                        i + 1, lengths[i], 128, 1);
             }
         }
     }
+
+    @Test
+    public void repeatedStoredTransitionsWithTinyOutput() throws Exception {
+        for (boolean nowrap : new boolean[] { false, true }) {
+            for (int size : new int[] { 1, 2, 7, 64 }) {
+                checkTransitions(nowrap, 6, Deflater.DEFAULT_STRATEGY, 42, 4, 65532, size, 3);
+            }
+        }
+    }
+
+    // Java 21 Deflater.setLevel permits a flush while applying a new level after the next deflate call.
+    // Check complete data and counters rather than an implementation-specific compressed representation.
+    // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/zip/Deflater.html#setLevel(int)
+    private static void checkTransitions(boolean nowrap, int level, int strategy, int seed, int prefixLength,
+            int storedLength, int outputSize, int repetitions) throws Exception {
+        byte[] prefix = new byte[prefixLength];
+        new Random(seed).nextBytes(prefix);
+        byte[] stored = new byte[storedLength];
+        byte[] output = new byte[outputSize];
+        var expected = new ByteArrayOutputStream();
+        var compressed = new ByteArrayOutputStream();
+        var deflater = new Deflater(level, nowrap);
+        try {
+            deflater.setStrategy(strategy);
+            for (int repetition = 0; repetition < repetitions; ++repetition) {
+                deflater.setLevel(level);
+                drain(deflater, compressed, output);
+                deflater.setInput(prefix);
+                expected.write(prefix);
+                drain(deflater, compressed, output);
+                deflater.setLevel(Deflater.NO_COMPRESSION);
+                drain(deflater, compressed, output);
+                deflater.setInput(stored);
+                expected.write(stored);
+                drain(deflater, compressed, output);
+            }
+            deflater.finish();
+            int calls = 0;
+            while (!deflater.finished()) {
+                assertTrue(++calls < expected.size() * 2 + 1000);
+                compressed.write(output, 0, deflater.deflate(output));
+            }
+            assertEquals(expected.size(), deflater.getBytesRead());
+            assertEquals(compressed.size(), deflater.getBytesWritten());
+            assertTrue(compressed.size() >= storedLength * repetitions);
+        } finally {
+            deflater.end();
+        }
+        assertInflates(compressed.toByteArray(), expected.toByteArray(), nowrap);
+    }
+
+    private static void assertInflates(byte[] compressed, byte[] expected, boolean nowrap) throws Exception {
+        var inflater = new Inflater(nowrap);
+        try {
+            inflater.setInput(compressed);
+            byte[] actual = new byte[expected.length + 1];
+            int count = 0;
+            while (!inflater.finished()) {
+                int read = inflater.inflate(actual, count, actual.length - count);
+                assertTrue(read > 0 || inflater.finished());
+                count += read;
+            }
+            assertEquals(expected.length, count);
+            assertArrayEquals(expected, java.util.Arrays.copyOf(actual, count));
+            assertEquals(0, inflater.getRemaining());
+        } finally {
+            inflater.end();
+        }
+    }
+
+    private static void drain(Deflater deflater, ByteArrayOutputStream compressed, byte[] output) {
+        int calls = 0;
+        int count;
+        do {
+            assertTrue(++calls < 200000);
+            count = deflater.deflate(output);
+            compressed.write(output, 0, count);
+        } while (!deflater.needsInput() || count == output.length);
+    }
+
 }
