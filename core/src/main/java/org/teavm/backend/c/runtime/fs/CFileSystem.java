@@ -252,6 +252,11 @@ public class CFileSystem implements VirtualFileSystem {
     @Unmanaged
     static native boolean flush(long file);
 
+    @Import(name = "teavm_file_sync")
+    @RuntimeInclude("file.h")
+    @Unmanaged
+    static native boolean sync(long file);
+
     @Import(name = "teavm_file_seek")
     @RuntimeInclude("file.h")
     @Unmanaged

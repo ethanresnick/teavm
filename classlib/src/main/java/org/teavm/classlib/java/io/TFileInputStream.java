@@ -84,10 +84,11 @@ public class TFileInputStream extends InputStream {
 
     @Override
     public void close() throws IOException {
+        var accessor = this.accessor;
+        this.accessor = null;
         if (accessor != null) {
             accessor.close();
         }
-        accessor = null;
     }
 
     @Override
