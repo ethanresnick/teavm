@@ -18,6 +18,7 @@ package org.teavm.classlib.java.lang;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
 import org.teavm.junit.EachTestCompiledSeparately;
@@ -256,6 +257,47 @@ public class ReflectiveInitializationTest {
         assertEquals(1, AsyncInitialization.counter);
     }
 
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    public void failingInitializerReleasesWaitingThread() throws Exception {
+        Throwable[] failures = new Throwable[2];
+        Thread first = new Thread(() -> initializeFailingClass(failures, 0));
+        Thread second = new Thread(() -> initializeFailingClass(failures, 1));
+        first.start();
+        while (FailureState.started == 0) {
+            Thread.sleep(1);
+        }
+        second.start();
+        first.join();
+        second.join();
+        // JLS 12.4.2: the initializing thread gets the original Error; waiters observe erroneous state.
+        assertEquals(InitializerError.class, failures[0].getClass());
+        assertEquals(NoClassDefFoundError.class, failures[1].getClass());
+        assertEquals(1, FailureState.started);
+    }
+
+    private void initializeFailingClass(Throwable[] failures, int index) {
+        try {
+            Class.forName(ConcurrentFailure.class.getName(), true, getClass().getClassLoader());
+        } catch (Throwable e) {
+            failures[index] = e;
+        }
+    }
+
+    static class FailureState {
+        static int started;
+    }
+
+    public static class ConcurrentFailure {
+        static {
+            FailureState.started++;
+            pause();
+            if (Boolean.parseBoolean("true")) {
+                throw new InitializerError();
+            }
+        }
+    }
+
     private static void pause() {
         try {
             Thread.sleep(10);
@@ -316,6 +358,115 @@ public class ReflectiveInitializationTest {
         for (boolean flag : flags) {
             Class.forName(ToInitialize.class.getName(), flag, getClass().getClassLoader());
             assertEquals(flag ? 1 : 0, Initialization.counter);
+        }
+    }
+
+    // Java SE 21 Class.forName specifies bootstrap lookup for a null loader and array-name lookup.
+    // TeaVM currently lacks defining-loader identity and general dynamic array class metadata.
+    @Test
+    @Disabled("Known gap: bootstrap-only Class.forName lookup is unsupported")
+    public void bootstrapLookupFindsPlatformClass() throws Exception {
+        assertEquals(String.class, Class.forName("java.lang.String", false, null));
+    }
+
+    @Test
+    @Disabled("Known gap: dynamic array Class.forName lookup is unsupported")
+    public void dynamicArrayLookupFindsArrayClass() throws Exception {
+        String name = new String("[Ljava.lang.String;".toCharArray());
+        assertEquals(String[].class, Class.forName(name, false, getClass().getClassLoader()));
+    }
+
+    @Test
+    public void typedBooleanSetterInitializes() throws Exception {
+        // Java SE 21 Field.setBoolean: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("booleanValue").setBoolean(null, true);
+        assertEquals(1, Initialization.counter);
+        assertEquals(true, TypedFields.booleanValue);
+    }
+
+    @Test
+    public void typedByteSetterInitializes() throws Exception {
+        // Java SE 21 Field.setByte: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("byteValue").setByte(null, (byte) 7);
+        assertEquals(1, Initialization.counter);
+        assertEquals((byte) 7, TypedFields.byteValue);
+    }
+
+    @Test
+    public void typedShortSetterInitializes() throws Exception {
+        // Java SE 21 Field.setShort: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("shortValue").setShort(null, (short) 7);
+        assertEquals(1, Initialization.counter);
+        assertEquals((short) 7, TypedFields.shortValue);
+    }
+
+    @Test
+    public void typedCharSetterInitializes() throws Exception {
+        // Java SE 21 Field.setChar: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("charValue").setChar(null, 'x');
+        assertEquals(1, Initialization.counter);
+        assertEquals('x', TypedFields.charValue);
+    }
+
+    @Test
+    public void typedIntSetterInitializes() throws Exception {
+        // Java SE 21 Field.setInt: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("intValue").setInt(null, 7);
+        assertEquals(1, Initialization.counter);
+        assertEquals(7, TypedFields.intValue);
+    }
+
+    @Test
+    public void typedLongSetterInitializes() throws Exception {
+        // Java SE 21 Field.setLong: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("longValue").setLong(null, 7L);
+        assertEquals(1, Initialization.counter);
+        assertEquals(7L, TypedFields.longValue);
+    }
+
+    @Test
+    public void typedFloatSetterInitializes() throws Exception {
+        // Java SE 21 Field.setFloat: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("floatValue").setFloat(null, 7F);
+        assertEquals(1, Initialization.counter);
+        assertEquals(7F, TypedFields.floatValue);
+    }
+
+    @Test
+    public void typedDoubleSetterInitializes() throws Exception {
+        // Java SE 21 Field.setDouble: a static field's declaring class is initialized if necessary.
+        assertEquals(0, Initialization.counter);
+        TypedFields.class.getField("doubleValue").setDouble(null, 7D);
+        assertEquals(1, Initialization.counter);
+        assertEquals(7D, TypedFields.doubleValue);
+    }
+
+    public static class TypedFields {
+        @Reflectable
+        public static boolean booleanValue;
+        @Reflectable
+        public static byte byteValue;
+        @Reflectable
+        public static short shortValue;
+        @Reflectable
+        public static char charValue;
+        @Reflectable
+        public static int intValue;
+        @Reflectable
+        public static long longValue;
+        @Reflectable
+        public static float floatValue;
+        @Reflectable
+        public static double doubleValue;
+        static {
+            Initialization.counter++;
         }
     }
 

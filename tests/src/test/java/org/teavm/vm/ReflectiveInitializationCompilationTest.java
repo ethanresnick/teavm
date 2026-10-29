@@ -28,7 +28,8 @@ public class ReflectiveInitializationCompilationTest {
     @Test
     public void cRejectsSuspendingReflectiveInitializer() {
         for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
-            for (var entry : List.of(AsyncProgram.class, AsyncFieldProgram.class, AsyncEnumProgram.class)) {
+            for (var entry : List.of(AsyncProgram.class, AsyncFieldProgram.class, AsyncEnumProgram.class,
+                    AsyncConstructorProgram.class, AsyncClassNewInstanceProgram.class)) {
                 var vm = compile(entry, level);
                 assertTrue(vm.getProblemProvider().getSevereProblems().stream().anyMatch(p ->
                         p.getText().contains(
@@ -85,6 +86,19 @@ public class ReflectiveInitializationCompilationTest {
         }
     }
 
+    public static class AsyncConstructorProgram {
+        public static void main(String[] args) throws Exception {
+            AsyncTarget.class.getConstructor().newInstance();
+        }
+    }
+
+    public static class AsyncClassNewInstanceProgram {
+        @SuppressWarnings("deprecation")
+        public static void main(String[] args) throws Exception {
+            AsyncTarget.class.newInstance();
+        }
+    }
+
     public static class AsyncEnumProgram {
         public static void main(String[] args) {
             Enum.valueOf(AsyncEnum.class, "ITEM");
@@ -110,6 +124,11 @@ public class ReflectiveInitializationCompilationTest {
     public static class AsyncTarget {
         @Reflectable
         public static int value;
+
+        @Reflectable
+        public AsyncTarget() {
+        }
+
         static {
             pause();
         }
