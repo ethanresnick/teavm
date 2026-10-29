@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.jvm.JvmTargetValidationMode
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
+import org.teavm.buildutil.TestShardFilter
 
 /*
  *  Copyright 2023 Alexey Andreev.
@@ -120,6 +121,13 @@ tasks.withType<Test>().configureEach {
     systemProperty("teavm.junit.sourceDirs", dirs
             .map { it.asFile.absolutePath }
             .joinToString(File.pathSeparator))
+
+    // Leave ordinary local runs unchanged. CI partitions whole classes, including nested fixtures.
+    val shardCount = providers.gradleProperty("teavm.tests.shardCount").orElse("1").get().toInt()
+    val shardIndex = providers.gradleProperty("teavm.tests.shardIndex").orElse("0").get().toInt()
+    inputs.property("teavm.tests.shardCount", shardCount)
+    inputs.property("teavm.tests.shardIndex", shardIndex)
+    include(TestShardFilter(shardCount, shardIndex))
 
     maxParallelForks = (Runtime.getRuntime().availableProcessors() * 2 / 3).coerceAtLeast(1)
     maxHeapSize = "800m"

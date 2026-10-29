@@ -26,6 +26,9 @@ repositories {
 }
 
 dependencies {
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
     implementation(libs.gson)
     implementation(libs.shadowPlugin)
     implementation(libs.maven.plugin.tools.api)
@@ -103,3 +106,6 @@ tasks.compileJava.configure {
 }
 
 sourceSets.main.configure { java.srcDir(generatedConfigDir) }
+tasks.test {
+    useJUnitPlatform()
+}
