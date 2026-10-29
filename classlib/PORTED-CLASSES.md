@@ -15,7 +15,7 @@ The port is mechanical:
 - `@ReservedStackAccess` annotations are removed;
 - `ForkJoinPool.managedBlock` becomes a call to `org.teavm.classlib.EmulSupport`.
 
-There are no other edits.
+Additional TeaVM adaptations are documented below and in the source.
 
 Each file has the Apache-2.0 header of this port, then jsr166's public-domain notice
 (https://creativecommons.org/publicdomain/zero/1.0/).
@@ -40,3 +40,26 @@ Each file has the Apache-2.0 header of this port, then jsr166's public-domain no
 
 `org.teavm.classlib.EmulSupport` holds the helpers that the ports call in place of JDK internals. It is written for
 TeaVM, not ported.
+
+## Executor and future ports
+
+| `TCompletableFuture` | `java.util.concurrent.CompletableFuture` | jsr166 |
+| `TExecutors` | `java.util.concurrent.Executors` | jsr166 |
+| `TFutureTask` | `java.util.concurrent.FutureTask` | jsr166 |
+| `TScheduledThreadPoolExecutor` | `java.util.concurrent.ScheduledThreadPoolExecutor` | jsr166 |
+| `TThreadPoolExecutor` | `java.util.concurrent.ThreadPoolExecutor` | jsr166 |
+
+ExecutorCompletionService and CompletionService use the JDK fallback; they are not ported here.
+
+Executor ports also remove ForkJoinPool-only paths, use one green thread per default asynchronous
+CompletableFuture task, and use EmulSupport.reachabilityFence where the source prevents finalization
+during a call. That helper is a no-op because TeaVM does not run finalizers; it is not a general
+reachability fence. Hand edits are marked "TeaVM:" in the source. The default factory captures its
+creating thread's group. The Java SE 21 privilegedThreadFactory, privilegedCallable and
+privilegedCallableUsingCurrentClassLoader methods are omitted because TeaVM cannot capture and enforce
+the required access-control context. No new security infrastructure is introduced.
+Exception messages and empty VarHandle initialization handlers are omitted. FutureTask.state does not
+spin on COMPLETING: both transitions to a terminal state are atomic between cooperative suspension points.
+CompletableFuture removes unused timeout tasks after exceptional completion and cancellation as well as success.
+
+Additional executor APIs supplied by the JDK fallback after leave-one-out validation: `AbstractExecutorService`, `CompletionException`, `CompletionStage`, `Delayed`, `ExecutorService`, `Future`, `RejectedExecutionHandler`, `RunnableFuture`, `RunnableScheduledFuture`, `ScheduledExecutorService`, `ScheduledFuture`, `ThreadFactory`.

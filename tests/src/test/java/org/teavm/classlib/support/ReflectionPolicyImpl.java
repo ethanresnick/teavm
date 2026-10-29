@@ -34,6 +34,10 @@ public class ReflectionPolicyImpl extends SimpleReflectionPolicy {
         selectClass("org.teavm.classlib.java.lang.ClassReflectionAPITest$FoundLate").foundByName();
         // ThreadTest simulates constructor-free allocation without exposing these fields in production.
         selectClass("java.lang.Thread").reflectableFields(named("finishedLock"));
+        // ExecutorRegressionTest observes cancellation of the actual reachable substitute's timeout task.
+        selectClass("java.util.concurrent.CompletableFuture").reflectableFields(named("stack"));
+        selectClass("java.util.concurrent.CompletableFuture$UniWhenComplete").reflectableFields(named("fn"));
+        selectClass("java.util.concurrent.CompletableFuture$Canceller").reflectableFields(named("f"));
         // ThreadGroupTest observes collection of detached registry nodes.
         selectClass("java.lang.ThreadGroup").reflectableFields(named("firstChild"));
 
