@@ -288,6 +288,9 @@ public final class TString extends TObject implements TSerializable, TComparable
         for (int i = 0; i < count; i++) {
             int a = charactersGet(start + i);
             int b = other.charactersGet(otherStart + i);
+            if (a == b && !TCharacter.isSurrogate((char) a)) {
+                continue;
+            }
             if (a < 128 && b < 128) {
                 if (a >= 'A' && a <= 'Z') {
                     a += 'a' - 'A';
@@ -295,9 +298,13 @@ public final class TString extends TObject implements TSerializable, TComparable
                 if (b >= 'A' && b <= 'Z') {
                     b += 'a' - 'A';
                 }
-            } else if (a != b || TCharacter.isSurrogate((char) a)) {
-                a = regionCodePointAt(start + i, start, end);
-                b = other.regionCodePointAt(otherStart + i, otherStart, otherEnd);
+            } else {
+                if (TCharacter.isSurrogate((char) a)) {
+                    a = regionCodePointAt(start + i, start, end);
+                }
+                if (TCharacter.isSurrogate((char) b)) {
+                    b = other.regionCodePointAt(otherStart + i, otherStart, otherEnd);
+                }
                 if (a != b) {
                     a = TCharacter.toUpperCase(a);
                     b = TCharacter.toUpperCase(b);

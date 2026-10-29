@@ -73,7 +73,10 @@ public class TSecretKeySpec implements KeySpec, SecretKey {
         String name = canonicalAlgorithm(algorithm);
         int hash = 0;
         for (int i = 0; i < name.length();) {
-            int codePoint = name.codePointAt(i);
+            int codePoint = name.charAt(i);
+            if (Character.isHighSurrogate((char) codePoint)) {
+                codePoint = name.codePointAt(i);
+            }
             hash = 31 * hash + foldCase(codePoint);
             i += Character.charCount(codePoint);
         }
