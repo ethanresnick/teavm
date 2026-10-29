@@ -25,8 +25,6 @@ import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.Test;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.teavm.extension.introspect.IntrospectClass;
@@ -59,11 +57,8 @@ public class IntrospectionTest {
         var classHolderSource = new ClasspathClassHolderSource(resourceProvider, new ReferenceCache(),
                 classLoader);
         // Parse a root-class fixture without loading host-JDK bytecode.
-        var writer = new ClassWriter(0);
-        writer.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, "java/lang/Object", null, null, null);
-        writer.visitEnd();
         var node = new ClassNode();
-        new ClassReader(writer.toByteArray()).accept(node, 0);
+        node.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, "java/lang/Object", null, null, null);
         var objectClass = new Parser(new ReferenceCache()).parseClass(node);
         world = new Introspection(new ClassHierarchy(name -> name.equals(objectClass.getName())
                 ? objectClass : classHolderSource.get(name)), classLoader);

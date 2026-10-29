@@ -22,6 +22,7 @@
 // CHECKSTYLE.OFF: MethodParamPad|RedundantModifier|WhitespaceAfter
 package org.teavm.classlib.java.util.concurrent;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
@@ -859,6 +860,7 @@ public interface TCompletionStage<T> {
      */
     public default TCompletionStage<T> exceptionallyAsync
         (Function<Throwable, ? extends T> fn) {
+        Objects.requireNonNull(fn);
         return handle((r, ex) -> (ex == null)
                       ? this
                       : this.<T>handleAsync((r1, ex1) -> fn.apply(ex1)))
@@ -885,6 +887,8 @@ public interface TCompletionStage<T> {
      */
     public default TCompletionStage<T> exceptionallyAsync
         (Function<Throwable, ? extends T> fn, Executor executor) {
+        Objects.requireNonNull(fn);
+        Objects.requireNonNull(executor);
         return handle((r, ex) -> (ex == null)
                       ? this
                       : this.<T>handleAsync((r1, ex1) -> fn.apply(ex1), executor))
@@ -907,6 +911,7 @@ public interface TCompletionStage<T> {
      */
     public default TCompletionStage<T> exceptionallyCompose
         (Function<Throwable, ? extends TCompletionStage<T>> fn) {
+        Objects.requireNonNull(fn);
         return handle((r, ex) -> (ex == null)
                       ? this
                       : fn.apply(ex))
@@ -930,6 +935,7 @@ public interface TCompletionStage<T> {
      */
     public default TCompletionStage<T> exceptionallyComposeAsync
         (Function<Throwable, ? extends TCompletionStage<T>> fn) {
+        Objects.requireNonNull(fn);
         return handle((r, ex) -> (ex == null)
                       ? this
                       : this.handleAsync((r1, ex1) -> fn.apply(ex1))
@@ -956,6 +962,8 @@ public interface TCompletionStage<T> {
     public default TCompletionStage<T> exceptionallyComposeAsync
         (Function<Throwable, ? extends TCompletionStage<T>> fn,
          Executor executor) {
+        Objects.requireNonNull(fn);
+        Objects.requireNonNull(executor);
         return handle((r, ex) -> (ex == null)
                       ? this
                       : this.handleAsync((r1, ex1) -> fn.apply(ex1), executor)

@@ -187,9 +187,7 @@ public interface TFuture<V> {
                     return get();
                 } catch (InterruptedException e) {
                     interrupted = true;
-                } catch (ExecutionException e) {
-                    throw new IllegalStateException();
-                } catch (CancellationException e) {
+                } catch (ExecutionException | CancellationException e) {
                     throw new IllegalStateException();
                 }
             }

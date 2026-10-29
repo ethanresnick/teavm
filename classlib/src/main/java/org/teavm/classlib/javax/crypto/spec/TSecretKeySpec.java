@@ -15,9 +15,9 @@
  */
 package org.teavm.classlib.javax.crypto.spec;
 
+import java.security.MessageDigest;
 import java.security.spec.KeySpec;
 import java.util.Arrays;
-import java.util.Locale;
 import javax.crypto.SecretKey;
 
 public class TSecretKeySpec implements KeySpec, SecretKey {
@@ -57,13 +57,24 @@ public class TSecretKeySpec implements KeySpec, SecretKey {
         return key.clone();
     }
 
+    private static int foldCase(int codePoint) {
+        return Character.toLowerCase(Character.toUpperCase(codePoint));
+    }
+
     private static String canonicalAlgorithm(String name) {
-        return name.equalsIgnoreCase("TripleDES") ? "desede" : name.toLowerCase(Locale.ENGLISH);
+        return "TripleDES".equalsIgnoreCase(name) ? "DESede" : name;
     }
 
     @Override
     public int hashCode() {
-        return Arrays.hashCode(key) ^ canonicalAlgorithm(algorithm).hashCode();
+        String name = canonicalAlgorithm(algorithm);
+        int hash = 0;
+        for (int i = 0; i < name.length();) {
+            int codePoint = name.codePointAt(i);
+            hash = 31 * hash + foldCase(codePoint);
+            i += Character.charCount(codePoint);
+        }
+        return Arrays.hashCode(key) ^ hash;
     }
 
     @Override
@@ -75,7 +86,7 @@ public class TSecretKeySpec implements KeySpec, SecretKey {
             return false;
         }
         var secret = (SecretKey) other;
-        return canonicalAlgorithm(algorithm).equals(canonicalAlgorithm(secret.getAlgorithm()))
-                && Arrays.equals(key, secret.getEncoded());
+        return canonicalAlgorithm(algorithm).equalsIgnoreCase(canonicalAlgorithm(secret.getAlgorithm()))
+                && MessageDigest.isEqual(key, secret.getEncoded());
     }
 }

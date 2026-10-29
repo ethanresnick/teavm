@@ -86,6 +86,7 @@ public final class UnicodeSupport {
         IntegerArray upperCaseMapping = new IntegerArray(256);
         IntegerArray lowerCaseMapping = new IntegerArray(256);
         int rangeStart = -1;
+        int nextCodePoint = 0;
         byte rangeClass = 0;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(resourceProvider
                 .getResource("org/teavm/classlib/impl/unicode/UnicodeData.txt").open(), StandardCharsets.UTF_8))) {
@@ -99,9 +100,14 @@ public final class UnicodeSupport {
                 }
                 String[] fields = splitLine(line);
                 int charCode = parseHex(fields[0]);
+                if (charCode > nextCodePoint) {
+                    encodeIdentityCaseMapping(nextCodePoint, upperCaseMapping, lowerCaseMapping, titleCaseMapping);
+                }
+                nextCodePoint = charCode + 1;
                 Byte charClass = classMap.get(fields[2]);
                 String name = fields[1];
                 if (name.endsWith(", First>")) {
+                    encodeIdentityCaseMapping(charCode, upperCaseMapping, lowerCaseMapping, titleCaseMapping);
                     rangeStart = charCode;
                     rangeClass = charClass != null ? charClass.byteValue() : 0;
                     continue;
@@ -140,6 +146,9 @@ public final class UnicodeSupport {
         } catch (IOException e) {
             throw new RuntimeException("Error reading unicode data", e);
         }
+        if (nextCodePoint <= Character.MAX_CODE_POINT) {
+            encodeIdentityCaseMapping(nextCodePoint, upperCaseMapping, lowerCaseMapping, titleCaseMapping);
+        }
         IntegerArray letterDigitValues = new IntegerArray(256);
         for (int i = 'A'; i <= 'Z'; ++i) {
             letterDigitValues.add(i);
@@ -165,6 +174,13 @@ public final class UnicodeSupport {
         UnicodeSupport.titleCaseMapping = titleCaseMapping.getAll();
         UnicodeSupport.upperCaseMapping = upperCaseMapping.getAll();
         UnicodeSupport.lowerCaseMapping = lowerCaseMapping.getAll();
+    }
+
+    private static void encodeIdentityCaseMapping(int codePoint, IntegerArray upper, IntegerArray lower,
+            IntegerArray title) {
+        encodeCaseMapping(upper, codePoint, codePoint);
+        encodeCaseMapping(lower, codePoint, codePoint);
+        encodeCaseMapping(title, codePoint, codePoint);
     }
 
     private static void encodeCaseMapping(IntegerArray array, int codePoint, int mappedCodePoint) {
