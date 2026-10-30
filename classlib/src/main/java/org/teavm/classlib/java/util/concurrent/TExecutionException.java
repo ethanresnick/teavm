@@ -16,6 +16,13 @@
 package org.teavm.classlib.java.util.concurrent;
 
 public class TExecutionException extends Exception {
+    protected TExecutionException() {
+    }
+
+    protected TExecutionException(String message) {
+        super(message);
+    }
+
 
     public TExecutionException(String message, Throwable cause) {
         super(message, cause);

@@ -49,7 +49,7 @@ TeaVM, not ported.
 | `TScheduledThreadPoolExecutor` | `java.util.concurrent.ScheduledThreadPoolExecutor` | jsr166 |
 | `TThreadPoolExecutor` | `java.util.concurrent.ThreadPoolExecutor` | jsr166 |
 
-ExecutorCompletionService and CompletionService use the JDK fallback; they are not ported here.
+Executor support types are also ported from the public-domain jsr166 sources; no host-JDK bytecode is needed.
 
 Executor ports also remove ForkJoinPool-only paths, use one green thread per default asynchronous
 CompletableFuture task. On JavaScript and Wasm GC, single-thread executor wrappers use Cleaner
@@ -68,4 +68,7 @@ Exception messages and empty VarHandle initialization handlers are omitted. Futu
 spin on COMPLETING: both transitions to a terminal state are atomic between cooperative suspension points.
 CompletableFuture removes unused timeout tasks after exceptional completion and cancellation as well as success.
 
-Additional executor APIs supplied by the JDK fallback after leave-one-out validation: `AbstractExecutorService`, `CompletionException`, `CompletionStage`, `Delayed`, `ExecutorService`, `Future`, `RejectedExecutionHandler`, `RunnableFuture`, `RunnableScheduledFuture`, `ScheduledExecutorService`, `ScheduledFuture`, `ThreadFactory`.
+Additional executor APIs ported from jsr166: `AbstractExecutorService`, `CompletionException`, `CompletionStage`, `Delayed`, `ExecutorService`, `Future`, `RejectedExecutionHandler`, `RunnableFuture`, `RunnableScheduledFuture`, `ScheduledExecutorService`, `ScheduledFuture`, `ThreadFactory`, `CompletionService`, `ExecutorCompletionService`, and `LinkedBlockingQueue`.
+
+The key interfaces, `SecretKeySpec`, destruction interfaces, and missing security/thread exception types
+are independently implemented against their public APIs. They do not copy OpenJDK implementation code.

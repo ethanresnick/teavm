@@ -25,6 +25,8 @@ import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.Test;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.ClassNode;
 import org.teavm.extension.introspect.IntrospectClass;
 import org.teavm.extension.introspect.IntrospectField;
 import org.teavm.extension.introspect.IntrospectGenericArray;
@@ -44,6 +46,7 @@ import org.teavm.model.ReferenceCache;
 import org.teavm.model.ValueType;
 import org.teavm.parsing.ClasspathClassHolderSource;
 import org.teavm.parsing.ClasspathResourceProvider;
+import org.teavm.parsing.Parser;
 
 public class IntrospectionTest {
     private IntrospectWorld world;
@@ -53,7 +56,12 @@ public class IntrospectionTest {
         var resourceProvider = new ClasspathResourceProvider(classLoader);
         var classHolderSource = new ClasspathClassHolderSource(resourceProvider, new ReferenceCache(),
                 classLoader);
-        world = new Introspection(new ClassHierarchy(classHolderSource), classLoader);
+        // Parse a root-class fixture without loading host-JDK bytecode.
+        var node = new ClassNode();
+        node.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC | Opcodes.ACC_SUPER, "java/lang/Object", null, null, null);
+        var objectClass = new Parser(new ReferenceCache()).parseClass(node);
+        world = new Introspection(new ClassHierarchy(name -> name.equals(objectClass.getName())
+                ? objectClass : classHolderSource.get(name)), classLoader);
     }
 
     @Test

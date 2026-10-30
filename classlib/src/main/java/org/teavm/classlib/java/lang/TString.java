@@ -279,15 +279,77 @@ public final class TString extends TObject implements TSerializable, TComparable
         if (this == anotherString) {
             return 0;
         }
-        int l = TMath.min(length(), anotherString.length());
-        for (int i = 0; i < l; ++i) {
-            char a = TCharacter.toLowerCase(charactersGet(i));
-            char b = TCharacter.toLowerCase(anotherString.charactersGet(i));
-            if (a - b != 0) {
+        return compareIgnoringCase(0, length(), anotherString, 0, anotherString.length());
+    }
+
+    private int compareIgnoringCase(int start, int end, TString other, int otherStart, int otherEnd) {
+        // Match OpenJDK supplementary ordering by comparing folded code-point values.
+        int count = TMath.min(end - start, otherEnd - otherStart);
+        for (int i = 0; i < count; i++) {
+            int a = charactersGet(start + i);
+            int b = other.charactersGet(otherStart + i);
+            if (a == b) {
+                if (!TCharacter.isSurrogate((char) a)) {
+                    continue;
+                }
+                if (TCharacter.isHighSurrogate((char) a) && i + 1 < count) {
+                    char next = charactersGet(start + i + 1);
+                    if (TCharacter.isLowSurrogate(next) && next == other.charactersGet(otherStart + i + 1)) {
+                        i++;
+                        continue;
+                    }
+                }
+            }
+            if (a < 128 && b < 128) {
+                if (a >= 'A' && a <= 'Z') {
+                    a += 'a' - 'A';
+                }
+                if (b >= 'A' && b <= 'Z') {
+                    b += 'a' - 'A';
+                }
+            } else {
+                if (TCharacter.isSurrogate((char) a)) {
+                    a = regionCodePointAt(start + i, start, end);
+                }
+                if (TCharacter.isSurrogate((char) b)) {
+                    b = other.regionCodePointAt(otherStart + i, otherStart, otherEnd);
+                }
+                if (a != b) {
+                    a = TCharacter.toUpperCase(a);
+                    b = TCharacter.toUpperCase(b);
+                    if (a != b) {
+                        a = TCharacter.toLowerCase(a);
+                        b = TCharacter.toLowerCase(b);
+                    }
+                }
+            }
+            if (a != b) {
                 return a - b;
             }
         }
-        return length() - anotherString.length();
+        return (end - start) - (otherEnd - otherStart);
+    }
+
+    private int regionCodePointAt(int index, int start, int end) {
+        char c = charactersGet(index);
+        // A region boundary can split a surrogate pair. Only combine pairs wholly inside the region.
+        if (TCharacter.isHighSurrogate(c) && index + 1 < end) {
+            char next = charactersGet(index + 1);
+            if (TCharacter.isLowSurrogate(next)) {
+                return TCharacter.toCodePoint(c, next);
+            }
+        } else if (TCharacter.isLowSurrogate(c) && index > start) {
+            char previous = charactersGet(index - 1);
+            if (TCharacter.isHighSurrogate(previous)) {
+                return TCharacter.toCodePoint(previous, c);
+            }
+        }
+        return c;
+    }
+
+    private static boolean regionOutOfBounds(int offset, int length, int size) {
+        // Callers reject negative offsets, so each branch uses arithmetic that cannot overflow.
+        return length >= 0 ? offset > size - length : offset + length > size;
     }
 
     public boolean startsWith(TString prefix, int toffset) {
@@ -310,25 +372,19 @@ public final class TString extends TObject implements TSerializable, TComparable
     }
 
     public boolean regionMatches(boolean ignoreCase, int toffset, TString other, int ooffset, int len) {
-        if (toffset < 0 || ooffset < 0 || toffset + len > length() || ooffset + len > other.length()) {
+        if (!ignoreCase) {
+            return regionMatches(toffset, other, ooffset, len);
+        }
+        if (toffset < 0 || ooffset < 0 || regionOutOfBounds(toffset, len, length())
+                || regionOutOfBounds(ooffset, len, other.length())) {
             return false;
         }
-        for (int i = 0; i < len; ++i) {
-            char a = charactersGet(toffset++);
-            char b = other.charactersGet(ooffset++);
-            if (ignoreCase) {
-                a = TCharacter.toLowerCase(a);
-                b = TCharacter.toLowerCase(b);
-            }
-            if (a != b) {
-                return false;
-            }
-        }
-        return true;
+        return compareIgnoringCase(toffset, toffset + len, other, ooffset, ooffset + len) == 0;
     }
 
     public boolean regionMatches(int toffset, TString other, int ooffset, int len) {
-        if (toffset < 0 || ooffset < 0 || toffset + len > length() || ooffset + len > other.length()) {
+        if (toffset < 0 || ooffset < 0 || regionOutOfBounds(toffset, len, length())
+                || regionOutOfBounds(ooffset, len, other.length())) {
             return false;
         }
         for (int i = 0; i < len; ++i) {
@@ -781,18 +837,8 @@ public final class TString extends TObject implements TSerializable, TComparable
         if (this == other) {
             return true;
         }
-        if (other == null) {
-            return false;
-        }
-        if (length() != other.length()) {
-            return false;
-        }
-        for (int i = 0; i < length(); ++i) {
-            if (TCharacter.toLowerCase(charactersGet(i)) != TCharacter.toLowerCase(other.charactersGet(i))) {
-                return false;
-            }
-        }
-        return true;
+        return other != null && length() == other.length()
+                && compareIgnoringCase(0, length(), other, 0, other.length()) == 0;
     }
 
     public byte[] getBytes(TString charsetName) throws TUnsupportedEncodingException {

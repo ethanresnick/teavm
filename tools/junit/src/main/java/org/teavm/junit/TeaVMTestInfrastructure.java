@@ -76,7 +76,7 @@ final class TeaVMTestInfrastructure {
     }
 
     private static ClassHolderSource getClassSource(ClassLoader classLoader) {
-        var resourceProvider = new ClasspathResourceProvider(classLoader);
+        var resourceProvider = new ClasspathResourceProvider(classLoader, false);
         return new PreOptimizingClassHolderSource(new ClasspathClassHolderSource(resourceProvider, referenceCache,
                 classLoader));
     }
