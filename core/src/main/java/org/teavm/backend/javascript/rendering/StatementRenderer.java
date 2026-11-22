@@ -569,9 +569,11 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
 
         writer.ws().append(infixText).ws();
 
-        // A right operand of the same precedence needs parentheses, except for the truly associative operators.
-        // Floating-point addition and multiplication aren't associative: a + (b + c) isn't (a + b) + c.
         switch (operation) {
+            case ADD:
+            case MULTIPLY:
+                precedence = associative ? innerPrecedence : innerPrecedence.next();
+                break;
             case AND:
             case OR:
             case BITWISE_AND:
@@ -598,7 +600,6 @@ public class StatementRenderer implements ExprVisitor, StatementVisitor {
             case MULTIPLY:
             case DIVIDE:
             case MODULO:
-                // JS gives %, * and / the same precedence
                 return Precedence.MULTIPLICATION;
             case AND:
                 return Precedence.LOGICAL_AND;

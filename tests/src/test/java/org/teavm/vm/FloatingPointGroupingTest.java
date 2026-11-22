@@ -80,8 +80,7 @@ public class FloatingPointGroupingTest {
     private int intThree() {
         return 3;
     }
-    private static double[] doubles = { 1, 1e16, -1e16, 1e300, 7, 2, 3 };
-    private static float[] floats = { 1, 1e8f, -1e8f, 3e38f, 7, 2, 3 };
+    private static float[] floats = { 1, 1e8f, -1e8f, 3e38f };
 
     @Test
     @AsyncEnabled
@@ -89,7 +88,6 @@ public class FloatingPointGroupingTest {
         float[] f = floats;
         assertEquals(1f, f[0] + (f[1] + f[2]), 0);
         assertEquals(3e38f, f[3] * (f[3] / f[3]), 0);
-        assertEquals(1f, f[4] % (f[5] * f[6]), 0);
     }
 
     @Test

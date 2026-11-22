@@ -53,7 +53,7 @@ The bootstrap compiler and test platform compile TeaVM to Wasm GC, including ext
 | JS timer plumbing (`ff58324e5`, exit support `28c2c13c5`) | Fork `Platform.scheduleAfter/scheduleAt` and deadline rearming | Retain fork schedule API and restore its dependency wiring, which upstream removed after switching its callers. Add upstream exit guards to retained timer callbacks. |
 | Weak references (`8cd97e4f2`, `534dd7a0f`, `677cf931f`) | Fork PR #29/#30, enqueue/clear/null semantics, interruptible queue waits | Integrate upstream registry plumbing and generated `reportNext`/`supplyImpl` split; preserve weak held references, null referents, enqueue semantics and monotonic remove timeouts. Preserve actual reference subclasses in queue delivery, and keep both regression suites. |
 | Dependency transitions (`9089fe100`, `bbc601ccb`, `00c0c9b6d`) | `3d56cda38` delivering all merged-domain source types | Use upstream no-argument domain merge and pending-domain improvements; preserve fork implicit exception and class-init analysis. |
-| Floating-point JS grouping (`7248c2d7d`) | Fork grouping fix and `FloatingPointGroupingTest` | Keep fork parenthesization, which already preserves floating-point grouping; combine upstream and fork regressions. |
+| Floating-point JS grouping (`7248c2d7d`) | Fork grouping fix and `FloatingPointGroupingTest` | Use upstream type-aware ADD/MULTIPLY grouping together with the exact remainder fix proposed in upstream PR #1387. Remove the fork blanket arithmetic-parenthesization override; keep distinct regression coverage. |
 | Console output (`f29a88992`) | Fork console byte-write/flush fix, PR #12 | Merge shared implementation; keep callback captured before clearing, with both regression suites. |
 | `String.lines` (`dde52b305`) | `732175e53` lines, indent and transform | Keep one `lines()` method and fork's shared line-boundary helpers used by `indent`; retain upstream tests and whitespace changes. |
 | `Random.nextInt(bound)` (`5e8f489fa`) | `c6993e5cc` specified bounded sequences | Keep one fork bounded implementation, already equivalent to the specified algorithm, together with nextBoolean/nextBytes corrections. |
@@ -81,7 +81,8 @@ Completed locally with JDK 25. The core suite and both style tasks passed; all r
 | Check | JUnit cases | Passed | Skipped | Result |
 | --- | ---: | ---: | ---: | --- |
 | Core compiler suite | 569 | 567 | 2 | Pass |
-| Targeted JVM/JS/Wasm GC, including JSPI | 536 | 534 | 2 | Pass |
+| Broader JVM/JS/Wasm GC before remainder reconciliation, including JSPI | 536 | 534 | 2 | Pass |
+| Focused JVM/JS after remainder reconciliation | 46 | 46 | 0 | Pass |
 | Targeted native C on macOS | 101 | 100 | 1 | Pass |
 | Repository-wide checkstyleMain | — | — | — | Pass |
 | Repository-wide checkstyleTest | — | — | — | Pass |
@@ -91,7 +92,9 @@ Backend tests ran with optimized and unoptimized configurations, and `teavm.test
 
 The JS/Wasm group covers BufferedWriter, CoroutineConditionalTest, AsyncTest, VMTest, DivisionByZero, IntegerDivision, implicit exception handlers, JSPI compilation/VM/thread behavior, monitors and reference queues, collections/concurrent maps/blocking queues, console output, RandomAccessFile, floating-point grouping, Math, Random, line/indent/blank-string behavior and resource bundles. The C group covers arithmetic, Math, Random, BufferedWriter, RandomAccessFile and monitor entry/reentrancy/wait-notify cases.
 
-The browser suite was rerun after restoring both optimizations; it includes all 62 StringTest cases as well as the three new coroutine cases. The targeted coroutine fix was separately validated on upstream `4dfbc459a`: all three new regressions fail before the fix and pass afterward, together with 18 existing `AsyncTest` cases. The upstream core suite passed 534 cases with two skips; repository-wide main/test style checks passed. The fork's focused async, JSPI, monitor, and reference-queue group passed 172 cases with one skip. These checks used optimized/unoptimized browser compilation and IR verification.
+The broader browser suite was rerun after restoring both coroutine optimizations, before the remainder reconciliation; it includes all 62 StringTest cases as well as the three new coroutine cases. The targeted coroutine fix was separately validated on upstream `4dfbc459a`: all three new regressions fail before the fix and pass afterward, together with 18 existing `AsyncTest` cases. The upstream core suite passed 534 cases with two skips; repository-wide main/test style checks passed. The fork's focused async, JSPI, monitor, and reference-queue group passed 172 cases with one skip. These checks used optimized/unoptimized browser compilation and IR verification.
+
+The remainder reconciliation uses the exact `StatementRenderer` and `Precedence` sources proposed in [upstream PR #1387](https://github.com/konsoletyper/teavm/pull/1387), retaining upstream's type-aware addition/multiplication rules. All 46 focused JVM/JS cases passed afterward: `RemainderPrecedenceTest`, `FloatingPointGroupingTest`, `VMTest.precedence`, `IntegerDivisionTest`, `DivisionByZeroTest`, and `BufferedWriterTest`. JS ran optimized and unoptimized with IR verification. The core suite and repository-wide main/test style checks were rerun for this reconciliation.
 
 The full repository test suite across every backend, bootstrap self-hosting execution, Linux/GCC CI, performance benchmarks and Kafka application acceptance were not run. The normal optimizer pipeline is restored; no performance benchmark was run.
 
@@ -228,7 +231,7 @@ The comparisons below use the pre-merge fork tip `ce2e810bf` and upstream tip `4
 
 **Upstream:** [`7248c2d7d`](https://github.com/konsoletyper/teavm/commit/7248c2d7d) passes a type-derived associativity flag to the renderer: integer ADD/MULTIPLY may omit those parentheses; floating-point ADD/MULTIPLY must keep them.
 
-**Comparison/merge:** both preserve floating-point evaluation order. Upstream is more selective and can emit fewer integer parentheses; the fork is more conservative and also carries the modulo-precedence correction. Retain the fork's grouping behavior, with the upstream checked-arithmetic rendering additions and both test suites.
+**Comparison/merge:** use upstream's type-aware associativity for ADD/MULTIPLY, with the exact remainder correction proposed in [upstream PR #1387](https://github.com/konsoletyper/teavm/pull/1387). Remainder shares the multiplication/division precedence level and uses the same left/right operand rules as subtraction and division. Remove the fork's blanket arithmetic-parenthesization override. Add the upstream PR's dedicated float/double remainder regressions and remove the older duplicate remainder assertion and unused test data; retain the distinct float addition/division and JSBody tests. The renderer and precedence enum now match the upstream PR byte for byte.
 
 ### Overlaps that do not have substantially different implementations
 
