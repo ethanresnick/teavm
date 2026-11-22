@@ -6,6 +6,8 @@ Merge `konsoletyper/teavm:master` at `4dfbc459aaf3209e397ad970458ef898a4baced8` 
 
 The 139-commit inventory below defines the reviewed snapshot; later upstream commits are outside this PR. `git cherry` found no patch-identical commits in this range, but there are many semantic duplicates because the fork and upstream implementations evolved separately.
 
+The [follow-up audit of incomplete upstream fixes](upstream-fix-audit-2026-11-22.md) corrects omissions in the earlier defect summary. It adds independently reproduced monitor, reference-queue, JSBody-grouping, and concurrent-map argument-validation gaps, distinguishes broader Random compatibility differences, and records the additional upstream/sync regression results.
+
 ## Major upstream changes
 
 ### Wasm GC generation
