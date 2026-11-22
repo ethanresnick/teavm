@@ -1,0 +1,372 @@
+/*
+ *  Copyright 2026 Alexey Andreev.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+package org.teavm.runtime;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import java.lang.ref.WeakReference;
+import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
+import org.teavm.junit.EachTestCompiledSeparately;
+import org.teavm.junit.OnlyPlatform;
+import org.teavm.junit.SkipJVM;
+import org.teavm.junit.TeaVMTest;
+import org.teavm.junit.TestPlatform;
+
+@TeaVMTest
+@OnlyPlatform(TestPlatform.C)
+@EachTestCompiledSeparately
+public class GCTest {
+    private static final int GARBAGE_COUNT = 2000;
+    private static final int MULTI_ARRAY_ROWS = 4096;
+    private static final int MULTI_ARRAY_COLUMNS = 1024;
+    private static final int CHECK_GC_COUNT = 5;
+    private static Object sink;
+    private static int[] checkedArray = new int[1];
+    private static int[] checkedNull;
+    private static Object checkedNotString = new Object();
+    private static int checkedQuotient = 1;
+    private static int checkedZero;
+
+    @Test
+    public void youngMonitorSurvivesGc() {
+        // Dead objects below the monitor, so that defragmentation has a gap to move the monitor into
+        makeGarbage();
+        var lock = new Object();
+        var hash = System.identityHashCode(lock);
+        synchronized (lock) {
+            forceGc();
+            forceGc();
+            var filler = overwriteFreeMemory();
+            assertEquals(hash, System.identityHashCode(lock));
+            assertTrue(Thread.holdsLock(lock));
+            // One more GC traverses the monitor again: crashes if the header points to garbage
+            forceGc();
+            assertEquals(hash, System.identityHashCode(lock));
+            sink = filler;
+        }
+        assertFalse(Thread.holdsLock(lock));
+        assertEquals(hash, System.identityHashCode(lock));
+    }
+
+    @Test
+    public void youngMonitorOfOldObjectSurvivesGc() {
+        var lock = new Object();
+        var hash = System.identityHashCode(lock);
+        // Full GC in the C backend; promotes lock to the old generation
+        System.gc();
+        makeGarbage();
+        synchronized (lock) {
+            // The monitor is young and reachable only through the header of an old object,
+            // i.e. only through the card table
+            forceGc();
+            forceGc();
+            var filler = overwriteFreeMemory();
+            assertEquals(hash, System.identityHashCode(lock));
+            assertTrue(Thread.holdsLock(lock));
+            forceGc();
+            assertEquals(hash, System.identityHashCode(lock));
+            sink = filler;
+        }
+        assertFalse(Thread.holdsLock(lock));
+        assertEquals(hash, System.identityHashCode(lock));
+    }
+
+    @Test
+    public void monitorOfStringLiteralSurvivesGc() {
+        // String literals live outside the heap
+        var lock = "MonitorGcTest.monitorOfStringLiteralSurvivesGc";
+        var hash = System.identityHashCode(lock);
+        makeGarbage();
+        synchronized (lock) {
+            forceGc();
+            forceGc();
+            var filler = overwriteFreeMemory();
+            assertEquals(hash, System.identityHashCode(lock));
+            assertTrue(Thread.holdsLock(lock));
+            forceGc();
+            assertEquals(hash, System.identityHashCode(lock));
+            sink = filler;
+        }
+        assertFalse(Thread.holdsLock(lock));
+        assertEquals(hash, System.identityHashCode(lock));
+    }
+
+    @Test
+    public void stringLiteralsWithoutMonitorUnaffectedByGc() {
+        var first = "MonitorGcTest.stringLiteralsWithoutMonitorUnaffectedByGc.1";
+        var second = "MonitorGcTest.stringLiteralsWithoutMonitorUnaffectedByGc.2";
+        var firstHash = System.identityHashCode(first);
+        makeGarbage();
+        forceGc();
+        forceGc();
+        System.gc();
+        forceGc();
+        assertEquals(firstHash, System.identityHashCode(first));
+        // Never had identity hash code assigned
+        var secondHash = System.identityHashCode(second);
+        forceGc();
+        assertEquals(secondHash, System.identityHashCode(second));
+        synchronized (second) {
+            forceGc();
+            assertTrue(Thread.holdsLock(second));
+        }
+        assertEquals(secondHash, System.identityHashCode(second));
+    }
+
+    @Test
+    public void synchronizedMethodAllocating() {
+        var worker = new Worker();
+        var hash = System.identityHashCode(worker);
+        for (var i = 0; i < 20; ++i) {
+            makeGarbage();
+            assertEquals(GARBAGE_COUNT * 10, worker.work());
+            assertEquals(hash, System.identityHashCode(worker));
+            assertFalse(Thread.holdsLock(worker));
+        }
+    }
+
+    @Test
+    public void manyMonitorsSurviveGc() {
+        var locks = new Object[50];
+        var hashes = new int[locks.length];
+        for (var i = 0; i < locks.length; ++i) {
+            makeGarbage();
+            locks[i] = new Object();
+            hashes[i] = System.identityHashCode(locks[i]);
+        }
+        lockRecursively(locks, hashes, 0);
+        for (var i = 0; i < locks.length; ++i) {
+            assertFalse(Thread.holdsLock(locks[i]));
+            assertEquals(hashes[i], System.identityHashCode(locks[i]));
+        }
+    }
+
+    private static void lockRecursively(Object[] locks, int[] hashes, int index) {
+        if (index == locks.length) {
+            forceGc();
+            forceGc();
+            var filler = overwriteFreeMemory();
+            for (var i = 0; i < locks.length; ++i) {
+                assertTrue(Thread.holdsLock(locks[i]));
+                assertEquals(hashes[i], System.identityHashCode(locks[i]));
+            }
+            forceGc();
+            sink = filler;
+            return;
+        }
+        synchronized (locks[index]) {
+            makeGarbage();
+            lockRecursively(locks, hashes, index + 1);
+            assertTrue(Thread.holdsLock(locks[index]));
+        }
+    }
+
+    @Test
+    @SkipJVM
+    public void multiArraySurvivesGcDuringInnerAllocations() {
+        // Dead objects below the outer array, so that defragmentation has a gap to move it into
+        makeGarbage();
+        var canary = new WeakReference<>(new Object());
+        // The inner arrays need more memory than is free, so GC runs while they are being allocated
+        var array = new int[MULTI_ARRAY_ROWS][MULTI_ARRAY_COLUMNS];
+        assertNull(canary.get());
+        // Checked before any further GC, which would walk a corrupted heap
+        assertEquals(MULTI_ARRAY_ROWS, array.length);
+        for (var i = 0; i < array.length; ++i) {
+            assertEquals(MULTI_ARRAY_COLUMNS, array[i].length);
+            array[i][MULTI_ARRAY_COLUMNS - 1] = i;
+        }
+        forceGc();
+        var filler = overwriteFreeMemory();
+        for (var i = 0; i < array.length; ++i) {
+            assertEquals(i, array[i][MULTI_ARRAY_COLUMNS - 1]);
+        }
+        sink = filler;
+    }
+
+    @Test
+    @SkipJVM
+    public void failedChecksSurviveGcDuringExceptionConstruction() {
+        for (var i = 0; i < CHECK_GC_COUNT; ++i) {
+            var caught = new Throwable[4];
+            var canary = new WeakReference<>(new Object());
+            // Only failed checks allocate here, so the GC that clears the canary ran inside one of them
+            while (canary.get() != null) {
+                try {
+                    checkedArray[checkedArray.length] = 1;
+                    fail();
+                } catch (ArrayIndexOutOfBoundsException e) {
+                    caught[0] = e;
+                }
+                try {
+                    checkedNull[0] = 1;
+                    fail();
+                } catch (NullPointerException e) {
+                    caught[1] = e;
+                }
+                try {
+                    sink = (String) checkedNotString;
+                    fail();
+                } catch (ClassCastException e) {
+                    caught[2] = e;
+                }
+                try {
+                    checkedQuotient = checkedQuotient / checkedZero;
+                    fail();
+                } catch (ArithmeticException e) {
+                    caught[3] = e;
+                }
+            }
+            // A collected exception is now free memory, which these overwrite
+            forceGc();
+            var filler = overwriteFreeMemory();
+            assertSame(ArrayIndexOutOfBoundsException.class, caught[0].getClass());
+            assertSame(NullPointerException.class, caught[1].getClass());
+            assertSame(ClassCastException.class, caught[2].getClass());
+            assertSame(ArithmeticException.class, caught[3].getClass());
+            for (var e : caught) {
+                assertTrue(e.getStackTrace().length > 0);
+            }
+            sink = filler;
+        }
+    }
+
+    @Test
+    @AsyncEnabled
+    public void handlersInLoopKeepValidRootsAcrossSuspension() throws InterruptedException {
+        assertEquals(135, handlersInLoop(Node.list(10), Node.list(7), Node.list(5)));
+    }
+
+    // The locals assigned in the protected blocks have versions that a loop-head phi would give the handlers,
+    // and the suspension keeps those phis alive until the GC roots are stored
+    private static int handlersInLoop(Node a, Node b, Node c) throws InterruptedException {
+        var sum = 0;
+        for (var round = 0; round < 3; ++round) {
+            makeGarbage();
+            System.gc();
+            try {
+                sum += a.value;
+                a = a.next;
+                Thread.sleep(1);
+                try {
+                    sum += b.value + throwOnThree(a.value);
+                    b = b.next;
+                    try {
+                        sum += c.value + throwOnThree(b.value);
+                        c = c.next;
+                    } catch (IllegalStateException e) {
+                        sum += c.value + a.value;
+                        c = c.next;
+                    } finally {
+                        sum += b.value;
+                    }
+                } catch (IllegalStateException e) {
+                    sum += b.value + a.value + c.value;
+                    b = b.next;
+                } finally {
+                    sum += a.value + c.value;
+                }
+            } catch (RuntimeException e) {
+                sum += 1000;
+                a = a != null ? a.next : null;
+            } finally {
+                sum += b != null ? b.value : 0;
+            }
+        }
+        return sum;
+    }
+
+    private static int throwOnThree(int value) {
+        if (value == 3) {
+            throw new IllegalStateException();
+        }
+        return value;
+    }
+
+    static class Node {
+        int value;
+        Node next;
+
+        static Node list(int length) {
+            Node head = null;
+            for (var i = 0; i < length; ++i) {
+                var node = new Node();
+                node.value = i;
+                node.next = head;
+                head = node;
+            }
+            return head;
+        }
+    }
+
+    static class Worker {
+        synchronized int work() {
+            var total = 0;
+            for (var i = 0; i < 10; ++i) {
+                synchronized (this) {
+                    total += allocate();
+                }
+            }
+            if (!Thread.holdsLock(this)) {
+                return -1;
+            }
+            return total;
+        }
+
+        private int allocate() {
+            var count = 0;
+            for (var i = 0; i < GARBAGE_COUNT; ++i) {
+                sink = new int[8];
+                ++count;
+            }
+            return count;
+        }
+    }
+
+    private static void makeGarbage() {
+        for (var i = 0; i < GARBAGE_COUNT; ++i) {
+            sink = new Object[4];
+        }
+        sink = null;
+    }
+
+    // Allocates until a young object becomes unreachable, i.e. at least one GC has happened
+    private static void forceGc() {
+        var ref = new WeakReference<>(new Object());
+        while (ref.get() != null) {
+            sink = new int[64];
+        }
+        sink = null;
+    }
+
+    // Fills memory freed by GC (including the old location of relocated monitors) with a recognizable pattern
+    private static int[][] overwriteFreeMemory() {
+        var result = new int[GARBAGE_COUNT][];
+        for (var i = 0; i < result.length; ++i) {
+            var array = new int[6];
+            for (var j = 0; j < array.length; ++j) {
+                array[j] = 0xDEADBEEF;
+            }
+            result[i] = array;
+        }
+        return result;
+    }
+}

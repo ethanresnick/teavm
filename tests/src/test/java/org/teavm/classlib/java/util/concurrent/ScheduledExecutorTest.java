@@ -40,7 +40,6 @@ package org.teavm.classlib.java.util.concurrent;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -49,8 +48,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
@@ -61,10 +60,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
+
 @TeaVMTest
+@AsyncEnabled
 public class ScheduledExecutorTest extends JSR166TestCase {
     // android-note: Removed because the CTS runner does a bad job of
     // retrying tests that have suite() declarations.

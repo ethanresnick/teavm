@@ -32,6 +32,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -75,6 +76,7 @@ public class PriorityQueueTest {
     // and "The queue retrieval operations poll, remove, peek, and element access the element at the head
     // of the queue." Removing an inner element may need to move the replacement up, not only down.
     @Test
+    @AsyncEnabled
     public void removeObjectKeepsPollOrder() {
         PriorityQueue<Integer> queue = queueOf(16, 1, 10, 22, 23, 3, 9);
         assertTrue(queue.remove(22));
@@ -82,6 +84,7 @@ public class PriorityQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void iteratorRemoveKeepsPollOrder() {
         PriorityQueue<Integer> queue = queueOf(16, 1, 10, 22, 23, 3, 9);
         for (Iterator<Integer> iter = queue.iterator(); iter.hasNext();) {
@@ -93,6 +96,7 @@ public class PriorityQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void removeIfKeepsPollOrder() {
         PriorityQueue<Integer> queue = queueOf(16, 1, 10, 22, 23, 3, 9);
         assertTrue(queue.removeIf(x -> x == 22));
@@ -100,6 +104,7 @@ public class PriorityQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void removeKeepsPollOrderWithComparator() {
         PriorityQueue<Integer> queue = new PriorityQueue<>(Comparator.reverseOrder());
         for (int i : new int[] { -16, -1, -10, -22, -23, -3, -9 }) {
@@ -114,6 +119,7 @@ public class PriorityQueueTest {
     // The iterator still has to return every other element exactly once, even when the removal moves an
     // element that it has not returned yet to a position it has already passed.
     @Test
+    @AsyncEnabled
     public void iteratorVisitsEachElementOnceWhenRemovalMovesElementUp() {
         PriorityQueue<Integer> queue = queueOf(16, 1, 10, 22, 23, 3, 9);
         List<Integer> visited = new ArrayList<>();
@@ -138,6 +144,7 @@ public class PriorityQueueTest {
 
     // Same as above, but the element that the removal moved up is then removed through the iterator too.
     @Test
+    @AsyncEnabled
     public void iteratorCanRemoveElementMovedUp() {
         PriorityQueue<Integer> queue = queueOf(16, 1, 10, 22, 23, 3, 9);
         List<Integer> visited = new ArrayList<>();
@@ -159,17 +166,20 @@ public class PriorityQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void randomOperationsMatchModel() {
         runRandomOperations(null, 1);
     }
 
     @Test
+    @AsyncEnabled
     public void randomOperationsMatchModelWithComparator() {
         // Compares only by floorDiv(x, 3), so distinct elements can tie
         runRandomOperations(Comparator.comparingInt(x -> Math.floorDiv(x, 3)), 2);
     }
 
     @Test
+    @AsyncEnabled
     public void randomOperationsMatchModelWithReverseComparator() {
         runRandomOperations(Comparator.reverseOrder(), 3);
     }
@@ -296,6 +306,7 @@ public class PriorityQueueTest {
     // AbstractQueue.addAll: "Attempts to addAll of a queue to itself result in IllegalArgumentException."
     // Throws: "IllegalArgumentException - ... or if the specified collection is this queue"
     @Test
+    @AsyncEnabled
     public void addAllOfItselfThrows() {
         PriorityQueue<Integer> queue = fillQueue();
         assertThrows(IllegalArgumentException.class, () -> queue.addAll(queue));
@@ -308,6 +319,7 @@ public class PriorityQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void addAllOfEqualQueueAdds() {
         PriorityQueue<Integer> queue = new PriorityQueue<>(List.of(2, 1));
         assertTrue(queue.addAll(new PriorityQueue<>(queue)));
@@ -316,6 +328,7 @@ public class PriorityQueueTest {
 
     // A user subclass of AbstractQueue inherits the same rule.
     @Test
+    @AsyncEnabled
     public void addAllOfItselfThrowsInAbstractQueueSubclass() {
         Queue<Integer> queue = new ListQueue();
         queue.add(3);

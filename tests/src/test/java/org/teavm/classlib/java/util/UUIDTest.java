@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.Random;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -32,6 +33,7 @@ import org.teavm.junit.TeaVMTest;
  * the same tests run against java.util.UUID, which checks the model itself against the JDK.
  */
 @TeaVMTest
+@AsyncEnabled
 public class UUIDTest {
     private static final long[] EXTREMES = { 0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE, 0xffffffffL,
             0x80000000L, 0x7fffffffL, 0xffffffff00000000L, 0x0000000100000000L, 0x00000000ffffffffL,

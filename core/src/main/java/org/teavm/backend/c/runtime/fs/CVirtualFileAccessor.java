@@ -56,7 +56,7 @@ public class CVirtualFileAccessor implements VirtualFileAccessor {
 
     @Override
     public void skip(int amount) throws IOException {
-        if (CFileSystem.seek(file, 0, amount)) {
+        if (CFileSystem.seek(file, 1, amount)) {
             operation = 0;
         }
     }

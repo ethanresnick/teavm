@@ -84,6 +84,7 @@ import org.teavm.backend.c.intrinsic.ShadowStackIntrinsic;
 import org.teavm.backend.c.intrinsic.StringIntrinsic;
 import org.teavm.backend.c.intrinsic.StringsIntrinsic;
 import org.teavm.backend.c.intrinsic.StructureIntrinsic;
+import org.teavm.backend.c.intrinsic.SystemIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.AnnotationConstructorIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.AnnotationDataIntrinsic;
 import org.teavm.backend.c.intrinsic.reflection.AnnotationInfoIntrinsic;
@@ -110,6 +111,7 @@ import org.teavm.backend.c.intrinsic.reflection.WildcardTypeInfoIntrinsic;
 import org.teavm.backend.c.transform.CFileSystemTransformer;
 import org.teavm.backend.c.transform.ClassInitFailureTransformer;
 import org.teavm.backend.c.transform.ClassLoaderCResourceTransformation;
+import org.teavm.backend.c.transform.MainMethodTransformation;
 import org.teavm.backend.c.transform.SynchronizedMethodTransformer;
 import org.teavm.backend.lowlevel.analyze.LowLevelInliningFilterFactory;
 import org.teavm.backend.lowlevel.dependency.BufferDependencyListener;
@@ -209,8 +211,9 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     private ShadowStackTransformer shadowStackTransformer;
     private WriteBarrierInsertion writeBarrierInsertion;
     private NullCheckInsertion nullCheckInsertion;
-    private DivisionCheckInsertion divisionCheckInsertion;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
+    private DivisionCheckInsertion divisionCheckInsertion = new DivisionCheckInsertion();
+    private boolean strict;
     private ExportDependencyListener exportDependencyListener = new ExportDependencyListener();
     private int minHeapSize = 4 * 1024 * 1024;
     private int maxHeapSize = 128 * 1024 * 1024;
@@ -228,6 +231,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     private List<CallSiteDescriptor> callSites = new ArrayList<>();
     private ReflectionDependencyListener reflection;
     private ProxyIntrinsicContext proxyContext;
+    private final MainMethodTransformation mainMethodTransformation = new MainMethodTransformation();
 
     public CTarget(CNameProvider nameProvider) {
         rawNameProvider = nameProvider;
@@ -261,6 +265,14 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         this.obfuscated = obfuscated;
     }
 
+    /**
+     * Enables checks that are not necessary for keeping heap consistent, like division by zero checks.
+     * Null and array bound checks are always performed, since without them generated code can damage heap.
+     */
+    public void setStrict(boolean strict) {
+        this.strict = strict;
+    }
+
     public void setFileNames(FileNameProvider fileNames) {
         this.fileNames = fileNames;
     }
@@ -274,7 +286,13 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         transformers.add(new CFileSystemTransformer());
         transformers.add(new SynchronizedMethodTransformer());
         transformers.add(new ClassLoaderCResourceTransformation());
+        transformers.add(mainMethodTransformation);
         return transformers;
+    }
+
+    @Override
+    public void setEntryPoint(String entryPoint, String name) {
+        mainMethodTransformation.setEntryPoint(entryPoint);
     }
 
     @Override
@@ -292,7 +310,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         shadowStackTransformer = new ShadowStackTransformer(characteristics);
         var nullCheckFilter = new LowLevelNullCheckFilter(characteristics);
         nullCheckInsertion = new NullCheckInsertion(nullCheckFilter);
-        divisionCheckInsertion = new DivisionCheckInsertion(nullCheckFilter::apply);
         writeBarrierInsertion = new WriteBarrierInsertion(characteristics);
 
         controller.addVirtualMethods(m -> VIRTUAL_METHODS.contains(m) || reflection.isVirtual(m));
@@ -320,6 +337,11 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
 
     @Override
     public void contributeDependencies(DependencyAnalyzer dependencyAnalyzer) {
+        BoundCheckInsertion.contributeDependencies(dependencyAnalyzer);
+        NullCheckInsertion.contributeDependencies(dependencyAnalyzer);
+        if (strict) {
+            DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
+        }
         dependencyAnalyzer.linkMethod(new MethodReference(Class.class, "createClass", ClassInfo.class, Class.class))
                 .use();
 
@@ -348,7 +370,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
                 void.class)).use();
         dependencyAnalyzer.linkMethod(new MethodReference(ExceptionHandling.class, "throwArithmeticException",
                 void.class)).use();
-        DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.MARK_FAILED).use();
         dependencyAnalyzer.linkMethod(ClassInitFailureTransformer.INITIALIZER_ERROR)
                 .propagateClass(1, Throwable.class.getName())
@@ -428,12 +449,14 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
     @Override
     public void beforeInlining(Program program, MethodReader method) {
         nullCheckInsertion.transformProgram(program, method.getReference());
-        divisionCheckInsertion.transformProgram(program, method.getReference());
     }
 
     @Override
     public void beforeOptimizations(Program program, MethodReader method) {
         boundCheckInsertion.transformProgram(program, method.getReference());
+        if (strict) {
+            divisionCheckInsertion.transformProgram(program, method.getReference());
+        }
     }
 
     @Override
@@ -489,6 +512,7 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         intrinsics.add(new FiberIntrinsic());
         intrinsics.add(new LongIntrinsic());
         intrinsics.add(new IntegerIntrinsic());
+        intrinsics.add(new SystemIntrinsic());
         intrinsics.add(new DivisionCheckIntrinsic());
         intrinsics.add(new StringsIntrinsic());
         intrinsics.add(new ConsoleIntrinsic());
@@ -525,7 +549,8 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         generators.add(new WeakReferenceGenerator());
         generators.add(new ReferenceQueueGenerator());
         generators.add(new CResourcesGenerator(controller.getProperties(), controller.getResourceProvider(),
-                controller.getClassLoader(), controller.extensionEnvironment()));
+                controller.getClassLoader(), controller.extensionEnvironment(),
+                controller.extensionPolicies()));
 
         var reflectionGenerators = new ArrayList<ReflectionGenerator>();
 
@@ -1373,7 +1398,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
                 return false;
             }
             switch (method.getName()) {
-                case "runMain":
                 case "setCurrentThread":
                     return true;
                 default:
@@ -1384,9 +1408,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
         @Override
         public void apply(IntrinsicContext context, InvocationExpr invocation) {
             switch (invocation.getMethod().getName()) {
-                case "runMain":
-                    generateCallToMainMethod(context, invocation);
-                    break;
                 case "setCurrentThread":
                     MethodReference methodRef = new MethodReference(Thread.class,
                             "setCurrentThread", Thread.class, void.class);
@@ -1397,17 +1418,6 @@ public class CTarget implements TeaVMTarget, TeaVMCHost {
                     break;
             }
         }
-    }
-
-    private void generateCallToMainMethod(IntrinsicContext context, InvocationExpr invocation) {
-        NameProvider names = context.names();
-        var method = new MethodReference(controller.getEntryPoint(), "main", ValueType.parse(String[].class),
-                ValueType.parse(void.class));
-        context.importMethod(method, true);
-        String mainMethod = names.forMethod(method);
-        context.writer().print(mainMethod + "(");
-        context.emit(invocation.getArguments().get(0));
-        context.writer().print(")");
     }
 
     @Override

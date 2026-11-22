@@ -28,9 +28,11 @@ import java.nio.InvalidMarkException;
 import java.nio.ReadOnlyBufferException;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class ByteBufferIndexedSliceTest {
     // Java SE 21 ByteBuffer.slice(int, int): absolute index and shared content; independent state;
     // position zero, limit/capacity length, undefined mark, BIG_ENDIAN order, same direct/read-only status.

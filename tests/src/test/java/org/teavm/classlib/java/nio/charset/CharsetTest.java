@@ -23,9 +23,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class CharsetTest {
     // Javadoc of Charset.isSupported: "Returns: true if, and only if, support for the named charset is available
     // in the current Java virtual machine". The class Javadoc makes charset names case-insensitive.

@@ -26,10 +26,9 @@ import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
-import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
-import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
 @EachTestCompiledSeparately
@@ -106,7 +105,7 @@ public class ConstructorTest {
     }
     
     @Test
-    @SkipPlatform(TestPlatform.C)
+    @AsyncEnabled
     public void asyncConstructor() throws Exception {
         var constructor = ClassWithAsyncConstructor.class.getDeclaredConstructor(int.class);
         var instance = constructor.newInstance(23);

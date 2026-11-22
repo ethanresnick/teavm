@@ -60,8 +60,13 @@ jobs:
         args+=("-Pteavm.tests.optimized=true")
         args+=("-Pteavm.tests.shardCount=${{ matrix.shards }}")
         args+=("-Pteavm.tests.shardIndex=${{ matrix.shard }}")
+        # Running tests on JVM gives the same result in each job, so do it only once
+        if [[ "${{ matrix.platform }}" != "wasm-gc" ]]; then
+          args+=("-Pteavm.tests.jvm=false")
+        fi
         args+=("-Pteavm.localNodeJS=true")
-        args+=("-Pteavm.tests.c.runWrapper=")
+        args+=("-Pteavm.tests.c.runWrapper=none")
+        args+=("-Pteavm.tests.checkIr=true")
         args+=("-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m")
         echo "${args[@]}"
         export TEAVM_TEST_BROWSER_LOG=1

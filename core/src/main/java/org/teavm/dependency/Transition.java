@@ -15,7 +15,6 @@
  */
 package org.teavm.dependency;
 
-import com.carrotsearch.hppc.IntHashSet;
 import java.util.Arrays;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ValueType;
@@ -24,7 +23,7 @@ class Transition {
     DependencyNode source;
     DependencyNode destination;
     DependencyTypeFilter filter;
-    IntHashSet pendingTypes;
+    PendingTypes pendingTypes;
     private byte destSubsetOfSrc;
 
     Transition(DependencyNode source, DependencyNode destination, DependencyTypeFilter filter) {
@@ -45,7 +44,7 @@ class Transition {
         }
 
         if (shouldMergeDomains()) {
-            mergeDomains(new DependencyType[] { type });
+            mergeDomains();
         } else {
             destination.propagate(type);
         }
@@ -57,18 +56,17 @@ class Transition {
         }
 
         if (shouldMergeDomains()) {
-            mergeDomains(types);
+            mergeDomains();
         } else {
             destination.propagate(types);
         }
     }
 
-    private void mergeDomains(DependencyType[] types) {
-        // After the merge, the destination shares the source's type set, so it has all of the source's types at
-        // once. Propagation is re-entrant, so some of them can still be on their way to the destination. Later
-        // deliveries skip them, because the destination already has them. Deliver all of them now, not only
-        // this batch.
-        types = source.typeSet.getTypesForNode(source, destination, null);
+    void mergeDomains() {
+        // This was called from `propagate`, which delivers types from source to destination
+        // However, merging already does this, do we don't need types, passed from `propagate`,
+        // they'll be already in the domain
+        var types = source.typeSet.getTypesForNode(source, destination, null);
         destination.dependencyAnalyzer.merging = true;
         destination.moveToSeparateDomain();
         destination.scheduleMultipleTypes(types, () -> {
@@ -82,7 +80,7 @@ class Transition {
         destination.dependencyAnalyzer.merging = false;
     }
 
-    private boolean shouldMergeDomains() {
+    boolean shouldMergeDomains() {
         if (!source.dependencyAnalyzer.domainOptimizationEnabled() || filter != null || !isDestSubsetOfSrc()) {
             return false;
         }

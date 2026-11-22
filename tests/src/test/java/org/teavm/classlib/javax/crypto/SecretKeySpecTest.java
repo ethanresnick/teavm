@@ -25,10 +25,12 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.security.auth.DestroyFailedException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class SecretKeySpecTest {
     @Test
     public void copiesInputAndOutput() {

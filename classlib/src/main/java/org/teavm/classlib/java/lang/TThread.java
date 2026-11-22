@@ -22,7 +22,6 @@ import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.platform.Platform;
-import org.teavm.platform.PlatformRunnable;
 import org.teavm.runtime.EventQueue;
 import org.teavm.runtime.Fiber;
 
@@ -328,17 +327,10 @@ public class TThread extends TObject implements TRunnable {
     static native void switchContext(TThread thread);
 
     private static void switchContext(final TThread thread, final AsyncCallback<Void> callback) {
-        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-            EventQueue.offer(() -> {
-                setCurrentThread(thread);
-                callback.complete(null);
-            });
-        } else {
-            Platform.postpone(() -> {
-                setCurrentThread(thread);
-                callback.complete(null);
-            });
-        }
+        EventQueue.offer(() -> {
+            setCurrentThread(thread);
+            callback.complete(null);
+        });
     }
 
     public void interrupt() {
@@ -492,7 +484,7 @@ public class TThread extends TObject implements TRunnable {
         current.interruptHandler = handler;
     }
 
-    static class SleepHandler implements PlatformRunnable, EventQueue.Event, TThreadInterruptHandler {
+    static class SleepHandler implements EventQueue.Event, TThreadInterruptHandler {
         private TThread thread;
         private AsyncCallback<Void> callback;
         private boolean isInterrupted;
@@ -549,26 +541,26 @@ public class TThread extends TObject implements TRunnable {
     public TClassLoader getContextClassLoader() {
         return contextClassLoaderSet ? contextClassLoader : TClassLoader.getSystemClassLoader();
     }
-    
+
     public UncaughtExceptionHandler getUncaughtExceptionHandler() {
         if (this.uncaughtExceptionHandler != null) {
             return this.uncaughtExceptionHandler;
         }
         return getThreadGroup();
     }
-    
+
     public void setUncaughtExceptionHandler(UncaughtExceptionHandler uncaughtExceptionHandler) {
         this.uncaughtExceptionHandler = uncaughtExceptionHandler;
     }
-    
+
     public static UncaughtExceptionHandler getDefaultUncaughtExceptionHandler() {
         return defaultUncaughtExceptionHandler;
     }
-    
+
     public static void setDefaultUncaughtExceptionHandler(UncaughtExceptionHandler handler) {
         defaultUncaughtExceptionHandler = handler;
     }
-    
+
     public interface UncaughtExceptionHandler {
         void uncaughtException(TThread t, Throwable e);
     }

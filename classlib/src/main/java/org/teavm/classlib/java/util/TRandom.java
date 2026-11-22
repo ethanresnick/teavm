@@ -47,6 +47,8 @@ public class TRandom extends TObject implements TRandomGenerator, TSerializable 
         return next(32);
     }
 
+
+
     protected int next(int bits) {
         var newSeed = (seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1);
         seed = newSeed;

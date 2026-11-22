@@ -25,6 +25,7 @@ import org.teavm.model.Program;
 import org.teavm.model.ValueType;
 import org.teavm.model.text.ListingBuilder;
 
+
 public class BoundCheckInsertionTest {
     private static final String PREFIX = "model/transformation/bound-check-insertion/";
     private static final MethodReference METHOD = new MethodReference("Test", "test", ValueType.INTEGER);
@@ -52,12 +53,62 @@ public class BoundCheckInsertionTest {
     }
 
     @Test
-    public void checkInHandler() {
+    public void constantIndexInBounds() {
         doTest();
     }
 
     @Test
-    public void checkInHandlerOfFirstBlock() {
+    public void constantIndexAboveSize() {
+        doTest();
+    }
+
+    @Test
+    public void negativeConstantIndex() {
+        doTest();
+    }
+
+    @Test
+    public void outOfBoundsFollowedByGet() {
+        doTest();
+    }
+
+    @Test
+    public void outOfBoundsFollowedByPut() {
+        doTest();
+    }
+
+    @Test
+    public void outOfBoundsInBranch() {
+        doTest();
+    }
+
+    @Test
+    public void outOfBoundsInTry() {
+        doTest();
+    }
+
+    @Test
+    public void boundsInHandler() {
+        doTest();
+    }
+
+    @Test
+    public void branchRefinement() {
+        doTest();
+    }
+
+    @Test
+    public void branchRefinementBypassed() {
+        doTest();
+    }
+
+    @Test
+    public void branchRefinementSameTargets() {
+        doTest();
+    }
+
+    @Test
+    public void branchRefinementLoopHeader() {
         doTest();
     }
 
@@ -72,5 +123,15 @@ public class BoundCheckInsertionTest {
         String originalText = new ListingBuilder().buildListing(original, "");
         String expectedText = new ListingBuilder().buildListing(expected, "");
         Assert.assertEquals(expectedText, originalText);
+    }
+
+    @Test
+    public void checkInHandler() {
+        doTest();
+    }
+
+    @Test
+    public void checkInHandlerOfFirstBlock() {
+        doTest();
     }
 }

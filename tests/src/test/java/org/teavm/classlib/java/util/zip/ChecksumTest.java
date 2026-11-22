@@ -22,6 +22,7 @@ import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -50,6 +51,7 @@ public class ChecksumTest {
     // buffers below come from duplicate(), slice() and asReadOnlyBuffer() at non-zero positions, so their
     // arrayOffset() is non-zero or they have no accessible array.
     @Test
+    @AsyncEnabled
     public void updateDerivedByteBuffer() {
         byte[] backing = new byte[DATA.length + 7];
         System.arraycopy(DATA, 0, backing, 3, DATA.length);

@@ -20,6 +20,7 @@ import java.util.function.BooleanSupplier;
 import org.teavm.model.ClassHolder;
 import org.teavm.model.ClassHolderTransformer;
 import org.teavm.model.ClassHolderTransformerContext;
+import org.teavm.model.analysis.NullnessInformation;
 import org.teavm.model.instructions.IntegerConstantInstruction;
 import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.optimization.ConstantConditionElimination;
@@ -72,9 +73,11 @@ public final class WasmGCJspi implements ClassHolderTransformer {
             }
             if (changed) {
                 do {
-                    changed = new GlobalValueNumbering(true).optimize(program)
-                            | new ConstantConditionElimination().optimize(method.getDescriptor(), program);
-                    new UnreachableBasicBlockEliminator().optimize(program);
+                    changed = new GlobalValueNumbering(true).optimize(program);
+                    var nullness = NullnessInformation.build(program, method.getDescriptor());
+                    changed |= new ConstantConditionElimination().optimize(nullness, null, program);
+                    nullness.dispose();
+                    new UnreachableBasicBlockEliminator().optimize(program, method.parameterCount());
                 } while (changed);
             }
         }

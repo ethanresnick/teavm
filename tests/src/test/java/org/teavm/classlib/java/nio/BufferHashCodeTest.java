@@ -34,6 +34,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -47,6 +48,7 @@ import org.teavm.junit.TeaVMTest;
  * against the JDK.
  */
 @TeaVMTest
+@AsyncEnabled
 public class BufferHashCodeTest {
     private static final ByteOrder[] ORDERS = { ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN };
 

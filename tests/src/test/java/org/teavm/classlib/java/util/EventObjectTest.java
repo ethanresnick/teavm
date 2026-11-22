@@ -21,9 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.EventObject;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class EventObjectTest {
     // EventObject(Object source) Javadoc: "Throws: IllegalArgumentException - if source is null"
     @Test

@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.lang.ref.ReferenceQueue;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -31,6 +32,7 @@ import org.teavm.junit.TestPlatform;
 
 // The C backend generates an empty body for ReferenceQueue.remove(), so a waiter there never blocks.
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 @SkipPlatform(TestPlatform.C)
 public class ReferenceQueueTest {

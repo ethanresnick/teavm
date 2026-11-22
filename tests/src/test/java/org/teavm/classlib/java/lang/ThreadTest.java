@@ -27,10 +27,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
+@AsyncEnabled
 @TeaVMTest
 @EachTestCompiledSeparately
 public class ThreadTest {
@@ -178,6 +180,7 @@ public class ThreadTest {
     // isAlive(): "A thread is alive if it has been started and has not yet died." So the started thread must not be
     // able to end before isAlive() is read: on the JVM it may run, and finish, before start() returns.
     @Test
+    @AsyncEnabled
     public void isAliveFollowsLifecycle() throws InterruptedException {
         var insideAlive = new boolean[1];
         var running = new AtomicBoolean();
@@ -217,6 +220,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void startTwiceThrows() throws InterruptedException {
         var thread = new Thread(() -> { });
         thread.start();
@@ -232,6 +236,7 @@ public class ThreadTest {
     // sleep(long, int): "IllegalArgumentException - if the value of millis is negative, or the value of nanos is
     // not in the range 0-999999".
     @Test
+    @AsyncEnabled
     public void sleepOverloadsAndSpinWait() throws InterruptedException {
         long start = System.currentTimeMillis();
         Thread.sleep(20, 500);
@@ -257,6 +262,7 @@ public class ThreadTest {
 
     // A sleep too long for a host timer, or for a deadline in a long, must still wait until interrupted.
     @Test
+    @AsyncEnabled
     public void longSleepsWaitUntilInterrupted() throws InterruptedException {
         var sleeps = new ArrayList<Runnable>();
         sleeps.add(() -> sleepUnchecked(Long.MAX_VALUE));
@@ -294,6 +300,7 @@ public class ThreadTest {
     // sleep: "InterruptedException - if any thread has interrupted the current thread. The interrupted status of
     // the current thread is cleared when this exception is thrown."
     @Test
+    @AsyncEnabled
     public void sleepThrowsForEarlierInterrupt() {
         var current = Thread.currentThread();
         var sleeps = new ArrayList<Runnable>();
@@ -316,6 +323,7 @@ public class ThreadTest {
     // join: "InterruptedException - if any thread has interrupted the current thread. The interrupted status of
     // the current thread is cleared when this exception is thrown."
     @Test
+    @AsyncEnabled
     public void joinThrowsForEarlierInterrupt() throws InterruptedException {
         var current = Thread.currentThread();
         var other = new Thread(() -> {
@@ -369,6 +377,7 @@ public class ThreadTest {
     // of nanos is not in the range 0-999999". join(long millis): "If the thread has not been started then this
     // method returns immediately, without waiting."
     @Test
+    @AsyncEnabled
     public void joinEdgeCases() throws InterruptedException {
         var notStarted = new Thread(() -> { });
         long start = System.currentTimeMillis();
@@ -425,6 +434,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void joinWithLongMaxValueWaits() throws InterruptedException {
         var done = new boolean[1];
         var thread = new Thread(() -> {
@@ -443,6 +453,7 @@ public class ThreadTest {
 
     // getContextClassLoader(): "The context ClassLoader is provided by the creator of the thread". It may be null.
     @Test
+    @AsyncEnabled
     public void contextClassLoaderIsKeptAndInherited() throws InterruptedException {
         var current = Thread.currentThread();
         var original = current.getContextClassLoader();
@@ -493,6 +504,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void unnamedThreadsHaveDistinctStableNames() {
         var first = new Thread();
         var second = new Thread();
@@ -507,6 +519,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void liveThreadsAppearAtStartAndDisappearAtExit() throws InterruptedException {
         var release = new boolean[1];
         var worker = new Thread(() -> {
@@ -542,6 +555,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void secondInterruptReachesANewWait() throws InterruptedException {
         var interrupted = new int[1];
         var waiting = new int[1];
@@ -569,6 +583,7 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM // finishedLock is TeaVM's internal join monitor.
     public void missingFinishedLockDoesNotPreventThreadCleanup() throws Exception {
         var ran = new boolean[1];
@@ -588,6 +603,7 @@ public class ThreadTest {
 
     // Thread.setDaemon: "IllegalThreadStateException - if this thread is alive".
     @Test
+    @AsyncEnabled
     public void liveThreadDaemonStatusCannotChange() throws InterruptedException {
         for (boolean daemon : new boolean[] { false, true }) {
             var worker = new Thread(() -> {
@@ -611,12 +627,14 @@ public class ThreadTest {
     }
 
     @Test
+    @AsyncEnabled
     public void stackTraceSnapshotSurvivesTraceCallback() throws InterruptedException {
         checkStackTraceSnapshot(false);
         System.out.println("Thread stack trace snapshot checked");
     }
 
     @Test
+    @AsyncEnabled
     public void stackTraceSnapshotSurvivesHashCallback() throws InterruptedException {
         checkStackTraceSnapshot(true);
         System.out.println("Thread stack hash snapshot checked");

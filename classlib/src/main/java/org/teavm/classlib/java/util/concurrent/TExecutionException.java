@@ -27,7 +27,7 @@ public class TExecutionException extends Exception {
     public TExecutionException(String message, Throwable cause) {
         super(message, cause);
     }
-  
+
     public TExecutionException(Throwable cause) {
         super(cause);
     }

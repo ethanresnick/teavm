@@ -211,10 +211,10 @@ public final class TString extends TObject implements TSerializable, TComparable
     public boolean isEmpty() {
         return charactersLength() == 0;
     }
-    
+
     public boolean isBlank() {
         for (int i = 0; i < charactersLength(); i++) {
-            if (charactersGet(i) != ' ') {
+            if (!Character.isWhitespace(charactersGet(i))) {
                 return false;
             }
         }
@@ -765,6 +765,8 @@ public final class TString extends TObject implements TSerializable, TComparable
     public TIntStream codePoints() {
         return new TStringCodePointsStream(this);
     }
+
+
 
     public static String valueOf(Object obj) {
         return obj != null ? obj.toString() : "null";

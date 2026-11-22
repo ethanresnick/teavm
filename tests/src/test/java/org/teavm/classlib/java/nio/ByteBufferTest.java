@@ -31,6 +31,7 @@ import java.nio.InvalidMarkException;
 import java.nio.ReadOnlyBufferException;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.java.lang.DoubleTest;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -84,6 +85,7 @@ public class ByteBufferTest {
     }
 
     @Test
+    @AsyncEnabled
     @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
     public void errorIfDirectBufferDoesNotFitInMemory() {
         // Wasm GC linear memory is at most 2 GiB, which these buffers and the data already in memory exceed
@@ -892,6 +894,7 @@ public class ByteBufferTest {
     // format is not pinned. These tests match OpenJDK's format (implementation class name, then
     // [pos=... lim=... cap=...]); the JVM run of this test checks that against the real JDK.
     @Test
+    @AsyncEnabled
     public void toStringIsTheJdkOne() {
         assertEquals("java.nio.HeapByteBuffer[pos=0 lim=0 cap=0]", ByteBuffer.allocate(0).toString());
         var buffer = ByteBuffer.allocate(16);
@@ -908,6 +911,7 @@ public class ByteBufferTest {
     }
 
     @Test
+    @AsyncEnabled
     public void toStringOfDerivedBuffersKeepsKindAndState() {
         for (var direct : new boolean[] { false, true }) {
             var kind = direct ? "java.nio.DirectByteBuffer" : "java.nio.HeapByteBuffer";

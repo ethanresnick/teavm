@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -164,6 +165,7 @@ public class SetTest {
     // is Integer.MIN_VALUE (for which Math.abs is negative) and other extreme hash codes must be storable
     // and findable at every table size, and absent elements (including in empty sets) must miss.
     @Test
+    @AsyncEnabled
     public void immutableSetHandlesExtremeHashCodes() {
         for (int n = 0; n <= HASH_POOL.length; ++n) {
             for (int offset = 0; offset < HASH_POOL.length; ++offset) {
@@ -190,6 +192,7 @@ public class SetTest {
     // Set: "Unmodifiable Sets ... disallow null elements. Attempts to create them with null elements result in
     // NullPointerException." Checked for every overload of Set.of and every position of the null.
     @Test
+    @AsyncEnabled
     public void ofRejectsNullAtAnyPosition() {
         for (int size = 1; size <= 11; ++size) {
             for (int nullAt = 0; nullAt < size; ++nullAt) {

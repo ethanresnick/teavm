@@ -29,6 +29,7 @@ import java.lang.reflect.UndeclaredThrowableException;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Proxiable;
 import org.teavm.classlib.support.ProxyConfiguration;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -410,6 +411,7 @@ public class ProxyTest {
     }
 
     @Test
+    @AsyncEnabled
     public void interfaceWithStaticMembers() {
         var sb = new StringBuilder();
         var a = (A) Proxy.newProxyInstance(ProxyTest.class.getClassLoader(), new Class[] { A.class },

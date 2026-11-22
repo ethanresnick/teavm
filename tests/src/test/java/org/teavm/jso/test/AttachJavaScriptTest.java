@@ -18,6 +18,7 @@ package org.teavm.jso.test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 import org.teavm.jso.JSBody;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.AttachJavaScript;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
@@ -26,6 +27,7 @@ import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 @OnlyPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
 @EachTestCompiledSeparately

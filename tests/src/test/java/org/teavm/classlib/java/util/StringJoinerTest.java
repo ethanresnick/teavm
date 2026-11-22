@@ -23,9 +23,11 @@ import java.util.List;
 import java.util.Random;
 import java.util.StringJoiner;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class StringJoinerTest {
     @Test
     public void joinsWithPrefixAndSuffix() {

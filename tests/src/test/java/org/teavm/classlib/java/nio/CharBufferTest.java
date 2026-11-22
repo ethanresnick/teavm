@@ -31,6 +31,7 @@ import java.nio.CharBuffer;
 import java.nio.InvalidMarkException;
 import java.nio.ReadOnlyBufferException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -671,6 +672,7 @@ public class CharBufferTest {
     // resulting string will be the character at this buffer's position, while the last character will be the
     // character at index limit() - 1. Invoking this method does not change the buffer's position."
     @Test
+    @AsyncEnabled
     public void toStringReturnsRemainingCharacters() {
         var buffer = CharBuffer.wrap("abcdefgh".toCharArray());
         buffer.position(2).limit(6);
@@ -698,6 +700,7 @@ public class CharBufferTest {
     // character buffer." append(CharSequence csq, int start, int end): "If csq is null, then characters will be
     // appended as if csq contained the four characters "null"."
     @Test
+    @AsyncEnabled
     public void appendNullCharSequence() {
         var buffer = CharBuffer.allocate(8);
         buffer.append(null);

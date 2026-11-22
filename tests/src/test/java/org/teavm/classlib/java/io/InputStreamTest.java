@@ -21,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -74,6 +75,7 @@ public class InputStreamTest {
     // InputStream.transferTo: "Throws: NullPointerException - if out is null". This holds even when there is
     // nothing to transfer.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("resource")
     public void transferToNullThrows() {
         assertThrows(NullPointerException.class, () -> new ChunkedInputStream(17, 0).transferTo(null));

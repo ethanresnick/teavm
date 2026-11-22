@@ -40,13 +40,10 @@
 // CHECKSTYLE.OFF: UnnecessaryParentheses|UnusedImports|WhitespaceAfter|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.CompletableFuture.failedFuture;
-
-
-
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -59,8 +56,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -70,10 +67,15 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
+
+
+
 @TeaVMTest
+@AsyncEnabled
 public class CompletableFutureTest extends JSR166TestCase {
 
     // android-note: Removed because the CTS runner does a bad job of

@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Properties;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.PlatformDetector;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -39,6 +40,7 @@ import org.teavm.junit.TeaVMTest;
 @EachTestCompiledSeparately
 public class SystemTest {
     @Test
+    @AsyncEnabled
     public void mapsLibraryNamesWithoutLoadingThem() {
         // System.mapLibraryName Javadoc specifies a platform-dependent name, not library loading:
         // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/System.html
@@ -58,6 +60,7 @@ public class SystemTest {
     }
 
     @Test
+    @AsyncEnabled
     public void rejectsNullLibraryName() {
         // System.mapLibraryName specifies NullPointerException for a null name.
         assertThrows(NullPointerException.class, () -> System.mapLibraryName(null));
@@ -228,6 +231,7 @@ public class SystemTest {
     }
 
     @Test
+    @AsyncEnabled
     public void standardPropertiesAreSet() {
         for (var name : List.of("java.vendor", "java.vm.vendor", "os.arch", "java.runtime.name",
                 "java.specification.version", "user.dir", "file.encoding")) {
@@ -238,6 +242,7 @@ public class SystemTest {
     // System.getenv(): "Returns an unmodifiable string map view of the current system environment."
     // System.getenv(String): "the string value of the variable, or null if the variable is not defined".
     @Test
+    @AsyncEnabled
     public void getenvMapAgreesWithGetenv() {
         var env = System.getenv();
         assertNotNull(env);
@@ -257,6 +262,7 @@ public class SystemTest {
     // TeaVM programs have no environment. getenv(): "If the system does not support environment variables,
     // an empty map is returned."
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void environmentIsEmpty() {
         assertTrue(System.getenv().isEmpty());
@@ -266,6 +272,7 @@ public class SystemTest {
 
     // getenv(String): "NullPointerException - if name is null"
     @Test
+    @AsyncEnabled
     public void getenvRejectsNullName() {
         assertThrows(NullPointerException.class, () -> System.getenv(null));
     }
@@ -274,6 +281,7 @@ public class SystemTest {
     // Attempting to query the presence of a key or value which is not of type String will throw a
     // ClassCastException."
     @Test
+    @AsyncEnabled
     @SuppressWarnings({ "SuspiciousMethodCalls", "ResultOfMethodCallIgnored" })
     public void getenvMapRejectsNullAndNonStringQueries() {
         var env = System.getenv();
@@ -289,6 +297,7 @@ public class SystemTest {
     // UnsupportedOperationException" for mutators that would change the map. Calls that would have no
     // effect "may, but are not required to" throw, so for them only check that the map is unchanged.
     @Test
+    @AsyncEnabled
     public void getenvMapIsUnmodifiable() {
         var env = System.getenv();
         var snapshot = new HashMap<>(env);
@@ -359,6 +368,7 @@ public class SystemTest {
     // "The call System.loadLibrary(name) is effectively equivalent to the call Runtime.getRuntime().loadLibrary(name)",
     // and likewise for load.
     @Test
+    @AsyncEnabled
     public void nativeLibrariesAreNotFound() {
         var runtime = Runtime.getRuntime();
         for (var name : List.of("teavm-test-no-such-library", "", "teavm-test/no-such-library",
@@ -376,6 +386,7 @@ public class SystemTest {
     // System.load / System.loadLibrary / Runtime.load / Runtime.loadLibrary:
     // "NullPointerException - if filename is null" ("if libname is null" for loadLibrary)
     @Test
+    @AsyncEnabled
     public void nativeLibraryNameMustNotBeNull() {
         var runtime = Runtime.getRuntime();
         assertThrows(NullPointerException.class, () -> System.load(null));

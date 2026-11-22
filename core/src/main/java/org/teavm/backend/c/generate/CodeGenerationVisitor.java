@@ -207,6 +207,26 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
         pushLocation(expr.getLocation());
         try {
             switch (expr.getOperation()) {
+                case DIVIDE_CHECKED:
+                case MODULO_CHECKED: {
+                    boolean needParenthesis = false;
+                    if (needsCallSiteId()) {
+                        needParenthesis = true;
+                        withCallSite();
+                    }
+                    writer.print(expr.getOperation() == BinaryOperation.DIVIDE_CHECKED
+                            ? "teavm_checkedDiv_" : "teavm_checkedRem_");
+                    writer.print(expr.getType() == OperationType.LONG ? "i64" : "i32");
+                    writer.print("(");
+                    expr.getFirstOperand().acceptVisitor(this);
+                    writer.print(", ");
+                    expr.getSecondOperand().acceptVisitor(this);
+                    writer.print(")");
+                    if (needParenthesis) {
+                        writer.print(")");
+                    }
+                    return;
+                }
                 case COMPARE_LESS:
                 case COMPARE_GREATER:
                     writer.print("teavm_compare_");
@@ -1259,13 +1279,18 @@ public class CodeGenerationVisitor implements ExprVisitor, StatementVisitor {
                 QualificationExpr qualification = (QualificationExpr) statement.getLeftValue();
                 FieldReference field = qualification.getField();
                 if (isMonitorField(field)) {
-                    writer.print("TEAVM_FIELD(");
+                    String instance = allocTemporaryVariable(CVariableType.PTR);
+                    writer.print(instance + " = ");
                     qualification.getQualified().acceptVisitor(this);
+                    writer.println(";");
                     field = new FieldReference(RuntimeObject.class.getName(), "hashCode");
-                    writer.print(", ").print(names.forClass(field.getClassName()) + ", "
+                    writer.print("TEAVM_FIELD(" + instance + ", ").print(names.forClass(field.getClassName()) + ", "
                             + names.forMemberField(field) + ") = TEAVM_PACK_MONITOR(");
                     statement.getRightValue().acceptVisitor(this);
                     writer.println(");");
+                    // Barrier goes after the store: evaluating the value may trigger GC, which resets cards
+                    writer.println("teavm_gc_writeBarrierChecked(" + instance + ");");
+                    freeTemporaryVariable(CVariableType.PTR);
                     popLocation(statement.getLocation());
                     return;
                 }

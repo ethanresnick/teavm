@@ -36,6 +36,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -43,6 +44,7 @@ import org.teavm.junit.TeaVMTest;
 @EachTestCompiledSeparately
 public class ClassLoaderTest {
     @Test
+    @AsyncEnabled
     public void reflectiveResourceReaderRetainsItsDependencies() throws Exception {
         var method = ResourceReader.class.getDeclaredMethod("read", String.class);
         assertEquals("qw", method.invoke(null, "resources-for-test/2"));
@@ -99,6 +101,7 @@ public class ClassLoaderTest {
     // found, a URL could not be constructed to locate the resource, ...". getResources: "If no resources could be
     // found, the enumeration will be empty."
     @Test
+    @AsyncEnabled
     public void getResourceFindsOnlyExistingResources() throws IOException {
         URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
         assertNotNull(url);
@@ -112,6 +115,7 @@ public class ClassLoaderTest {
     // Names that try to reach outside the program's resources find nothing: a resource name has no leading "/",
     // ".." is not resolved, and an absolute URL is just a name.
     @Test
+    @AsyncEnabled
     public void getResourceDoesNotLeaveTheResources() throws IOException {
         var loader = ClassLoader.getSystemClassLoader();
         for (var name : new String[] { "/resources-for-test/1", "../resources-for-test/1",
@@ -125,6 +129,7 @@ public class ClassLoaderTest {
     // On JS the resources are a JavaScript object, so a name of one of its inherited properties must not count as
     // a resource.
     @Test
+    @AsyncEnabled
     public void namesOfJavaScriptObjectPropertiesAreNotResources() {
         var loader = ClassLoader.getSystemClassLoader();
         for (var name : new String[] { "constructor", "__proto__", "toString", "hasOwnProperty", "valueOf" }) {
@@ -135,6 +140,7 @@ public class ClassLoaderTest {
 
     // getResource and getResources: "Throws: NullPointerException - If name is null".
     @Test
+    @AsyncEnabled
     public void getResourceRejectsNullName() {
         var loader = ClassLoader.getSystemClassLoader();
         assertThrows(NullPointerException.class, () -> loader.getResource(null));
@@ -142,6 +148,7 @@ public class ClassLoaderTest {
     }
 
     @Test
+    @AsyncEnabled
     public void getResourceGivesUrlThatReadsTheResource() throws IOException {
         URL url = ClassLoader.getSystemClassLoader().getResource("resources-for-test/2");
         try (var input = url.openStream()) {
@@ -163,6 +170,7 @@ public class ClassLoaderTest {
 
     // A '#' or '%' in the name is part of the name, not a fragment or an escape of the URL.
     @Test
+    @AsyncEnabled
     public void getResourceKeepsSpecialCharactersOfName() throws IOException {
         URL url = ClassLoader.getSystemResource("resources-for-test/hash#percent%41");
         assertNotNull(url);
@@ -180,6 +188,7 @@ public class ClassLoaderTest {
     // invoke findResource(String) to find the resource." getResources: "The search order is described in the
     // documentation for getResource(String)."
     @Test
+    @AsyncEnabled
     public void getResourceSearchesParentThenFindResource() throws IOException {
         var own = new URL("http://example.com/own");
         var loader = new ClassLoader() {
@@ -207,6 +216,7 @@ public class ClassLoaderTest {
     // With a null parent, only the built-in loader and findResource are searched. The program's resources belong to
     // the system loader, as the class path does in the JDK.
     @Test
+    @AsyncEnabled
     public void loaderWithoutParentDoesNotSeeProgramResources() throws IOException {
         var loader = new ClassLoader(null) { };
         assertNull(loader.getResource("resources-for-test/1"));
@@ -217,6 +227,7 @@ public class ClassLoaderTest {
     // getResourceAsStream reads the embedded resources for every loader (the Wasm GC and C backends replace its
     // body), so a loader without a parent still sees the program's resources through it.
     @Test
+    @AsyncEnabled
     @Disabled("Known gap: getResourceAsStream does not follow getResource's delegation")
     public void loaderWithoutParentDoesNotStreamProgramResources() {
         var loader = new ClassLoader(null) { };
@@ -236,6 +247,7 @@ public class ClassLoaderTest {
     // ClassLoader(): "Creates a new class loader using the ClassLoader returned by the method
     // getSystemClassLoader() as the parent class loader."
     @Test
+    @AsyncEnabled
     public void defaultParentIsSystemLoader() {
         assertSame(ClassLoader.getSystemClassLoader(), new ClassLoader() { }.getParent());
         assertNull(new ClassLoader(null) { }.getParent());
@@ -244,6 +256,7 @@ public class ClassLoaderTest {
     }
 
     @Test
+    @AsyncEnabled
     public void loaderDelegatesToParentFirst() throws ClassNotFoundException {
         var loader = new ClassLoader() { };
         assertSame(String.class, loader.loadClass("java.lang.String"));
@@ -258,6 +271,7 @@ public class ClassLoaderTest {
     }
 
     @Test
+    @AsyncEnabled
     public void systemLoaderFindsKeptClasses() throws ClassNotFoundException {
         var system = ClassLoader.getSystemClassLoader();
         assertSame(String.class, system.loadClass("java.lang.String"));
@@ -276,6 +290,7 @@ public class ClassLoaderTest {
     // following order: [findLoadedClass, then] Invoke the loadClass method on the parent class loader. [...]
     // Invoke the findClass(String) method to find the class."
     @Test
+    @AsyncEnabled
     public void parentIsAskedBeforeFindClass() throws ClassNotFoundException {
         var log = new ArrayList<String>();
         var parent = new RecordingLoader("parent", ClassLoader.getSystemClassLoader(), log,
@@ -314,6 +329,7 @@ public class ClassLoaderTest {
     // loadClass(String, boolean): "If the parent is null the class loader built into the virtual machine is
     // used, instead." The built-in loader holds the platform classes, not the application's.
     @Test
+    @AsyncEnabled
     public void nullParentUsesBuiltInLoader() throws ClassNotFoundException {
         var log = new ArrayList<String>();
         var testName = ClassLoaderTest.class.getName();
@@ -358,6 +374,7 @@ public class ClassLoaderTest {
     // this method will then invoke the resolveClass(Class) method on the resulting Class object."
     // resolveClass(Class): "Throws: NullPointerException - If c is null"
     @Test
+    @AsyncEnabled
     public void resolveFlag() throws ClassNotFoundException {
         var log = new ArrayList<String>();
         var loader = new RecordingLoader("loader", null, log, Map.of("test.Mine", Byte.class));
@@ -396,6 +413,7 @@ public class ClassLoaderTest {
     // findLoadedClass: "Returns: The Class object, or null if the class has not been loaded". A loader can not
     // define classes in TeaVM, so no class is ever recorded as loaded by it.
     @Test
+    @AsyncEnabled
     public void findLoadedClassFindsNothing() throws ClassNotFoundException {
         var loader = new RecordingLoader("loader", null, new ArrayList<>(), Map.of("test.Mine", Byte.class));
         loader.loadClass("test.Mine");
@@ -408,6 +426,7 @@ public class ClassLoaderTest {
     // loadClass catches only the parent's ClassNotFoundException; any other exception reaches the caller, and
     // this loader's findClass is not called.
     @Test
+    @AsyncEnabled
     public void exceptionsPropagate() throws ClassNotFoundException {
         var log = new ArrayList<String>();
         var child = new RecordingLoader("child", new ClassLoader(null) { }, log, Map.of());

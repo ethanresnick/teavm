@@ -45,15 +45,15 @@ public class NullnessInformation {
     }
 
     public boolean isNotNull(Variable variable) {
-        return nullnessArray[variable.getIndex()] == Nullness.NOT_NULL;
+        return variable.getIndex() < nullnessArray.length && nullnessArray[variable.getIndex()] == Nullness.NOT_NULL;
     }
 
     public boolean isNull(Variable variable) {
-        return nullnessArray[variable.getIndex()] == Nullness.NULL;
+        return variable.getIndex() < nullnessArray.length && nullnessArray[variable.getIndex()] == Nullness.NULL;
     }
 
     public boolean isSynthesized(Variable variable) {
-        return synthesizedVariables.get(variable.getIndex());
+        return variable.getIndex() < synthesizedVariables.size() && synthesizedVariables.get(variable.getIndex());
     }
 
     public void dispose() {
@@ -75,7 +75,9 @@ public class NullnessInformation {
                 }
             }
             variableMapper.applyToPhis(block);
-            removeDuplicateIncomings(block);
+            for (Phi phi : block.getPhis()) {
+                removeEqualIncomings(phi);
+            }
             if (block.getExceptionVariable() != null) {
                 block.setExceptionVariable(variableMapper.map(block.getExceptionVariable()));
             }
@@ -90,21 +92,16 @@ public class NullnessInformation {
         program.pack();
     }
 
-    /**
-     * PhiUpdater gives an exception handler's phi every version of a variable that the protected block assigned.
-     * Mapping the synthesized versions back to their source variable can leave two equal incomings from one block;
-     * keep one.
-     */
-    private static void removeDuplicateIncomings(BasicBlock block) {
-        for (Phi phi : block.getPhis()) {
-            var incomings = phi.getIncomings();
-            for (int i = 0; i < incomings.size(); ++i) {
-                var incoming = incomings.get(i);
-                for (int j = incomings.size() - 1; j > i; --j) {
-                    var other = incomings.get(j);
-                    if (other.getSource() == incoming.getSource() && other.getValue() == incoming.getValue()) {
-                        incomings.remove(j);
-                    }
+    // Versions that the extension gave to a handler phi map back to the variable the phi already had
+    private static void removeEqualIncomings(Phi phi) {
+        var incomings = phi.getIncomings();
+        for (var i = incomings.size() - 1; i > 0; --i) {
+            var incoming = incomings.get(i);
+            for (var j = 0; j < i; ++j) {
+                var other = incomings.get(j);
+                if (other.getSource() == incoming.getSource() && other.getValue() == incoming.getValue()) {
+                    incomings.remove(i);
+                    break;
                 }
             }
         }

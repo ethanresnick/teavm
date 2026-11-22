@@ -42,6 +42,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -99,6 +100,7 @@ public class BigIntegerHashCodeTest {
     }
 
     @Test
+    @AsyncEnabled
     public void equalValuesBuiltDifferentlyHashAlike() {
         BigInteger p = new BigInteger("115792089210356248762697446949407573530086143415290314195533631308867097853951");
         BigInteger[] equal = {
@@ -118,6 +120,7 @@ public class BigIntegerHashCodeTest {
     }
 
     @Test
+    @AsyncEnabled
     public void hashCodeIsTheJdkOne() {
         assertEquals(-1, BigInteger.ONE.negate().hashCode());
         assertEquals(16 * 31 * 31 * 31, BigInteger.ONE.shiftLeft(100).hashCode());
@@ -127,6 +130,7 @@ public class BigIntegerHashCodeTest {
     // Object.hashCode: "If two objects are equal according to the equals method, then calling the hashCode
     // method on each of the two objects must produce the same integer result."
     @Test
+    @AsyncEnabled
     public void equalValuesHashAlikeWhateverTheirHistory() {
         Random random = new Random(44);
         BigInteger big = BigInteger.ONE.shiftLeft(500).subtract(BigInteger.ONE);
@@ -160,6 +164,7 @@ public class BigIntegerHashCodeTest {
     }
 
     @Test
+    @AsyncEnabled
     public void hashCodeFollowsTheJdkFormula() {
         Random random = new Random(45);
         assertEquals(0, BigInteger.ZERO.hashCode());
@@ -181,6 +186,7 @@ public class BigIntegerHashCodeTest {
     // BigDecimal.equals: "two BigDecimal objects equal only if they are equal in value and scale", so equal
     // BigDecimals with large unscaled values must hash alike too.
     @Test
+    @AsyncEnabled
     public void equalBigDecimalsHashAlike() {
         Random random = new Random(46);
         BigInteger big = BigInteger.ONE.shiftLeft(300);

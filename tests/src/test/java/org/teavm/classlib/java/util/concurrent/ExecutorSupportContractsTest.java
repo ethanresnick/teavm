@@ -32,9 +32,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class ExecutorSupportContractsTest {
     @Test
     public void completionServiceUsesExecutorFactoriesAndSuppliedQueue() throws Exception {

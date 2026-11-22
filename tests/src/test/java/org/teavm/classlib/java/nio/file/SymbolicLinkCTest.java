@@ -35,6 +35,7 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.teavm.interop.Import;
 import org.teavm.interop.c.Include;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.AttachC;
 import org.teavm.junit.IncludeC;
 import org.teavm.junit.OnlyPlatform;
@@ -45,6 +46,7 @@ import org.teavm.junit.TestPlatform;
 // Real symbolic links on the C backend's POSIX file system. The expected values are what the JDK on macOS returns
 // for the same tree.
 @TeaVMTest
+@AsyncEnabled
 @IncludeC("org/teavm/c/test/file-links.h")
 @AttachC("org/teavm/c/test/file-links.c")
 @SkipJVM

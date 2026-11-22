@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -377,6 +378,7 @@ public class ArrayDequeTest {
     // ArrayDeque.clone: "Returns a copy of this deque". Object.clone: by convention, the copy comes from
     // super.clone(), so "x.clone().getClass() == x.getClass()", and it is independent of the original.
     @Test
+    @AsyncEnabled
     public void cloneKeepsClassAndIsIndependent() {
         var deque = new CustomDeque();
         deque.tag = "t";
@@ -404,6 +406,7 @@ public class ArrayDequeTest {
     // elements is removed, in both directions, at every head position and every size that fits without growing, so
     // removals close to either end, next to each other and across the end of the array are covered.
     @Test
+    @AsyncEnabled
     public void iteratorRemoveEverySubsetAtEveryOffset() {
         var failures = new ArrayList<String>();
         for (var capacity = 1; capacity <= 5; ++capacity) {

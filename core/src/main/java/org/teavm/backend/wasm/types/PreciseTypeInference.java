@@ -15,8 +15,9 @@
  */
 package org.teavm.backend.wasm.types;
 
-import java.util.function.Predicate;
 import org.teavm.backend.wasm.WasmGCUtil;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
+import org.teavm.backend.wasm.model.WasmType;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.MethodReference;
 import org.teavm.model.PrimitiveType;
@@ -28,17 +29,13 @@ public class PreciseTypeInference extends BaseTypeInference<PreciseValueType> {
     public static final PreciseValueType OBJECT_TYPE = new PreciseValueType(ValueType.object("java.lang.Object"),
             false);
     private ClassHierarchy hierarchy;
-    private Predicate<String> missingClass;
+    private WasmGCTypeMapper typeMapper;
 
-    /**
-     * @param missingClass tells whether a class is missing from the class path. Such a class has only null values,
-     *                     so a merge treats it as the bottom type.
-     */
     public PreciseTypeInference(Program program, MethodReference reference, ClassHierarchy hierarchy,
-            Predicate<String> missingClass) {
+            WasmGCTypeMapper typeMapper) {
         super(program, reference);
         this.hierarchy = hierarchy;
-        this.missingClass = missingClass;
+        this.typeMapper = typeMapper;
     }
 
     @Override
@@ -95,14 +92,18 @@ public class PreciseTypeInference extends BaseTypeInference<PreciseValueType> {
                     if (p.equals(q)) {
                         return a;
                     }
+                    if (typeMapper != null && typeMapper.mapType(a.valueType) == WasmType.EXTERN
+                            && typeMapper.mapType(b.valueType) == WasmType.EXTERN) {
+                        return a;
+                    }
                     var first = hierarchy.getClassSource().get(p);
                     var second = hierarchy.getClassSource().get(q);
                     // A class missing from the class path has only null values, and WasmGCTypeMapper maps it to the
                     // bottom type (ref null none). So it joins as the bottom: the merge is the other operand.
-                    if (first == null && missingClass.test(p)) {
+                    if (first == null && typeMapper != null && typeMapper.isMissingFromClassPath(p)) {
                         return b;
                     }
-                    if (second == null && missingClass.test(q)) {
+                    if (second == null && typeMapper != null && typeMapper.isMissingFromClassPath(q)) {
                         return a;
                     }
                     if (first == null) {

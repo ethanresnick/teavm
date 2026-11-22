@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -26,6 +27,7 @@ import org.teavm.junit.TestPlatform;
 
 // The C runtime has no entropy source, so it must not hand out a SecureRandom.
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 @OnlyPlatform(TestPlatform.C)
 public class SecureRandomCTest {

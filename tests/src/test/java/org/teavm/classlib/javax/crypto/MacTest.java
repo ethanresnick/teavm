@@ -35,9 +35,11 @@ import javax.crypto.ShortBufferException;
 import javax.crypto.spec.SecretKeySpec;
 import javax.security.auth.DestroyFailedException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class MacTest {
     // RFC 2202 test cases 1-7: the expected HMAC-MD5 and HMAC-SHA1 values. rfc2202Vectors() builds the inputs.
     private static final String[][] RFC_2202 = {

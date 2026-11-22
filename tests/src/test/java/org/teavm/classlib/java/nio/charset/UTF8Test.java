@@ -26,6 +26,7 @@ import java.nio.charset.CoderResult;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -244,6 +245,7 @@ public class UTF8Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decodeMalformedInputWithJdkLengths() {
         assertEquals("\uFFFD", decode(0xE4, 0xB8));
         assertEquals("\uFFFDA", decode(0xE4, 0xB8, 0x41));
@@ -261,11 +263,13 @@ public class UTF8Test {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeLoneLowSurrogate() {
         assertArrayEquals(new byte[] { 97, 63, 98 }, "a\uDC00b".getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
+    @AsyncEnabled
     public void encodeLeavesHighSurrogateAtEndOfChunk() {
         CharsetEncoder encoder = StandardCharsets.UTF_8.newEncoder();
         CharBuffer input = CharBuffer.wrap("a\uD83D");
@@ -282,6 +286,7 @@ public class UTF8Test {
     private static final int[] FEW_BYTES = { 0x41, 0x80, 0x90, 0xBF, 0xC2, 0xE0, 0xE1, 0xED, 0xF0, 0xF4, 0xF5 };
 
     @Test
+    @AsyncEnabled
     public void decodeEveryShortSequenceAsJdk() {
         CharsetDecoder decoder = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_8);
         CharsetTestCommon.forEachSequence(BYTES, 3, sequence -> {
@@ -297,6 +302,7 @@ public class UTF8Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decodeAcrossEndOfInternalBuffer() {
         CharsetDecoder decoder = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_8);
         CharsetTestCommon.forEachSequence(FEW_BYTES, 4, sequence -> {
@@ -306,6 +312,7 @@ public class UTF8Test {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeEveryShortSequenceAsJdk() {
         CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_8);
         CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 5, sequence -> {
@@ -315,6 +322,7 @@ public class UTF8Test {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeAcrossEndOfInternalBuffer() {
         CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_8);
         CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 3, sequence -> {

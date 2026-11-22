@@ -20,6 +20,7 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -117,6 +118,7 @@ public class UTF16Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decodeSurrogatePairAtEndOfInput() {
         assertEquals("a😀", new String(CharsetTestCommon.hexToBytes("0061D83DDE00"),
                 StandardCharsets.UTF_16BE));
@@ -127,6 +129,7 @@ public class UTF16Test {
     // CharsetEncoder(Charset, float, float, byte[]): the replacement "must be legal", and the single byte '?' is not
     // a legal UTF-16 sequence. The JDK's UTF-16 encoders replace with U+FFFD in their byte order.
     @Test
+    @AsyncEnabled
     public void encodeLoneSurrogateAsReplacementCharacter() {
         assertEquals("0061FFFD0062", CharsetTestCommon.bytesToHex("a\uD800b".getBytes(StandardCharsets.UTF_16BE)));
         assertEquals("6100FDFF6200", CharsetTestCommon.bytesToHex("a\uDC00b".getBytes(StandardCharsets.UTF_16LE)));
@@ -136,6 +139,7 @@ public class UTF16Test {
     private static final int[] BYTES = { 0x00, 0x41, 0xD8, 0xDB, 0xDC, 0xDF };
 
     @Test
+    @AsyncEnabled
     public void decodeEveryShortSequenceAsJdk() {
         CharsetDecoder decoderBE = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_16BE);
         CharsetDecoder decoderLE = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_16LE);
@@ -147,6 +151,7 @@ public class UTF16Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decodeAcrossEndOfInternalBuffer() {
         CharsetDecoder decoder = CharsetTestCommon.replacingDecoder(StandardCharsets.UTF_16BE);
         CharsetTestCommon.forEachSequence(BYTES, 5, sequence -> {
@@ -157,6 +162,7 @@ public class UTF16Test {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeEveryShortSequenceAsJdk() {
         CharsetEncoder encoderBE = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_16BE);
         CharsetEncoder encoderLE = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_16LE);
@@ -168,6 +174,7 @@ public class UTF16Test {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeAcrossEndOfInternalBuffer() {
         CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.UTF_16BE);
         CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 3, sequence -> {

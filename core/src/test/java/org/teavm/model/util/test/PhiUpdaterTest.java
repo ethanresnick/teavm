@@ -21,7 +21,6 @@ import org.junit.Test;
 import org.junit.rules.TestName;
 import org.teavm.model.ListingParseUtils;
 import org.teavm.model.Program;
-import org.teavm.model.Variable;
 import org.teavm.model.text.ListingBuilder;
 import org.teavm.model.util.PhiUpdater;
 
@@ -51,23 +50,52 @@ public class PhiUpdaterTest {
     }
 
     @Test
+    public void exceptionPhiAfterBlockPhi() {
+        doTest();
+    }
+
+    @Test
+    public void existingExceptionPhiTwoVariables() {
+        doTest();
+    }
+
+    @Test
+    public void existingExceptionPhiInLoop() {
+        doTest();
+    }
+
+    @Test
     public void phiIncoming() {
         doTest();
     }
 
+    @Test
+    public void exceptionPhiFromParameter() {
+        doTest(1);
+    }
+
+    @Test
+    public void existingExceptionPhiFromParameter() {
+        doTest(1);
+    }
+
     private void doTest() {
+        doTest(0);
+    }
+
+    private void doTest(int parameterCount) {
         String originalPath = PREFIX + name.getMethodName() + ".original.txt";
         String expectedPath = PREFIX + name.getMethodName() + ".expected.txt";
         Program original = ListingParseUtils.parseFromResource(originalPath);
         Program expected = ListingParseUtils.parseFromResource(expectedPath);
 
-        new PhiUpdater().updatePhis(original, new Variable[0]);
+        new PhiUpdater().updatePhis(original, parameterCount);
 
         String originalText = new ListingBuilder().buildListing(original, "");
         String expectedText = new ListingBuilder().buildListing(expected, "");
         Assert.assertEquals(expectedText, originalText);
 
-        new PhiUpdater().updatePhis(original, new Variable[0]);
+        new PhiUpdater().updatePhis(original, parameterCount);
         String repeatedText = new ListingBuilder().buildListing(original, "");
         Assert.assertEquals("Repeated update", originalText, repeatedText);
     }

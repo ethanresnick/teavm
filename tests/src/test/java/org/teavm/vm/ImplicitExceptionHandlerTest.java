@@ -17,6 +17,7 @@ package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -25,6 +26,7 @@ import org.teavm.junit.TeaVMTest;
 // missing type shows only in optimized builds. Each try block reads its inputs from locals, so that nothing else in it
 // can throw.
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class ImplicitExceptionHandlerTest {
     private int index = 4;

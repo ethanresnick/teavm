@@ -18,12 +18,14 @@ package org.teavm.vm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
 // The class name and simple name of each exception that the runtime creates, caught by a supertype, and
 // catching it by its exact type. The program never names these classes otherwise.
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class RuntimeExceptionClassNameTest {
     private static int index = 4;

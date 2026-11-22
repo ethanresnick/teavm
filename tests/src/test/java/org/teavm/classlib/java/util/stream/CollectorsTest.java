@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -50,6 +51,7 @@ public class CollectorsTest {
     // joining(delimiter): "the input elements, separated by the specified delimiter, in encounter order".
     // An empty element is still an element, so it is still separated from its neighbors.
     @Test
+    @AsyncEnabled
     public void joiningKeepsDelimitersAroundEmptyElements() {
         assertEquals(",a", Stream.of("", "a").collect(Collectors.joining(",")));
         assertEquals("a,,b", Stream.of("a", "", "b").collect(Collectors.joining(",")));

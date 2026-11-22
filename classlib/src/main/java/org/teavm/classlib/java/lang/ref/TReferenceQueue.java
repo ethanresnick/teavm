@@ -21,7 +21,6 @@ import org.teavm.classlib.java.lang.TThreadInterruptHandler;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.platform.Platform;
-import org.teavm.platform.PlatformRunnable;
 import org.teavm.runtime.EventQueue;
 
 public class TReferenceQueue<T> {
@@ -97,7 +96,7 @@ public class TReferenceQueue<T> {
         return true;
     }
 
-    private class RemoveCallback implements EventQueue.Event, PlatformRunnable, AsyncCallback<TReference<T>>,
+    private class RemoveCallback implements EventQueue.Event, AsyncCallback<TReference<T>>,
             TThreadInterruptHandler {
         RemoveCallback next;
         RemoveCallback prev;

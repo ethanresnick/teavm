@@ -75,6 +75,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @SuppressWarnings("SuspiciousMethodCalls")
@@ -620,6 +621,7 @@ public class TreeMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void descendingComparatorReversesNaturalOrdering() {
         // NavigableMap.descendingMap: "The returned map has an ordering equivalent to
         // Collections.reverseOrder(comparator())."
@@ -873,6 +875,7 @@ public class TreeMapTest {
     // TreeMap: "A structural modification is any operation that adds or deletes one or more mappings; merely
     // changing the value associated with an existing key is not a structural modification."
     @Test
+    @AsyncEnabled
     public void replacingValueDuringIterationIsNotStructural() {
         var map = new TreeMap<String, Integer>();
         map.put("a", 1);
@@ -917,6 +920,7 @@ public class TreeMapTest {
     // key, or polling an empty view does not invalidate any of the map's iterators; adding a key or removing a
     // present key does.
     @Test
+    @AsyncEnabled
     public void onlyStructuralChangesInvalidateIterators() {
         var random = new Random(43);
         for (var size = 1; size <= 24; ++size) {
@@ -995,6 +999,7 @@ public class TreeMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void cloneDoesNotCallOverriddenPutOrPutAll() {
         var map = new FrozenTreeMap();
         map.put("a", "1");

@@ -43,12 +43,14 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
  * Multi-entry zips and multi-member gzip files, and reuse of an Inflater or a Deflater after reset().
  */
 @TeaVMTest
+@AsyncEnabled
 public class ZipInputStreamTest {
     // Written by the JDK 25 ZipOutputStream and GZIPOutputStream from content(...) below. JDK_ZIP_ENTRIES lists the
     // entries. dir/d.txt and f.txt are DEFLATED with sizes and CRC set before putNextEntry, so they have no data

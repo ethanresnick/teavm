@@ -29,6 +29,7 @@ import java.net.URLConnection;
 import java.net.URLStreamHandler;
 import java.net.URLStreamHandlerFactory;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -46,6 +47,7 @@ public class URLTest {
     
     
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void openStreamOfUnsupportedProtocolThrowsIOException() throws MalformedURLException {
         // FTP is unsupported by TeaVM, but the JVM would attempt a real network connection.
@@ -60,6 +62,7 @@ public class URLTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
     public void openStreamOfHttpThrowsIOExceptionWithoutXHR() throws MalformedURLException {
         // C has no HTTP client: opening an http or https URL must fail loudly, not return an empty stream.
@@ -617,6 +620,7 @@ public class URLTest {
     }
 
     @Test
+    @AsyncEnabled
     public void sameFileTreatsExplicitDefaultPortAsDefault() throws MalformedURLException {
         assertTrue(new URL("http://example.com/a").sameFile(new URL("http://example.com:80/a")));
         assertTrue(new URL("https://example.com/a").sameFile(new URL("https://example.com:443/a")));

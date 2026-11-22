@@ -29,6 +29,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.teavm.compiler.bootstrap.junit.platform.BootstrapWasmGCTestPlatform;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -258,6 +260,15 @@ public class StringTest {
     }
 
     @Test
+    public void isBlankWorks() {
+        assertTrue("".isBlank());
+        assertTrue("  ".isBlank());
+        assertTrue("\t\n \u2008\r\f".isBlank());
+        assertFalse(" a ".isBlank());
+        assertFalse("\u00A0".isBlank());
+    }
+
+    @Test
     public void convertedToCharArray() {
         char[] array = "123".toCharArray();
         assertEquals(3, array.length);
@@ -342,7 +353,7 @@ public class StringTest {
     private String turkish = "istanbul";
 
     @Test
-    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC })
+    @SkipPlatform({ TestPlatform.C, TestPlatform.WEBASSEMBLY_GC, BootstrapWasmGCTestPlatform.ID })
     public void convertsCaseLocaled() {
         assertEquals(turkish, "İstanbul".toLowerCase(new Locale("tr", "TR")));
         assertEquals(common, "İstanbul".toLowerCase(Locale.US));
@@ -390,6 +401,7 @@ public class StringTest {
     // join(CharSequence delimiter, Iterable<? extends CharSequence> elements): "Note that if an element is null,
     // then "null" is added."
     @Test
+    @AsyncEnabled
     public void joinNullElements() {
         CharSequence nullSequence = null;
         assertEquals("null", String.join("/", nullSequence));
@@ -405,6 +417,7 @@ public class StringTest {
     // negative, or endIndex is larger than the length of this String object, or beginIndex is larger than
     // endIndex". subSequence(int, int) behaves as substring. This holds for empty ranges too.
     @Test
+    @AsyncEnabled
     public void substringChecksBounds() {
         String str = "null";
         for (int begin = -1; begin <= 5; ++begin) {
@@ -430,7 +443,7 @@ public class StringTest {
         assertThrows(IndexOutOfBoundsException.class, () -> str.substring(-1));
         assertEquals("", str.substring(4));
     }
-    
+
     @Test
     public void testIsBlank() {
         assertTrue(new String(new char[0]).isBlank());
@@ -456,13 +469,26 @@ public class StringTest {
                 .codePoints().toArray());
         assertArrayEquals(new int[] { 56178 }, String.valueOf((char) 56178).codePoints().toArray());
     }
-    
+
+    @Test
+    public void lines() {
+        assertEquals(List.of(), "".lines().collect(Collectors.toList()));
+        assertEquals(List.of("abc"), "abc".lines().collect(Collectors.toList()));
+        assertEquals(List.of("abc"), "abc\n".lines().collect(Collectors.toList()));
+        assertEquals(List.of(""), "\n".lines().collect(Collectors.toList()));
+        assertEquals(List.of("", ""), "\n\n".lines().collect(Collectors.toList()));
+        assertEquals(List.of("a", "b", "", "c", "d"), "a\nb\r\n\rc\rd\r\n".lines().collect(Collectors.toList()));
+        assertEquals(List.of(" a ", "\t"), " a \r\t".lines().collect(Collectors.toList()));
+        assertEquals(List.of("a"), "a\nb\nc".lines().limit(1).collect(Collectors.toList()));
+        assertEquals(2, "a\n\nb".lines().filter(l -> !l.isEmpty()).count());
+    }
+
     @Test
     public void translateEscapes() {
         assertEquals("abc", "abc".translateEscapes());
         assertEquals("\n\r\t\n", "\\n\\r\\t\\12".translateEscapes());
     }
-    
+
     @Test
     public void stripIndent() {
         assertEquals("abc", "abc".stripIndent());
@@ -478,6 +504,7 @@ public class StringTest {
     // string is constructed from the corresponding component b in the byte array such that:
     // c == (char)(((hibyte & 0xff) << 8) | (b & 0xff))"
     @Test
+    @AsyncEnabled
     @SuppressWarnings("deprecation")
     public void hibyteConstructor() {
         assertEquals("Hi", new String(new byte[] { 72, 105 }, 0, 0, 2));
@@ -513,6 +540,7 @@ public class StringTest {
     // ascii.length - count". The class Javadoc: "Unless otherwise noted, passing a null argument to a
     // constructor or method in this class will cause a NullPointerException to be thrown."
     @Test
+    @AsyncEnabled
     @SuppressWarnings("deprecation")
     public void hibyteConstructorChecksBounds() {
         var bytes = new byte[] { 1, 2, 3 };
@@ -536,6 +564,7 @@ public class StringTest {
     // it is a sequence of one or more characters followed by the end of the string. A line does not include the
     // line terminator."
     @Test
+    @AsyncEnabled
     public void linesExamples() {
         assertEquals(List.of(), "".lines().collect(Collectors.toList()));
         assertEquals(List.of(""), "\n".lines().collect(Collectors.toList()));
@@ -553,6 +582,7 @@ public class StringTest {
     }
 
     @Test
+    @AsyncEnabled
     public void linesProperty() {
         forEachLinesCase((text, lines) -> {
             assertEquals(lines, text.lines().collect(Collectors.toList()), () -> describe(text));
@@ -579,6 +609,7 @@ public class StringTest {
     // string is empty, then an empty string is returned." White space is as defined by
     // Character.isWhitespace (via stripLeading/indexOfNonWhitespace).
     @Test
+    @AsyncEnabled
     public void indentExamples() {
         assertEquals("", "".indent(0));
         assertEquals("", "".indent(5));
@@ -597,6 +628,7 @@ public class StringTest {
     }
 
     @Test
+    @AsyncEnabled
     public void indentProperty() {
         int[] ns = { 0, 1, 2, 3, -1, -2, -3, -100, -Integer.MAX_VALUE, Integer.MIN_VALUE + 1, Integer.MIN_VALUE };
         forEachLinesCase((text, lines) -> {
@@ -623,6 +655,7 @@ public class StringTest {
     // Javadoc of transform(Function): "This method allows the application of a function to this string. The
     // function should expect a single argument of String type and produce an R result."
     @Test
+    @AsyncEnabled
     public void transform() {
         assertEquals("xy", "x".transform(s -> s + "y"));
         assertEquals(Integer.valueOf(3), "abc".transform(String::length));

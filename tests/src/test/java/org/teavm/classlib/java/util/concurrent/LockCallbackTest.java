@@ -21,6 +21,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.junit.jupiter.api.Test;
 import org.teavm.jso.browser.Window;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -32,6 +33,7 @@ import org.teavm.junit.TestPlatform;
  * work there, however long ago the current thread's time slice started.
  */
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 @OnlyPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC })
 public class LockCallbackTest {

@@ -17,7 +17,6 @@ package org.teavm.backend.wasm.dependencies;
 
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
-import java.lang.ref.WeakReference;
 import org.teavm.dependency.AbstractDependencyListener;
 import org.teavm.dependency.DependencyAgent;
 import org.teavm.dependency.DependencyNode;
@@ -26,12 +25,14 @@ import org.teavm.model.MethodReference;
 
 public class WasmGCReferenceQueueDependency extends AbstractDependencyListener {
     private DependencyNode valueNode;
+    private DependencyNode referenceNode;
     private boolean refQueuePassedToRef;
     private boolean refQueuePoll;
 
     @Override
     public void started(DependencyAgent agent) {
         valueNode = agent.createNode();
+        referenceNode = agent.createNode();
     }
 
     @Override
@@ -39,6 +40,7 @@ public class WasmGCReferenceQueueDependency extends AbstractDependencyListener {
         if (method.getMethod().getOwnerName().equals("java.lang.ref.WeakReference")) {
             switch (method.getMethod().getName()) {
                 case "<init>":
+                    method.getVariable(0).connect(referenceNode);
                     if (method.getMethod().parameterCount() == 2) {
                         refQueuePassedToRef = true;
                         checkRefQueue(agent);
@@ -59,10 +61,10 @@ public class WasmGCReferenceQueueDependency extends AbstractDependencyListener {
 
     private void checkRefQueue(DependencyAgent agent) {
         if (refQueuePassedToRef && refQueuePoll) {
-            agent.linkMethod(new MethodReference(ReferenceQueue.class, "supply", Reference.class, void.class))
-                    .propagate(0, ReferenceQueue.class)
-                    .propagate(1, WeakReference.class)
-                    .use();
+            var supply = agent.linkMethod(new MethodReference(ReferenceQueue.class,
+                    "supply", Reference.class, void.class));
+            supply.propagate(0, ReferenceQueue.class).use();
+            referenceNode.connect(supply.getVariable(1));
         }
     }
 }

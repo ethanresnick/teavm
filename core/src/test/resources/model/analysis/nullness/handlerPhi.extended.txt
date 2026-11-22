@@ -9,7 +9,7 @@ $try
     goto $join
     catch java.lang.RuntimeException goto $handler
 $handler
-    @y := phi @x_1 from $try, @x from $try
+    @y := phi @x from $try, @x_1 from $try
     invokeStatic `Foo.handle(LFoo;)V` @y
     goto $join
 $join

@@ -31,6 +31,7 @@ import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.java.lang.DoubleTest;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -287,6 +288,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compare() {
         assertEquals(0, Arrays.compare(new int[] { 1, 2 }, new int[] { 1, 2 }));
         assertEquals(-1, Integer.signum(Arrays.compare(new int[] { 1, 2 }, new int[] { 1, 3 })));
@@ -300,6 +302,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareUnsigned() {
         assertEquals(1, Integer.signum(Arrays.compareUnsigned(new byte[] { (byte) 0xff }, new byte[] { 1 })));
         assertEquals(1, Integer.signum(Arrays.compareUnsigned(new short[] { -1 }, new short[] { 1 })));
@@ -489,6 +492,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareMatchesLexicographicOrderOnRandomArrays() {
         var random = new Random(0x5EED);
         for (var kind : compareKinds()) {
@@ -556,6 +560,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareOrdersNullArraysFirst() {
         for (var kind : compareKinds()) {
             checkNullArrays(kind);
@@ -575,6 +580,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareRangeChecksIndexes() {
         for (var kind : compareKinds()) {
             checkRangeExceptions(kind);
@@ -607,6 +613,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareWithComparatorRequiresComparator() {
         // "NullPointerException - if the comparator is null"
         String[] a = { "a" };
@@ -616,6 +623,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareFloatingPointEdgeCases() {
         // Float.compare: "0.0f is considered by this method to be greater than -0.0f" and "Float.NaN is
         // considered by this method to be equal to itself and greater than all other float values (including
@@ -630,6 +638,7 @@ public class ArraysTest {
     }
 
     @Test
+    @AsyncEnabled
     public void compareUnsignedEdgeCases() {
         assertTrue(Arrays.compareUnsigned(new byte[] { (byte) 0x80 }, new byte[] { 0x7F }) > 0);
         assertTrue(Arrays.compare(new byte[] { (byte) 0x80 }, new byte[] { 0x7F }) < 0);

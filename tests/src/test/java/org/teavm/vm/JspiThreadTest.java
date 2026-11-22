@@ -15,6 +15,7 @@
  */
 package org.teavm.vm;
 
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
@@ -24,6 +25,7 @@ import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 @EachTestCompiledSeparately
 @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)

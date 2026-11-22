@@ -72,9 +72,15 @@ public class UnusedVariableElimination implements MethodOptimization {
     }
 
     private final ImplicitExceptions implicitExceptions;
+    private boolean allDivisionsUnsafe;
 
     public UnusedVariableElimination() {
-        this(ImplicitExceptions.REMOVE);
+        this(true);
+    }
+
+    public UnusedVariableElimination(boolean allDivisionsUnsafe) {
+        this(allDivisionsUnsafe ? ImplicitExceptions.KEEP_ALL : ImplicitExceptions.REMOVE);
+        this.allDivisionsUnsafe = allDivisionsUnsafe;
     }
 
     public UnusedVariableElimination(ImplicitExceptions implicitExceptions) {
@@ -88,7 +94,8 @@ public class UnusedVariableElimination implements MethodOptimization {
 
     public boolean optimize(MethodReader method, Program program) {
         Graph graph = VariableUsageGraphBuilder.build(program);
-        boolean[] escaping = VariableEscapeAnalyzer.findEscapingVariables(program, implicitExceptions);
+        boolean[] escaping = VariableEscapeAnalyzer.findEscapingVariables(program, implicitExceptions,
+                allDivisionsUnsafe);
         boolean[] used = new boolean[escaping.length];
 
         for (int i = 0; i <= method.parameterCount(); ++i) {

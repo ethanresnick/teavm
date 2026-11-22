@@ -40,6 +40,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -106,6 +107,7 @@ public class DeflateStreamTest {
 
     // A second flush with nothing new to flush made zlib report Z_BUF_ERROR, which used to throw.
     @Test
+    @AsyncEnabled
     public void gzipFlushTwiceRoundTrips() throws IOException {
         var bytes = new ByteArrayOutputStream();
         var gzip = new GZIPOutputStream(bytes);
@@ -123,6 +125,7 @@ public class DeflateStreamTest {
     // With syncFlush = true and more pending output than the 512-byte buffer, one deflate call left the rest of the
     // flush in the deflater, so the flushed bytes did not decode to all the data written.
     @Test
+    @AsyncEnabled
     public void gzipFlushWritesAllPendingOutput() throws IOException, DataFormatException {
         var data = new byte[20000];
         var random = new Random(1);
@@ -148,6 +151,7 @@ public class DeflateStreamTest {
     }
 
     @Test
+    @AsyncEnabled
     public void streamsRoundTripWithSmallBuffersAndOneByteReads() throws IOException {
         var data = (longString + longString).getBytes(StandardCharsets.UTF_8);
         for (int bufSize : new int[] { 1, 2, 7, 512 }) {
@@ -164,6 +168,7 @@ public class DeflateStreamTest {
 
     // A stream cut short at any position must end in EOFException, not loop or return a short result.
     @Test
+    @AsyncEnabled
     public void truncatedStreamsThrowAtEveryPosition() throws IOException {
         var data = longString.getBytes(StandardCharsets.UTF_8);
         var zlibBytes = new ByteArrayOutputStream();
@@ -224,6 +229,7 @@ public class DeflateStreamTest {
     }
 
     @Test
+    @AsyncEnabled
     public void damagedZlibHeaderFailsTheStream() {
         var in = new InflaterInputStream(new ByteArrayInputStream(new byte[] { 0x78, 0x00, 0x03, 0x00 }));
         assertThrows(IOException.class, in::readAllBytes);
@@ -262,6 +268,7 @@ public class DeflateStreamTest {
     // DeflaterOutputStream.flush Javadoc: without syncFlush, "this method only flushes the output stream without
     // flushing the compressor", so flush() adds nothing after the header here.
     @Test
+    @AsyncEnabled
     public void gzipOutputIsTheJdkOne() throws IOException {
         var output = new ByteArrayOutputStream();
         var gzip = new GZIPOutputStream(output);
@@ -274,6 +281,7 @@ public class DeflateStreamTest {
     }
 
     @Test
+    @AsyncEnabled
     public void gzipSyncFlush() throws IOException {
         var output = new ByteArrayOutputStream();
         var gzip = new GZIPOutputStream(output, true);
@@ -293,6 +301,7 @@ public class DeflateStreamTest {
     // inflate to all the data written so far, for every level, strategy and buffer size, including buffers smaller
     // than a sync marker.
     @Test
+    @AsyncEnabled
     public void syncFlushWritesAllPendingOutput() throws IOException, DataFormatException {
         var random = new Random(2);
         var noise = new byte[3000];
@@ -361,6 +370,7 @@ public class DeflateStreamTest {
     // DeflaterOutputStream.flush Javadoc: without syncFlush, "this method only flushes the output stream without
     // flushing the compressor".
     @Test
+    @AsyncEnabled
     public void flushWithoutSyncFlushOnlyFlushesTheStream() throws IOException {
         var data = longString.getBytes(StandardCharsets.UTF_8);
         for (int kind = 0; kind < 4; kind++) {
@@ -395,6 +405,7 @@ public class DeflateStreamTest {
 
     // After finish() the compressor has finished, so a sync flush has nothing to add, and must not fail.
     @Test
+    @AsyncEnabled
     public void syncFlushAfterFinishWritesNothing() throws IOException {
         var data = longString.getBytes(StandardCharsets.UTF_8);
         for (boolean gzip : new boolean[] { false, true }) {

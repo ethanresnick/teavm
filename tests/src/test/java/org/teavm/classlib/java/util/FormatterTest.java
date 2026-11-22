@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import java.math.BigDecimal;
 import java.util.DuplicateFormatFlagsException;
 import java.util.FormatFlagsConversionMismatchException;
 import java.util.Formattable;
@@ -28,6 +29,7 @@ import java.util.IllegalFormatCodePointException;
 import java.util.IllegalFormatConversionException;
 import java.util.IllegalFormatFlagsException;
 import java.util.IllegalFormatPrecisionException;
+import java.util.IllegalFormatWidthException;
 import java.util.Locale;
 import java.util.MissingFormatWidthException;
 import java.util.UnknownFormatConversionException;
@@ -284,6 +286,28 @@ public class FormatterTest {
     }
     
     @Test
+    public void roundsFloatHalfUp() {
+        assertEquals("0.3", new Formatter(Locale.US).format("%.1f", 0.25).toString());
+        assertEquals("1", new Formatter(Locale.US).format("%.0f", 0.5).toString());
+        assertEquals("-0.13", new Formatter(Locale.US).format("%.2f", -0.125).toString());
+        assertEquals("10.0", new Formatter(Locale.US).format("%.1f", 9.95).toString());
+        assertEquals("2.3", new Formatter(Locale.US).format("%.1f", 2.25f).toString());
+        // Formatter rounds the digits of Double.toString, not the exact binary value
+        assertEquals("1.01", new Formatter(Locale.US).format("%.2f", 1.005).toString());
+    }
+
+    @Test
+    public void roundsBigDecimalHalfUp() {
+        assertEquals("1", new Formatter(Locale.US).format("%.0f", new BigDecimal("0.5")).toString());
+        assertEquals("-1", new Formatter(Locale.US).format("%.0f", new BigDecimal("-0.5")).toString());
+        assertEquals("0.1", new Formatter(Locale.US).format("%.1f", new BigDecimal("0.05")).toString());
+        assertEquals("-0.1", new Formatter(Locale.US).format("%.1f", new BigDecimal("-0.05")).toString());
+        assertEquals("100000000000.00000000", new Formatter(Locale.US)
+                .format("%.8f", new BigDecimal("99999999999.999999995000")).toString());
+        assertEquals("0.13", new Formatter(Locale.US).format("%.2f", new BigDecimal("0.125")).toString());
+    }
+
+    @Test
     public void formatsEscapePercent() {
         assertEquals("%", new Formatter().format("%%", "%").toString());
         
@@ -300,5 +324,36 @@ public class FormatterTest {
         } catch (Exception e) {
             assertNotNull(e);
         }
+    }
+
+    @Test
+    public void escapedPercentDoesNotConsumeArgument() {
+        assertEquals("% 5", new Formatter().format("%% %d", 5).toString());
+        assertEquals("50% of x", new Formatter().format("%d%% of %s", 50, "x").toString());
+        assertEquals("% 5", new Formatter().format("%2$% %d", 5, 7).toString());
+        assertEquals("3 % 3", new Formatter().format("%d %% %<d", 3).toString());
+    }
+
+    @Test
+    public void formatsEscapedPercentWithWidth() {
+        assertEquals("    %", new Formatter().format("%5%").toString());
+        assertEquals("%    ", new Formatter().format("%-5%").toString());
+        var missingWidth = assertThrows(MissingFormatWidthException.class, () -> new Formatter().format("%1$-%"));
+        assertEquals("%-%", missingWidth.getFormatSpecifier());
+        assertThrows(IllegalFormatPrecisionException.class, () -> new Formatter().format("%.2%"));
+        var invalidFlags = assertThrows(IllegalFormatFlagsException.class, () -> new Formatter().format("%-+5%"));
+        assertEquals("-+", invalidFlags.getFlags());
+    }
+
+    @Test
+    public void formatsLineSeparator() {
+        var separator = System.lineSeparator();
+        assertEquals("a" + separator + "b", new Formatter().format("a%nb").toString());
+        assertEquals("1" + separator + "2", new Formatter().format("%d%n%d", 1, 2).toString());
+        assertEquals("1" + separator + "1", new Formatter().format("%d%n%<d", 1).toString());
+        var invalidFlags = assertThrows(IllegalFormatFlagsException.class, () -> new Formatter().format("%+ n"));
+        assertEquals("+ ", invalidFlags.getFlags());
+        assertThrows(IllegalFormatWidthException.class, () -> new Formatter().format("%5n"));
+        assertThrows(IllegalFormatPrecisionException.class, () -> new Formatter().format("%.2n"));
     }
 }

@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -75,6 +76,39 @@ public class MapTest {
                         Map.entry("p", 9), Map.entry("a", 10))));
     }
     
+    @Test
+    public void copyOfEmptyMapGet() {
+        Map<String, String> copied = Map.copyOf(Map.of());
+        assertNull(copied.get("missing"));
+    }
+
+    @Test
+    public void copyOfEmptyMutableMapGet() {
+        Map<String, String> copied = Map.copyOf(new HashMap<>());
+        assertNull(copied.get("missing"));
+    }
+
+    @Test
+    public void copyOfEmptyMapEntrySetContains() {
+        Map<String, String> copied = Map.copyOf(Map.of());
+        assertFalse(copied.entrySet().contains(Map.entry("missing", "value")));
+
+        Map<String, String> mutableCopied = Map.copyOf(new HashMap<>());
+        assertFalse(mutableCopied.entrySet().contains(Map.entry("missing", "value")));
+    }
+
+    @Test
+    public void copyOfMutableMapGet() {
+        Map<String, String> original = new HashMap<>();
+        original.put("first", "one");
+        original.put("second", "two");
+
+        Map<String, String> copied = Map.copyOf(original);
+        assertEquals("one", copied.get("first"));
+        assertEquals("two", copied.get("second"));
+        assertNull(copied.get("missing"));
+    }
+
     @Test
     public void copyOfOptimized() {
         Map<String, Integer> mapCopy1 = Map.copyOf(Map.of("q", 0, "w", 1, "e", 2));
@@ -168,6 +202,7 @@ public class MapTest {
     // Map.get: "Returns the value to which the specified key is mapped, or null if this map contains
     // no mapping for the key." Lookups in an empty immutable map must therefore simply miss.
     @Test
+    @AsyncEnabled
     public void emptyImmutableMapLookup() {
         checkEmptyLookup(Map.ofEntries());
         checkEmptyLookup(Map.copyOf(new HashMap<>()));
@@ -186,6 +221,7 @@ public class MapTest {
     // Keys whose hashCode() is Integer.MIN_VALUE (for which Math.abs is negative) and other extreme
     // hash codes must be storable and findable at every table size, and absent keys must miss.
     @Test
+    @AsyncEnabled
     public void immutableMapHandlesExtremeHashCodes() {
         for (int n = 0; n <= HASH_POOL.length; ++n) {
             for (int offset = 0; offset < HASH_POOL.length; ++offset) {
@@ -227,6 +263,7 @@ public class MapTest {
     // result in NullPointerException." Checked for every overload of Map.of and every position of the null, and for
     // Map.ofEntries, Map.entry, Map.copyOf and Map.Entry.copyOf.
     @Test
+    @AsyncEnabled
     public void factoriesRejectNullAtAnyPosition() {
         for (int pairs = 1; pairs <= 11; ++pairs) {
             for (int nullAt = 0; nullAt < 2 * pairs; ++nullAt) {

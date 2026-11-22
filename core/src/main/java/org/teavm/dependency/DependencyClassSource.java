@@ -49,6 +49,7 @@ import org.teavm.model.optimization.UnreachableBasicBlockEliminator;
 import org.teavm.model.transformation.ClassInitInsertion;
 import org.teavm.model.util.BasicBlockSplitter;
 import org.teavm.model.util.ModelUtils;
+import org.teavm.model.util.ProgramChecker;
 
 class DependencyClassSource implements ClassHolderSource {
     private DependencyAgent agent;
@@ -108,7 +109,7 @@ class DependencyClassSource implements ClassHolderSource {
         generatedClasses.put(cls.getName(), cls);
         for (MethodHolder method : cls.getMethods()) {
             if (method.getProgram() != null && method.getProgram().basicBlockCount() > 0) {
-                new UnreachableBasicBlockEliminator().optimize(method.getProgram());
+                new UnreachableBasicBlockEliminator().optimize(method.getProgram(), method.parameterCount());
             }
         }
         cache.remove(cls.getName());
@@ -178,6 +179,7 @@ class DependencyClassSource implements ClassHolderSource {
 
         ProgramEmitter pe = ProgramEmitter.create(program, innerHierarchy);
         BasicBlockSplitter splitter = new BasicBlockSplitter(program);
+        boolean hasInvokeDynamic = false;
         for (int i = 0; i < program.basicBlockCount(); ++i) {
             BasicBlock block = program.basicBlockAt(i);
             for (Instruction insn : block) {
@@ -185,6 +187,7 @@ class DependencyClassSource implements ClassHolderSource {
                     continue;
                 }
                 block = insn.getBasicBlock();
+                hasInvokeDynamic = true;
 
                 InvokeDynamicInstruction indy = (InvokeDynamicInstruction) insn;
                 MethodReference bootstrapMethod = new MethodReference(indy.getBootstrapMethod().getClassName(),
@@ -228,6 +231,9 @@ class DependencyClassSource implements ClassHolderSource {
             }
         }
         splitter.fixProgram();
+        if (hasInvokeDynamic && ProgramChecker.ENABLED) {
+            ProgramChecker.verify(program, method, "after invokedynamic replacement");
+        }
     }
 
     private void reportError(CallLocation location, String message, Object... args) {

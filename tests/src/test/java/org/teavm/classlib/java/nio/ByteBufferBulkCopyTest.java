@@ -21,9 +21,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class ByteBufferBulkCopyTest {
     @Test
     public void unalignedBulkCopiesPreserveBytesAndBoundaries() {

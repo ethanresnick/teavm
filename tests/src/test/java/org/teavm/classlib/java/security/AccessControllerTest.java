@@ -30,9 +30,11 @@ import java.security.PrivilegedExceptionAction;
 import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 @SuppressWarnings("removal")
 public class AccessControllerTest {
     // Java 24 Javadoc for checkPermission: "Throws AccessControlException." / "AccessControlException - always".

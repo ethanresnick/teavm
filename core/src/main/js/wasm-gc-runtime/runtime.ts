@@ -20,6 +20,8 @@ interface Context {
     exports: WebAssembly.Exports;
     userExports: Record<string, unknown>;
     stackDeobfuscator: ((addresses: number[]) => StackFrame[]) | null;
+    killedWithCode: number | null;
+    onExit: ((code: number) => void) | null;
 }
 
 interface StackFrame {
@@ -32,12 +34,14 @@ interface StackFrame {
 interface DefaultsResult {
     supplyExports(exports: WebAssembly.Exports): void;
     supplyStackDeobfuscator(deobfuscator: (addresses: number[]) => StackFrame[]): void;
+    killedWithCode: number | null;
 }
 
 export interface TeaVMInstance {
     exports: Record<string, unknown>;
     instance: WebAssembly.Instance;
     module: WebAssembly.Module;
+    killedWithCode: number | null;
 }
 
 export interface LoadOptions {
@@ -48,6 +52,7 @@ export interface LoadOptions {
     stack?: number;
     installImports?: (imports: Record<string, unknown>) => void;
     noAutoImports?: boolean;
+    onExit?: (code: number) => void;
 }
 
 interface DeobfuscatorOptions {
@@ -126,12 +131,15 @@ function setGlobalName(name: string, value: unknown): void {
 export function defaults(
     imports: Record<string, unknown>,
     userExports: Record<string, unknown>,
-    stringBuiltins: boolean
+    stringBuiltins: boolean,
+    onExit?: (code: number) => void
 ): DefaultsResult {
     const context: Context = {
         exports: null!,
         userExports,
-        stackDeobfuscator: null
+        stackDeobfuscator: null,
+        killedWithCode: null,
+        onExit: onExit ?? null
     };
     if (!stringBuiltins) {
         stringImports(imports);
@@ -139,7 +147,7 @@ export function defaults(
     dateImports(imports);
     consoleImports(imports);
     coreImports(imports, context);
-    asyncImports(imports);
+    asyncImports(imports, context);
     let jspi: unknown;
     let jspiInitialized = false;
     Object.defineProperty(imports, "teavmJspi", {
@@ -165,7 +173,10 @@ export function defaults(
         },
         supplyStackDeobfuscator(deobfuscator: (addresses: number[]) => StackFrame[]) {
             context.stackDeobfuscator = deobfuscator;
-        }
+        },
+        get killedWithCode(): number | null {
+            return context.killedWithCode;
+        },
     };
 }
 
@@ -213,6 +224,30 @@ function jspiImports(): WebAssembly.ModuleImports {
 
 const javaExceptionSymbol = Symbol("javaException");
 
+/**
+ * Thrown to JS code that calls anything exported by a module after the module was terminated
+ * by {@code System.exit}, including the call that terminated the module.
+ */
+export class ExitError extends Error {
+    readonly exitCode: number;
+
+    constructor(exitCode: number) {
+        super("TeaVM module was terminated with exit code " + exitCode);
+        this.name = "TeaVMExitError";
+        this.exitCode = exitCode;
+    }
+}
+
+function terminatedError(context: Context): Error {
+    return new ExitError(context.killedWithCode!);
+}
+
+function checkAlive(context: Context): void {
+    if (context.killedWithCode !== null) {
+        throw terminatedError(context);
+    }
+}
+
 class JavaError extends Error {
     #context: Context;
     [javaExceptionSymbol]: unknown;
@@ -225,6 +260,10 @@ class JavaError extends Error {
     }
 
     get message(): string {
+        if (this.#context.killedWithCode !== null) {
+            // Throwable.getMessage() may be overridden by user, don't run any Java code after System.exit
+            return "(could not fetch message, module was terminated)";
+        }
         const exceptionMessage = this.#context.exports["teavm.exceptionMessage"];
         const stringToJs = this.#context.exports["teavm.stringToJs"];
         if (typeof exceptionMessage === "function" && typeof stringToJs === "function") {
@@ -464,6 +503,9 @@ function extractDylinkInfo(module: WebAssembly.Module): DylinkInfo {
 
 function coreImports(imports: Record<string, unknown>, context: Context): void {
     const finalizationRegistry = new FinalizationRegistry<{ queue: unknown; ref: WeakRef<object> }>(heldValue => {
+        if (context.killedWithCode !== null) {
+            return;
+        }
         const ref = heldValue.ref.deref();
         const report = context.exports["teavm.reportGarbageCollectedValue"];
         if (ref !== void 0 && typeof report !== "undefined") {
@@ -475,6 +517,9 @@ function coreImports(imports: Record<string, unknown>, context: Context): void {
         finalizationRegistry.unregister(token);
     });
     const stringFinalizationRegistry = new FinalizationRegistry<unknown>(heldValue => {
+        if (context.killedWithCode !== null) {
+            return;
+        }
         const report = context.exports?.["teavm.reportGarbageCollectedString"];
         if (typeof report === "function") {
             (report as Function)(heldValue);
@@ -559,14 +604,34 @@ function coreImports(imports: Record<string, unknown>, context: Context): void {
         },
         decorateException(javaException: unknown) {
             new JavaError(context, javaException);
+        },
+        kill(code: number) {
+            if (context.killedWithCode !== null) {
+                return;
+            }
+            context.killedWithCode = code;
+            if (context.onExit !== null) {
+                context.onExit(code);
+            }
         }
     };
 }
 
-function asyncImports(imports: Record<string, unknown>): void {
+function asyncImports(imports: Record<string, unknown>, context: Context): void {
     imports.teavmAsync = {
         offerAfter(instance: unknown, fn: (instance: unknown) => void, delayMs: number) {
-            return setTimeout(() => { fn(instance); }, Math.max(0, Math.min(delayMs, 0x7FFFFFFF)));
+            return setTimeout(() => {
+                if (context.killedWithCode !== null) {
+                    return;
+                }
+                try {
+                    fn(instance);
+                } catch (e) {
+                    if (context.killedWithCode === null) {
+                        throw e;
+                    }
+                }
+            }, Math.max(0, Math.min(delayMs, 0x7FFFFFFF)));
         },
         kill(id: ReturnType<typeof setTimeout>) {
             clearTimeout(id);
@@ -663,8 +728,12 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
         return (context.exports["teavm.js.extractException"] as Function)(e);
     }
     function rethrowJavaAsJs(e: unknown): never {
+        if (context.killedWithCode !== null) {
+            throw terminatedError(context);
+        }
         throw javaExceptionToJs(e);
     }
+    const checkAliveFn = () => checkAlive(context);
     function getProperty(obj: Record<string, unknown> | null, prop: string): unknown {
         try {
             return obj !== null ? obj[prop] : getGlobalName(prop);
@@ -685,15 +754,16 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
             paramsForString[last] = "..." + paramsForString[last];
         }
         const paramsAsString = paramsForString.join(", ");
-        return new Function("rethrowJavaAsJs", "fn",
+        return new Function("rethrowJavaAsJs", "checkAlive", "fn",
             `return function(${paramsAsString}) {\n` +
+            `    checkAlive();\n` +
             `    try {\n` +
             `        return fn(${params.join(', ')});\n` +
             `    } catch (e) {\n` +
             `        rethrowJavaAsJs(e);\n` +
             `    }\n` +
             `};`
-        )(rethrowJavaAsJs, fn) as Function;
+        )(rethrowJavaAsJs, checkAliveFn, fn) as Function;
     }
     function renameConstructor(name: string, c: Function): Function {
         return new Function(
@@ -729,6 +799,7 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
                 } else if (constructor === null) {
                     throw new Error("This class can't be instantiated directly");
                 } else {
+                    checkAlive(context);
                     try {
                         return constructor.apply(null, arguments as unknown as unknown[]);
                     } catch (e) {
@@ -771,15 +842,16 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
                 paramsForString[last] = "..." + paramsForString[last];
             }
             const paramsAsString = paramsForString.join(", ");
-            cls.prototype[name] = new Function("rethrowJavaAsJs", "fn",
+            cls.prototype[name] = new Function("rethrowJavaAsJs", "checkAlive", "fn",
                 `return function(${paramsAsString}) {\n` +
+                `    checkAlive();\n` +
                 `    try {\n` +
                 `        return fn(${['this', ...params].join(", ")});\n` +
                 `    } catch (e) {\n` +
                 `        rethrowJavaAsJs(e);\n` +
                 `    }\n` +
                 `};`
-            )(rethrowJavaAsJs, fn);
+            )(rethrowJavaAsJs, checkAliveFn, fn);
         },
         defineStaticMethod(cls: any, name: string, fn: Function, vararg: boolean): void {
             cls[name] = defineFunction(fn, vararg);
@@ -788,6 +860,7 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
         defineProperty(cls: any, name: string, getFn: Function, setFn: Function | null): void {
             const descriptor: PropertyDescriptor = {
                 get() {
+                    checkAlive(context);
                     try {
                         return getFn(this);
                     } catch (e) {
@@ -797,6 +870,7 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
             };
             if (setFn !== null) {
                 descriptor.set = function(value: unknown) {
+                    checkAlive(context);
                     try {
                         setFn(this, value);
                     } catch (e) {
@@ -809,6 +883,7 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
         defineStaticProperty(cls: any, name: string, getFn: Function, setFn: Function | null): void {
             const descriptor: PropertyDescriptor = {
                 get() {
+                    checkAlive(context);
                     try {
                         return getFn();
                     } catch (e) {
@@ -818,6 +893,7 @@ function jsoImports(imports: Record<string, any>, context: Context, stringBuilti
             };
             if (setFn !== null) {
                 descriptor.set = function(value: unknown) {
+                    checkAlive(context);
                     try {
                         setFn(value);
                     } catch (e) {
@@ -1086,7 +1162,8 @@ export async function load(src: string | BufferSource, options?: LoadOptions): P
 
     const importObj: WebAssembly.Imports = {};
     const userExports: Record<string, unknown> = {};
-    const defaultsResult = defaults(importObj, userExports, await hasStringBuiltins());
+    const onExit = isNodeJs ? (code: number) => process.exit(code) : options.onExit;
+    const defaultsResult = defaults(importObj, userExports, await hasStringBuiltins(), onExit);
     const allocator = await linkImports(importObj, options, module, emscriptenModules);
     if (typeof options.installImports !== "undefined") {
         options.installImports(importObj);
@@ -1110,7 +1187,10 @@ export async function load(src: string | BufferSource, options?: LoadOptions): P
     const teavm: TeaVMInstance = {
         exports: userExports,
         instance,
-        module
+        module,
+        get killedWithCode(): number | null {
+            return defaultsResult.killedWithCode;
+        },
     };
     for (const key in instance.exports) {
         const exportObj = instance.exports[key];

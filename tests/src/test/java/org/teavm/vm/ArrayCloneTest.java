@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.function.IntSupplier;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -36,6 +37,7 @@ import org.teavm.junit.TeaVMTest;
  * non-escaping way must therefore not share a compilation with any other clone of the same type.
  */
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class ArrayCloneTest {
     static int sink;

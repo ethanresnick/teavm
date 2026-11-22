@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.teavm.interop.Import;
 import org.teavm.interop.c.Include;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.AttachC;
 import org.teavm.junit.IncludeC;
 import org.teavm.junit.OnlyPlatform;
@@ -37,6 +38,7 @@ import org.teavm.junit.TestPlatform;
 
 // Real symbolic links and permission bits on the C backend's POSIX file system.
 @TeaVMTest
+@AsyncEnabled
 @IncludeC("org/teavm/c/test/file-links.h")
 @AttachC("org/teavm/c/test/file-links.c")
 @SkipJVM

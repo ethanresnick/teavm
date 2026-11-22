@@ -18,6 +18,9 @@ function init() {
     this[teavm_javaField("java.lang.ref.ReferenceQueue", "inner")] = [];
     if (teavm_javaMethodExists("java.lang.ref.ReferenceQueue", "reportNext(Ljava/lang/ref/Reference;)Z")) {
         let registry = new (teavm_globals.FinalizationRegistry)(heldValue => {
+            if ($rt_exited()) {
+                return;
+            }
             if (typeof heldValue.token !== 'undefined') {
                 // The reference became unreachable before its referent
                 registry.unregister(heldValue.token);

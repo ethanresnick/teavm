@@ -22,9 +22,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.LinkedBlockingDeque;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class LinkedBlockingDequeTest {
     // LinkedBlockingDeque.addAll: "Attempts to addAll of a deque to itself result in IllegalArgumentException."
     // Throws: "IllegalArgumentException - if the collection is this deque"

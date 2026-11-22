@@ -35,6 +35,7 @@ final class PropertyNames {
     static final String SOURCE_DIRS = "teavm.junit.sourceDirs";
     static final String C_CLASS_LIST_FILE = "teavm.junit.c.classListFile";
     static final String TIMEOUT = "teavm.junit.timeout";
+    static final String JVM_ENABLED = "teavm.junit.jvm";
 
     private PropertyNames() {
     }

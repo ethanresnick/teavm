@@ -41,7 +41,6 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -51,10 +50,13 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.SynchronousQueue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
+
 @TeaVMTest
+@AsyncEnabled
 public class SynchronousQueueTest extends JSR166TestCase {
 
     // android-note: These tests have been moved into their own separate

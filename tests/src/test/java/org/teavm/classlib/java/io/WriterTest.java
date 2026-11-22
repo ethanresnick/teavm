@@ -24,9 +24,11 @@ import java.io.Writer;
 import java.util.List;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class WriterTest {
     // Writer.append(CharSequence csq): "If csq is null, then the four characters "null" are appended to this
     // writer." append(CharSequence csq, int start, int end): "If csq is null, then characters will be appended as

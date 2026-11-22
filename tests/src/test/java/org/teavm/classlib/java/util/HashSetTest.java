@@ -22,9 +22,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class HashSetTest {
     // HashSet.clone: "Returns a shallow copy of this HashSet instance". Object.clone: by convention,
     // "x.clone().getClass() == x.getClass()". So a LinkedHashSet's clone is a LinkedHashSet, in the same order.

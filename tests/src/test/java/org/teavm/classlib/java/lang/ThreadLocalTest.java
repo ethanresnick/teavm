@@ -24,6 +24,7 @@ import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.jso.browser.Window;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -33,6 +34,7 @@ public class ThreadLocalTest {
     private volatile int counter;
 
     @Test
+    @AsyncEnabled
     @OnlyPlatform(TestPlatform.JAVASCRIPT)
     public void concurrentUpdate() throws InterruptedException {
         var local = new ThreadLocal<String>();
@@ -93,6 +95,7 @@ public class ThreadLocalTest {
     }
 
     @Test
+    @AsyncEnabled
     public void inheritableThreadLocalPassesValueToNewThread() throws InterruptedException {
         var local = new InheritableThreadLocal<String>() {
             @Override
@@ -120,6 +123,7 @@ public class ThreadLocalTest {
     // inheritable thread-local variables for which the parent has values." childValue: "This method is called
     // from within the parent thread before the child is started."
     @Test
+    @AsyncEnabled
     public void inheritableThreadLocalEdgeCases() throws InterruptedException {
         var mainThread = Thread.currentThread();
         var childValueThreads = new Thread[1];
@@ -207,6 +211,7 @@ public class ThreadLocalTest {
     // childValue is user code. Both locals create another InheritableThreadLocal there, so whichever runs first
     // changes the set of locals while the snapshot still has the other one to visit.
     @Test
+    @AsyncEnabled
     public void childValueMayCreateInheritableThreadLocal() throws InterruptedException {
         var created = new ArrayList<InheritableThreadLocal<String>>();
         class Creating extends InheritableThreadLocal<String> {

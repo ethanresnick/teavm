@@ -28,10 +28,12 @@ import java.util.zip.Inflater;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class DeflaterParamsTest {
     @Test

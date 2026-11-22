@@ -164,7 +164,7 @@ public class TProperties extends THashtable<Object, Object> {
             buffer.setLength(0);
         }
     }
-    
+
     /**
      * Represents a unified abstraction for reading data either from an input stream or a reader.
      * This interface provides a common way to handle both binary and character sources.
@@ -177,7 +177,7 @@ public class TProperties extends THashtable<Object, Object> {
          * @throws IOException if an I/O error occurs during reading
          */
         int read() throws IOException;
-        
+
         /**
          * Closes the underlying stream or reader and releases any system resources associated with it.
          *
@@ -185,7 +185,7 @@ public class TProperties extends THashtable<Object, Object> {
          */
         void close() throws IOException;
     }
-    
+
     /**
      * Implementation of {@link StreamOrReader} for character-based input using a {@link TReader}.
      * This class wraps the provided reader with a {@link TBufferedReader} for efficient reading.
@@ -257,7 +257,7 @@ public class TProperties extends THashtable<Object, Object> {
 
     /**
      * Internal method that parses input from a {@link StreamOrReader} and loads key-value pairs.
-     */ 
+     */
     @SuppressWarnings("fallthrough")
     private synchronized void load(StreamOrReader sr) throws IOException {
         int mode = NONE;

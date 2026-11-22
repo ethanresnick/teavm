@@ -40,6 +40,7 @@ import java.util.Vector;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.LinkedBlockingDeque;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -48,6 +49,7 @@ import org.teavm.junit.TeaVMTest;
  * [...] Modifications to the view write through to the underlying collection."
  */
 @TeaVMTest
+@AsyncEnabled
 public class ReversedViewTest {
     private static List<SequencedCollection<Integer>> reversedViewsOf1To4() {
         List<SequencedCollection<Integer>> result = new ArrayList<>();

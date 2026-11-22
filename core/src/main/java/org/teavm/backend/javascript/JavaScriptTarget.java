@@ -47,6 +47,8 @@ import org.teavm.backend.javascript.codegen.OutputSourceWriterBuilder;
 import org.teavm.backend.javascript.codegen.RememberedSource;
 import org.teavm.backend.javascript.codegen.RememberingSourceWriter;
 import org.teavm.backend.javascript.codegen.SourceWriter;
+import org.teavm.backend.javascript.intrinsics.eventqueue.EventQueueDependencyListener;
+import org.teavm.backend.javascript.intrinsics.eventqueue.EventQueueGenerator;
 import org.teavm.backend.javascript.intrinsics.ref.ReferenceQueueGenerator;
 import org.teavm.backend.javascript.intrinsics.ref.ReferenceQueueTransformer;
 import org.teavm.backend.javascript.intrinsics.ref.WeakReferenceDependencyListener;
@@ -137,8 +139,8 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     private List<MethodContributor> forcedFunctionMethods = new ArrayList<>();
     private boolean strict;
     private BoundCheckInsertion boundCheckInsertion = new BoundCheckInsertion();
+    private DivisionCheckInsertion divisionCheckInsertion = new DivisionCheckInsertion();
     private NullCheckInsertion nullCheckInsertion = new NullCheckInsertion(NullCheckFilter.EMPTY);
-    private DivisionCheckInsertion divisionCheckInsertion = new DivisionCheckInsertion(method -> true);
     private final Map<String, String> importedModules = new LinkedHashMap<>();
     private JavaScriptTemplateFactory templateFactory;
     private JSModuleType moduleType = JSModuleType.UMD;
@@ -176,6 +178,10 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         var refQueueGenerator = new ReferenceQueueGenerator();
         methodGenerators.put(new MethodReference(ReferenceQueue.class, "<init>", void.class), refQueueGenerator);
         methodGenerators.put(new MethodReference(ReferenceQueue.class, "poll", Reference.class), refQueueGenerator);
+
+        var eventQueueGenerator = new EventQueueGenerator(templateFactory);
+        methodGenerators.put(EventQueueGenerator.OFFER, eventQueueGenerator);
+        methodGenerators.put(EventQueueGenerator.KILL, eventQueueGenerator);
     }
 
     @Override
@@ -293,19 +299,9 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         exceptionCons.use();
 
         if (strict) {
+            BoundCheckInsertion.contributeDependencies(dependencyAnalyzer);
             DivisionCheckInsertion.contributeDependencies(dependencyAnalyzer);
-
-            exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
-                    ArrayIndexOutOfBoundsException.class, "<init>", void.class));
-            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
-                    ArrayIndexOutOfBoundsException.class.getName()));
-            exceptionCons.use();
-
-            exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
-                    NullPointerException.class, "<init>", void.class));
-            exceptionCons.getVariable(0).propagate(dependencyAnalyzer.getClassType(
-                    NullPointerException.class.getName()));
-            exceptionCons.use();
+            NullCheckInsertion.contributeDependencies(dependencyAnalyzer);
 
             exceptionCons = dependencyAnalyzer.linkMethod(new MethodReference(
                     ClassCastException.class, "<init>", void.class));
@@ -346,6 +342,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         });
 
         dependencyAnalyzer.addDependencyListener(new WeakReferenceDependencyListener());
+        dependencyAnalyzer.addDependencyListener(new EventQueueDependencyListener());
         dependencyAnalyzer.addDependencyListener(reflection);
     }
 
@@ -385,14 +382,14 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
     public void beforeInlining(Program program, MethodReader method) {
         if (strict) {
             nullCheckInsertion.transformProgram(program, method.getReference());
-            divisionCheckInsertion.transformProgram(program, method.getReference());
-        }
+            }
     }
 
     @Override
     public void beforeOptimizations(Program program, MethodReader method) {
         if (strict) {
             boundCheckInsertion.transformProgram(program, method.getReference());
+            divisionCheckInsertion.transformProgram(program, method.getReference());
         }
     }
 
@@ -468,6 +465,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         renderer.renderStringConstants();
         renderer.renderCompatibilityStubs();
         emitMainMethod(classes, rememberingWriter);
+        emitRuntimeApi(rememberingWriter);
 
         for (var listener : rendererListeners) {
             listener.complete();
@@ -526,6 +524,19 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
         printStats(sourceWriter, totalSize);
     }
 
+    private void emitRuntimeApi(SourceWriter writer) {
+        var exitMethod = controller.getDependencyInfo().getMethod(new MethodReference(System.class, "exit",
+                int.class, void.class));
+        if (exitMethod == null || !exitMethod.isUsed()) {
+            return;
+        }
+        var alias = "$rt_export_teavmRuntime";
+        writer.startVariableDeclaration().appendFunction(alias)
+                .appendFunction("$rt_runtimeApi").append("()").endDeclaration();
+        exports.add(new ExportedDeclaration(w -> w.appendFunction(alias),
+                n -> n.functionName(alias), "teavmRuntime"));
+    }
+
     private void emitMainMethod(ClassReaderSource classes, SourceWriter writer) {
         var alias = "$rt_export_main";
         var ref = new MethodReference(controller.getEntryPoint(), TeaVM.MAIN_METHOD_DESC);
@@ -540,7 +551,7 @@ public class JavaScriptTarget implements TeaVMTarget, TeaVMJavaScriptHost {
             ref = new MethodReference(controller.getEntryPoint(), TeaVM.SHORT_MAIN_METHOD_DESC);
             mainMethod = classes.resolve(ref);
             if (mainMethod != null) {
-                instanceEntryPoint = true;
+                instanceEntryPoint = !mainMethod.hasModifier(ElementModifier.STATIC);
                 hasMainMethod = true;
             }
         }

@@ -19,12 +19,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
+@AsyncEnabled
 public class RuntimeTest {
     // Runtime.maxMemory(): "Returns the maximum amount of memory that the Java virtual machine will attempt
     // to use. If there is no inherent limit then the value Long.MAX_VALUE will be returned."

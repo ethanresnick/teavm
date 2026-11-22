@@ -23,9 +23,11 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class LoggerTest {
     // Logger.getResourceBundleName(): "Returns: localization bundle name (may be null)". getResourceBundle():
     // "Returns: localization bundle (may be null)". getLogger(String) creates a logger without a bundle.

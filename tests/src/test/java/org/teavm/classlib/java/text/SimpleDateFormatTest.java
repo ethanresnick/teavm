@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -203,6 +204,7 @@ public class SimpleDateFormatTest {
     // It doesn't say whether "GMT" is matched with regard to case. OpenJDK ignores case, and so does
     // TeaVM's zone name lookup, so "gmt+05:30" must not stop at "gmt" and lose the offset.
     @Test
+    @AsyncEnabled
     public void gmtOffsetParsedInAnyCase() {
         String[] offsets = { "05:30", "1:00", "12:00", "00:30", "0:00" };
         long[] offsetMillis = { 5 * 3600_000L + 1800_000L, 3600_000L, 12 * 3600_000L, 1800_000L, 0 };
@@ -225,6 +227,7 @@ public class SimpleDateFormatTest {
     }
 
     @Test
+    @AsyncEnabled
     public void numericZoneWithoutGmtPrefixRejected() {
         for (String pattern : new String[] { "yyyy-MM-dd HH:mm:ss z", "yyyy-MM-dd HH:mm:ss Z" }) {
             SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.ENGLISH);
@@ -238,36 +241,43 @@ public class SimpleDateFormatTest {
     }
 
     @Test
+    @AsyncEnabled
     public void numericGeneralTimeZoneHoursOver23Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss z", "2014-06-24 09:33:49 GMT+24:00");
     }
 
     @Test
+    @AsyncEnabled
     public void numericGeneralTimeZoneMinutesOver59Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss z", "2014-06-24 09:33:49 GMT+05:60");
     }
 
     @Test
+    @AsyncEnabled
     public void rfc822TimeZoneHoursOver23Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss Z", "2014-06-24 09:33:49 +2400");
     }
 
     @Test
+    @AsyncEnabled
     public void rfc822TimeZoneMinutesOver59Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss Z", "2014-06-24 09:33:49 +0560");
     }
 
     @Test
+    @AsyncEnabled
     public void iso8601TimeZoneHoursOver23Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss XXX", "2014-06-24 09:33:49 +24:00");
     }
 
     @Test
+    @AsyncEnabled
     public void iso8601TimeZoneMinutesOver59Rejected() {
         assertNotParsed("yyyy-MM-dd HH:mm:ss XXX", "2014-06-24 09:33:49 +05:60");
     }
 
     @Test
+    @AsyncEnabled
     public void largestNumericTimeZoneParsed() {
         long expected = 1403602429000L - 23 * 3600_000L - 59 * 60_000L;
         assertEquals(expected, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH),
@@ -285,6 +295,7 @@ public class SimpleDateFormatTest {
     // hang in markFromOldGeneration or crash with SIGSEGV. That happens with or without the range checks
     // under test, so it is a separate C GC bug; the targeted tests above still run on C.
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void numericTimeZoneRangeSweep() {
         // One format per pattern, and messages built only on failure, to keep allocation low.
@@ -356,6 +367,7 @@ public class SimpleDateFormatTest {
     // to the index of the character where the error occurred, and null is returned." Parsing must therefore
     // never throw, whatever prefix of a valid text it is given.
     @Test
+    @AsyncEnabled
     public void truncatedNumericTimeZoneNeverThrows() {
         String[][] cases = {
                 { "z", "GMT+05:30" }, { "Z", "+0530" }, { "X", "+05" }, { "XX", "+0530" }, { "XXX", "+05:30" },
@@ -386,6 +398,7 @@ public class SimpleDateFormatTest {
     }
 
     @Test
+    @AsyncEnabled
     public void gmtFollowedByTextParsed() {
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ENGLISH);
         ParsePosition position = new ParsePosition(0);
@@ -396,12 +409,14 @@ public class SimpleDateFormatTest {
     }
 
     @Test
+    @AsyncEnabled
     public void gmtBeforeOtherFieldsParsed() {
         assertEquals(1403602429000L, parseFully(new SimpleDateFormat("z yyyy-MM-dd HH:mm:ss", Locale.ENGLISH),
                 "GMT 2014-06-24 09:33:49"));
     }
 
     @Test
+    @AsyncEnabled
     public void gmtBeforeLiteralTextParsed() {
         assertEquals(1403602429000L, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z '(x)'", Locale.ENGLISH),
                 "2014-06-24 09:33:49 GMT (x)"));
@@ -415,6 +430,7 @@ public class SimpleDateFormatTest {
     // SIGSEGV. 30000 parses of "... Europe/Paris" crash the same way without this PR's change, so it is a
     // separate C GC bug (see numericTimeZoneRangeSweep); the targeted GMT tests above still run on C.
     @Test
+    @AsyncEnabled
     @SkipJVM
     @SkipPlatform(TestPlatform.C)
     public void everyZoneNameParsedUpToLongestMatch() {
@@ -482,6 +498,7 @@ public class SimpleDateFormatTest {
     // Known gap: TeaVM also accepts zone IDs, and GMT0 is one. So "GMT" followed by "0" matches GMT0,
     // while the JDK takes "GMT" alone and leaves "0" for the next field.
     @Test
+    @AsyncEnabled
     @Disabled("TeaVM matches the zone ID GMT0 where the JDK takes GMT and leaves the digit")
     public void gmtFollowedByDigitLeavesDigit() {
         assertEquals(1403602429000L, parseFully(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z'0'", Locale.ENGLISH),

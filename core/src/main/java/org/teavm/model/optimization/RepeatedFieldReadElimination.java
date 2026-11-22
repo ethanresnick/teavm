@@ -324,6 +324,7 @@ public class RepeatedFieldReadElimination implements MethodOptimization {
         for (BasicBlock block : program.getBasicBlocks()) {
             for (TryCatchBlock tryCatchBlock : block.getTryCatchBlocks()) {
                 exceptionHandlers[tryCatchBlock.getHandler().getIndex()] = true;
+                everythingInvalid[tryCatchBlock.getHandler().getIndex()] = true;
             }
         }
 
@@ -425,7 +426,6 @@ public class RepeatedFieldReadElimination implements MethodOptimization {
 
         @Override
         public void visit(InvokeInstruction insn) {
-            // A divisor check writes nothing; it only throws.
             if (!DivisionCheckInsertion.isCheck(insn.getMethod())) {
                 invalidatesAll = true;
             }

@@ -52,7 +52,7 @@ public class PreOptimizingClassHolderSource implements ClassHolderSource {
         NoSuchFieldCatchElimination noSuchFieldCatchElimination = new NoSuchFieldCatchElimination();
         for (MethodHolder method : cls.getMethods()) {
             if (method.getProgram() != null) {
-                noSuchFieldCatchElimination.apply(method.getProgram());
+                noSuchFieldCatchElimination.apply(method.getProgram(), method.parameterCount());
                 new GlobalValueNumbering(true).optimize(method.getProgram());
                 // The mode is not known here, and null checks are not inserted yet, so keep every instruction that
                 // can throw. TeaVM removes them later when it does not compile in strict mode.

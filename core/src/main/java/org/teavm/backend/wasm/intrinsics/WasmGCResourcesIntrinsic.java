@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Properties;
 import java.util.ServiceLoader;
-import org.teavm.ast.InvocationExpr;
 import org.teavm.backend.wasm.generate.methods.WasmGCGenerationUtil;
 import org.teavm.backend.wasm.model.WasmGlobal;
 import org.teavm.backend.wasm.model.WasmMemorySegment;
@@ -38,11 +37,13 @@ import org.teavm.backend.wasm.runtime.WasmGCResources;
 import org.teavm.classlib.ResourceSupplier;
 import org.teavm.classlib.ResourceSupplierContext;
 import org.teavm.extension.ExtensionEnvironment;
+import org.teavm.extension.ExtensionPolicySource;
 import org.teavm.extension.spi.resources.ResourcesPolicy;
 import org.teavm.model.CallLocation;
 import org.teavm.model.ListableClassReaderSource;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ValueType;
+import org.teavm.model.instructions.InvokeInstruction;
 
 public class WasmGCResourcesIntrinsic implements WasmGCInlineIntrinsic {
     private Properties properties;
@@ -50,12 +51,14 @@ public class WasmGCResourcesIntrinsic implements WasmGCInlineIntrinsic {
     private WasmGlobal baseGlobal;
     private WasmGCCodeGenContext genContext;
     private ExtensionEnvironment extensionEnv;
+    private ExtensionPolicySource extensionPolicies;
 
     public WasmGCResourcesIntrinsic(Properties properties, WasmGCCodeGenContext genContext,
-            ExtensionEnvironment extensionEnv) {
+            ExtensionEnvironment extensionEnv, ExtensionPolicySource extensionPolicies) {
         this.properties = properties;
         this.genContext = genContext;
         this.extensionEnv = extensionEnv;
+        this.extensionPolicies = extensionPolicies;
     }
 
     public void writeModule(WasmModule module) {
@@ -78,13 +81,14 @@ public class WasmGCResourcesIntrinsic implements WasmGCInlineIntrinsic {
     }
 
     @Override
-    public void apply(InvocationExpr invocation, WasmGCInlineIntrinsicContext context, WasmInstructionBuilder builder) {
+    public void apply(InvokeInstruction invocation, WasmGCInlineIntrinsicContext context,
+            WasmInstructionBuilder builder) {
         switch (invocation.getMethod().getName()) {
             case "acquireResources":
                 acquireResources(builder);
                 break;
             case "readSingleByte":
-                context.generate(builder, invocation.getArguments().get(0));
+                context.emitLocal(builder, invocation.getArguments().get(0));
                 builder.loadI32(1, 0, WasmInt32Subtype.UINT8);
                 break;
         }
@@ -99,7 +103,7 @@ public class WasmGCResourcesIntrinsic implements WasmGCInlineIntrinsic {
                 resourceSet.addAll(Arrays.asList(resources));
             }
         }
-        for (var policy : ServiceLoader.load(ResourcesPolicy.class, genContext.classLoader())) {
+        for (var policy : extensionPolicies.createPolicies(ResourcesPolicy.class)) {
             policy.initialize(extensionEnv);
             var resources = policy.supplyResources(genContext.classes().getClassNames());
             if (resources != null) {

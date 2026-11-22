@@ -512,12 +512,12 @@ public class TConcurrentHashMap<K, V> extends TAbstractMap<K, V>
         }
 
         var newValue = mappingFunction.apply(key);
+        if (newValue == null) {
+            return null;
+        }
         entry = getEntry(key, hash);
         if (entry != null) {
             return entry.value;
-        }
-        if (newValue == null) {
-            return null;
         }
         var index = computeIndex(hash);
         placeHashedEntry(key, newValue, index, hash);

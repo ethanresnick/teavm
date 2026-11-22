@@ -66,6 +66,7 @@ public class WasmGCGenerationContext implements BaseWasmGenerationContext {
     private WasmFunction aaiobeMethod;
     private WasmFunction cceMethod;
     private WasmFunction naseMethod;
+    private WasmFunction aeMethod;
     private WasmTag exceptionTag;
     private Map<String, Set<String>> interfaceImplementors;
     private WasmGCNameProvider names;
@@ -197,6 +198,14 @@ public class WasmGCGenerationContext implements BaseWasmGenerationContext {
                     ArrayIndexOutOfBoundsException.class));
         }
         return aaiobeMethod;
+    }
+
+    public WasmFunction aeMethod() {
+        if (aeMethod == null) {
+            aeMethod = functions().forStaticMethod(new MethodReference(WasmGCSupport.class, "ae",
+                    ArithmeticException.class));
+        }
+        return aeMethod;
     }
 
     public WasmFunction cceMethod() {

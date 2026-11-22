@@ -149,6 +149,10 @@ public class TCharacter extends TObject implements TComparable<TCharacter> {
         return new String(new char[] { c });
     }
 
+    public static String toString(int codePoint) {
+        return new String(toChars(codePoint));
+    }
+
     public static boolean isValidCodePoint(int codePoint) {
         return codePoint >= 0 && codePoint <= MAX_CODE_POINT;
     }
@@ -471,7 +475,7 @@ public class TCharacter extends TObject implements TComparable<TCharacter> {
         } else {
             int i;
             for (i = codePointOffset; i < 0 && index > 0; ++i) {
-                if (index > 0 && isLowSurrogate(seq.charAt(index - 1))
+                if (index > 1 && isLowSurrogate(seq.charAt(index - 1))
                         && isHighSurrogate(seq.charAt(index - 2))) {
                     index -= 2;
                 } else {
@@ -506,7 +510,7 @@ public class TCharacter extends TObject implements TComparable<TCharacter> {
         } else {
             int i;
             for (i = codePointOffset; i < 0 && index > start; ++i) {
-                if (index > start && isLowSurrogate(a[index - 1])
+                if (index > start + 1 && isLowSurrogate(a[index - 1])
                         && isHighSurrogate(a[index - 2])) {
                     index -= 2;
                 } else {

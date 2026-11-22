@@ -40,6 +40,7 @@ import java.util.Collections;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.teavm.interop.PlatformMarker;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -487,6 +488,7 @@ public class FileTest {
     // incrementing counter would, or anyone who sees one temporary file could prepare the next one. The numbers
     // between prefix and suffix are not an arithmetic sequence.
     @Test
+    @AsyncEnabled
     public void createTempFileNamesDoNotFollowSequence() throws IOException {
         var dir = new File("test-temp-sequence");
         dir.mkdirs();
@@ -1941,6 +1943,7 @@ public class FileTest {
     // canRead/canWrite/canExecute: "true if and only if the file specified by this abstract pathname exists and
     // ..." -- a missing file has no permissions to change or test.
     @Test
+    @AsyncEnabled
     public void permissionSettersOnMissingFileReturnFalse() {
         var file = new File("no-such-file-for-permissions");
         assertFalse(file.setWritable(false));
@@ -1955,6 +1958,7 @@ public class FileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void setWritableChangesAnExistingFile() throws IOException {
         var file = new File("file-for-set-writable");
         assertTrue(file.createNewFile());
@@ -1975,6 +1979,7 @@ public class FileTest {
     // both forms must change canRead/canWrite/canExecute, and each setter must leave the other two permissions
     // alone. Runs every setter, with both values and both ownerOnly forms, from each of the eight states.
     @Test
+    @AsyncEnabled
     public void permissionSettersChangeOnlyTheirOwnPermission() throws IOException {
         var file = new File("file-for-permission-setters");
         assertTrue(file.createNewFile());
@@ -2023,6 +2028,7 @@ public class FileTest {
     // The one-argument forms are "A convenience method to set the owner's ... permission", i.e. the two-argument
     // form with ownerOnly = true.
     @Test
+    @AsyncEnabled
     public void oneArgumentPermissionSettersChangeTheOwnersPermission() throws IOException {
         var file = new File("file-for-one-argument-permission-setters");
         assertTrue(file.createNewFile());
@@ -2044,6 +2050,7 @@ public class FileTest {
     // canRead: "true if and only if the file ... exists and can be read by the application"; the stream
     // constructors throw FileNotFoundException "if the file ... for some other reason cannot be opened".
     @Test
+    @AsyncEnabled
     public void clearedPermissionsBlockStreams() throws IOException {
         var file = new File("file-for-cleared-permissions");
         assertTrue(file.createNewFile());
@@ -2077,6 +2084,7 @@ public class FileTest {
     // A new regular file is not executable, and a new directory can be searched, which canExecute reports for a
     // directory on POSIX file systems.
     @Test
+    @AsyncEnabled
     public void canExecuteOfNewFileAndDirectory() throws IOException {
         var file = new File("file-for-can-execute");
         var dir = new File("dir-for-can-execute");
@@ -2096,6 +2104,7 @@ public class FileTest {
     // equivalent to evaluating the expression: FileSystems.getDefault().getPath(this.getPath()); Subsequent
     // invocations of this method return the same Path."
     @Test
+    @AsyncEnabled
     public void toPath() {
         var files = new File[] {
             new File("dir", "name.txt"),
@@ -2124,6 +2133,7 @@ public class FileTest {
     // "If this abstract pathname is the empty abstract pathname then this method returns a Path that may be used to
     // access the current user directory."
     @Test
+    @AsyncEnabled
     public void emptyFileToPath() throws IOException {
         var path = new File("").toPath();
         assertEquals(Path.of(""), path);

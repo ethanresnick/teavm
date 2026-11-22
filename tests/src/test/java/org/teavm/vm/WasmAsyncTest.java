@@ -23,12 +23,14 @@ import org.teavm.interop.AsyncCallback;
 import org.teavm.interop.Intrinsified;
 import org.teavm.interop.NativeAsync;
 import org.teavm.jso.browser.Window;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
+@AsyncEnabled
 @TeaVMTest
 @EachTestCompiledSeparately
 @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
@@ -65,10 +67,21 @@ public class WasmAsyncTest {
         assertEquals(54, teeThenSuspend());
     }
 
+    @Test
+    public void suspendingLoopExitsByFallThrough() {
+        assertEquals(3, loopExitByFallThrough(3));
+        assertEquals(1, loopExitByFallThrough(0));
+    }
+
     @Async
     @NativeAsync
     @Intrinsified
     private static native int generatedMethod(int n);
+
+    @Async
+    @NativeAsync
+    @Intrinsified
+    private static native int loopExitByFallThrough(int n);
 
     @Async
     @NativeAsync

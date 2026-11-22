@@ -40,7 +40,6 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
@@ -48,10 +47,13 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
+
 @TeaVMTest
+@AsyncEnabled
 public class ReentrantLockTest extends JSR166TestCase {
     // android-note: Removed because the CTS runner does a bad job of
     // retrying tests that have suite() declarations.

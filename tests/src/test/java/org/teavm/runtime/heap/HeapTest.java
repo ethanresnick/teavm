@@ -24,15 +24,17 @@ import java.util.TreeSet;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.teavm.compiler.bootstrap.junit.platform.BootstrapWasmGCTestPlatform;
 import org.teavm.interop.Address;
 import org.teavm.interop.Structure;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
-@OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
+@OnlyPlatform({TestPlatform.WEBASSEMBLY_GC, BootstrapWasmGCTestPlatform.ID})
 @SkipJVM
 public class HeapTest {
     private Address startBackup;
@@ -260,6 +262,7 @@ public class HeapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void allocLargerThanMaxSizeFails() {
         var a = Heap.alloc(256);
         assertEquals(0, Heap.alloc(Integer.MAX_VALUE).toInt());
@@ -278,6 +281,7 @@ public class HeapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void allocNearIntLimitFailsWithDefaultMaxSize() {
         // The JS runtime passes Integer.MAX_VALUE as maxSize unless the application sets one. A request that
         // can't fit together with its record header must fail, and must not wrap around when aligned.
@@ -299,6 +303,7 @@ public class HeapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void growReportsFailure() {
         // 32767 pages on top of the current memory (at least 2 pages) exceed the Wasm GC module's maximum of 32768
         // pages, so memory.grow fails. Heap.grow must then report 0 bytes. The heap itself does not change.

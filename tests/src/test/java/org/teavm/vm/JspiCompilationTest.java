@@ -78,6 +78,7 @@ public class JspiCompilationTest {
                 }
             });
         }
+        vm.setAsyncEnabled(true);
         vm.installPlugins();
         vm.setEntryPoint(Program.class.getName());
         vm.setOptimizationLevel(level);

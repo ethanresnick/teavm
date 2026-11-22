@@ -32,7 +32,6 @@ import org.teavm.diagnostics.Problem;
 import org.teavm.model.ClassHolderSource;
 import org.teavm.model.MethodReference;
 import org.teavm.model.ReferenceCache;
-import org.teavm.parsing.ClasspathResourceProvider;
 import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.vm.DirectoryBuildTarget;
 import org.teavm.vm.TeaVM;
@@ -52,7 +51,17 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
 
     abstract TestRunStrategy createRunStrategy(File outputDir);
 
-    abstract TestPlatform getPlatform();
+    /**
+     * Built-in platform which artifacts this platform produces, see {@link TestPlatform}.
+     */
+    abstract String getPlatform();
+
+    /**
+     * Identifier of this particular platform. Same as {@link #getPlatform()} for built-in platforms.
+     */
+    String getId() {
+        return getPlatform();
+    }
 
     abstract String getPath();
 
@@ -60,7 +69,7 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
 
     abstract List<TeaVMTestConfiguration<T>> getConfigurations();
 
-    abstract CompileResult compile(Consumer<TeaVM> additionalProcessing, String baseName,
+    abstract CompileResult compile(TestEntryPointSpec entryPoint, String baseName,
             TeaVMTestConfiguration<T> configuration, File path, AnnotatedElement element);
 
     abstract boolean usesFileName();
@@ -84,7 +93,7 @@ abstract class TestPlatformSupport<T extends TeaVMTarget> {
             TeaVM vm = new TeaVMBuilder(target)
                     .setClassLoader(classLoader)
                     .setClassSource(classSource)
-                    .setResourceProvider(new ClasspathResourceProvider(classLoader, false))
+                    .setResourceProvider(TeaVMTestInfrastructure.resourceProvider)
                     .setReferenceCache(referenceCache)
                     .setDependencyAnalyzerFactory(dependencyAnalyzerFactory)
                     .setStrict(true)

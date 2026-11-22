@@ -19,10 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class StringCaseComparisonTest {
     private static final String[][] GROUPS = {
         { "I", "i", "\u0130", "\u0131" }, { "\u03a3", "\u03c3", "\u03c2" },
