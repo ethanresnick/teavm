@@ -379,29 +379,19 @@ public class WasmGCMethodGenerator implements BaseWasmFunctionRepository {
         if (function.getBody().getLast() instanceof WasmReturn) {
             function.getBody().getLast().delete();
         }
-        optimizeInstructions(function, isSuspend);
+        new WasmInstructionsOptimizer().optimize(function);
         new WasmDeadStoreOptimizer().optimize(function);
-        if (!isSuspend || jspi) {
-            var localsOptimizer = new WasmLocalsOptimizer();
-            localsOptimizer.setFriendlyToDebugger(friendlyToDebugger);
-            localsOptimizer.optimize(function);
-        }
+        var localsOptimizer = new WasmLocalsOptimizer();
+        localsOptimizer.setFriendlyToDebugger(friendlyToDebugger);
+        localsOptimizer.optimize(function);
         new WasmIdentityCopyOptimizer().visitMany(function.getBody());
-        optimizeInstructions(function, isSuspend);
+        new WasmInstructionsOptimizer().optimize(function);
         if (isSuspend && !jspi) {
             if (coroutineTransformation == null) {
                 coroutineTransformation = new CoroutineTransformation(functionTypes, this, classInfoProvider);
             }
             coroutineTransformation.transform(function);
         }
-    }
-
-    private void optimizeInstructions(WasmFunction function, boolean isSuspend) {
-        var optimizer = new WasmInstructionsOptimizer();
-        // Coroutine splitting must keep guard exits distinct from the following conditional's exits.
-        // Reconstructing them as if-arm targets can redirect a normal path into a preceding exception guard.
-        optimizer.setConditionalReconstructionEnabled(!isSuspend || jspi);
-        optimizer.optimize(function);
     }
 
     private void wrapSynchronizedMethod(MethodHolder method, WasmCodeGenerator codeGen,

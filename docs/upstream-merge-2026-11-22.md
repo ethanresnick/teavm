@@ -14,7 +14,9 @@ The 139-commit inventory below defines the reviewed snapshot; later upstream com
 
 The fork's JSPI mode, failed/async class initialization, negative array size checks, and direct multidimensional-array constructors were implemented in the old generator. They are ported to the replacement. The deleted `WasmGCInstructionGenerationVisitor` is not kept alongside the new architecture.
 
-One integration workaround is required: condition reconstruction in `WasmInstructionsOptimizer` can redirect ordinary coroutine paths into earlier exception guards. Existing fork tests `ObjectTest.endedWaitsDoNotKeepThreadsAlive` and `WeakReferenceTest.queueRemoveDeliversEachReferenceOnce` exposed spurious NegativeArraySizeException/ArrayIndexOutOfBoundsException. Keep this reconstruction step disabled for functions that will undergo coroutine splitting; retain the other Wasm instruction optimizations. Also skip local-variable coalescing for these functions: without reconstruction, it fails its interference assertion on the upstream arrays-live-across-suspension regression. JSPI and non-suspending functions retain both optimizations. The performance effect of this conservative restriction has not been measured.
+The coroutine splitter must preserve the distinction between an exit from an original conditional arm and the synthetic branch that selects the else arm. Both the optimized and general splitting paths previously redirected original then-arm exits to an inner block, allowing execution to fall through into else. Map original arm exits to the outer wrapper; in the general path, target the inner wrapper directly for the synthetic else-selection branch. Condition reconstruction and local-variable coalescing remain enabled for coroutine functions.
+
+The fork's monitor/reference-queue regressions first exposed this defect. Three standalone Java regressions in `CoroutineConditionalTest` also reproduce it on unmodified upstream, without JSPI or fork class-library changes: a suspendable then-arm exit returns 3 instead of 2, its nested form returns 4 instead of 2, and a value-producing nested conditional returns 13 instead of 12. All three pass with the targeted fix. Restoring only the general splitting path's old behavior makes the value-producing regression fail again, establishing coverage of both paths. The standalone fix and regressions are also proposed upstream in [PR #1386](https://github.com/konsoletyper/teavm/pull/1386).
 
 ### SSA and optimizer invariants
 
@@ -79,7 +81,7 @@ Completed locally with JDK 25. The core suite and both style tasks passed; all r
 | Check | JUnit cases | Passed | Skipped | Result |
 | --- | ---: | ---: | ---: | --- |
 | Core compiler suite | 569 | 567 | 2 | Pass |
-| Targeted JVM/JS/Wasm GC, including JSPI | 478 | 476 | 2 | Pass |
+| Targeted JVM/JS/Wasm GC, including JSPI | 536 | 534 | 2 | Pass |
 | Targeted native C on macOS | 101 | 100 | 1 | Pass |
 | Repository-wide checkstyleMain | — | — | — | Pass |
 | Repository-wide checkstyleTest | — | — | — | Pass |
@@ -87,9 +89,11 @@ Completed locally with JDK 25. The core suite and both style tasks passed; all r
 
 Backend tests ran with optimized and unoptimized configurations, and `teavm.tests.checkIr=true`. JS minification was disabled for this targeted run. Browser execution used the existing headless Chromium installation. Native C used the repository's `compile-c-macos-fast.sh` and disabled the debugger wrapper.
 
-The JS/Wasm group covers BufferedWriter, AsyncTest, VMTest, DivisionByZero, IntegerDivision, implicit exception handlers, JSPI compilation/VM/thread behavior, monitors and reference queues, collections/concurrent maps/blocking queues, console output, RandomAccessFile, floating-point grouping, Math, Random, line/indent/blank-string behavior and resource bundles. The C group covers arithmetic, Math, Random, BufferedWriter, RandomAccessFile and monitor entry/reentrancy/wait-notify cases.
+The JS/Wasm group covers BufferedWriter, CoroutineConditionalTest, AsyncTest, VMTest, DivisionByZero, IntegerDivision, implicit exception handlers, JSPI compilation/VM/thread behavior, monitors and reference queues, collections/concurrent maps/blocking queues, console output, RandomAccessFile, floating-point grouping, Math, Random, line/indent/blank-string behavior and resource bundles. The C group covers arithmetic, Math, Random, BufferedWriter, RandomAccessFile and monitor entry/reentrancy/wait-notify cases.
 
-The full repository test suite across every backend, bootstrap self-hosting execution, Linux/GCC CI, performance benchmarks and Kafka application acceptance were not run. The coroutine-optimizer performance tradeoff described above remains unmeasured.
+The browser suite was rerun after restoring both optimizations; it includes all 62 StringTest cases as well as the three new coroutine cases. The targeted coroutine fix was separately validated on upstream `4dfbc459a`: all three new regressions fail before the fix and pass afterward, together with 18 existing `AsyncTest` cases. The upstream core suite passed 534 cases with two skips; repository-wide main/test style checks passed. The fork's focused async, JSPI, monitor, and reference-queue group passed 172 cases with one skip. These checks used optimized/unoptimized browser compilation and IR verification.
+
+The full repository test suite across every backend, bootstrap self-hosting execution, Linux/GCC CI, performance benchmarks and Kafka application acceptance were not run. The normal optimizer pipeline is restored; no performance benchmark was run.
 
 
 ## Detailed comparison of materially different overlapping fixes

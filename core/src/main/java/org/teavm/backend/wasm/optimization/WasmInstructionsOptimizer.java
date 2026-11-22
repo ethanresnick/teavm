@@ -161,7 +161,6 @@ import org.teavm.backend.wasm.model.instruction.WasmUnreachable;
  */
 public class WasmInstructionsOptimizer {
     private WasmFunction function;
-    private boolean conditionalReconstructionEnabled = true;
     private final Map<WasmInstructionList, Set<WasmInstruction>> branchRefs = new HashMap<>();
     private final Map<WasmInstructionList, List<WasmCatchClause>> branchCatchRefs = new HashMap<>();
     private final WasmTypeInference conditionTypeInference = new WasmTypeInference();
@@ -180,16 +179,10 @@ public class WasmInstructionsOptimizer {
      */
     private Write[] writesByLocal;
 
-    public void setConditionalReconstructionEnabled(boolean enabled) {
-        conditionalReconstructionEnabled = enabled;
-    }
-
     public void optimize(WasmFunction function) {
         this.function = function;
         new BranchRefCollector().visitMany(function.getBody());
-        if (conditionalReconstructionEnabled) {
-            reconstructConditionals(function.getBody());
-        }
+        reconstructConditionals(function.getBody());
         writesByLocal = new Write[function.getLocalVariables().size()];
         processList(function.getBody(), null);
         writesByLocal = null;
