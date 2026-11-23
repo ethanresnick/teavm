@@ -185,6 +185,8 @@ The comparisons below use the pre-merge fork tip `ce2e810bf` and upstream tip `4
 
 **Comparison/merge:** runtime behavior is equivalent; upstream avoids the placeholder method and generates the cross-class call explicitly. Adopt the upstream construction. Retain fork timeout/interrupt semantics and propagate actual reference subclasses into `supply`, rather than only the base WeakReference type, so overridden methods remain reachable.
 
+**Follow-up cleanup (2026-11-23):** removed the accidentally retained template `reportNext` stub, its copy exclusion, and the template-method invocation remapper. No template method calls another template method after adopting upstream's generated `supply`, so the adapter is unused. The generated call to the real queue's `reportNext` and its fallback to `supplyImpl` remain intact. This cleanup was reviewed by source/diff inspection only; no new builds or tests were run.
+
 ### 9. Unmodifiable sorted/sequenced collection views
 
 **Issue:** an unmodifiable wrapper must protect nested views, iterator removal, entry mutation, default mutators and reversed views while reflecting changes to the backing collection.

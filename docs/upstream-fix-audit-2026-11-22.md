@@ -89,3 +89,9 @@ These are contract holes in the same methods, not a failure of the null-result b
 - This is not exhaustive execution of every test/backend. Native C, bootstrap self-hosting, and full application acceptance were not rerun in this follow-up. No absence-of-bugs claim is made for the unexecuted paths.
 
 The additional reproduced cases are already covered by retained fork production fixes. This follow-up changes the review record, not the sync's production implementation.
+
+## Reference-queue cleanup and scope clarification (2026-11-23)
+
+A source-only follow-up confirms that upstream's generated `supply` invokes the real queue's `reportNext` and then `supplyImpl`; the Java template no longer invokes a template method. Remove the unused template `reportNext` stub, copy exclusion and invocation-remapping adapter. This does not remove the real waiter-delivery hook. No additional builds or tests were run.
+
+The remaining enqueue-related differences need narrower descriptions: the C call to `teavm_reference_clear` is behavior-equivalent to the prior assignment with the current helper, and JS/Wasm manual enqueue still does not deliver the reference to the queue (the corresponding test explicitly skips those backends). Calling the overridable Java `clear()` from `enqueue()` also differs from the documented direct-clearing semantics, so the fork's implementation should not be submitted unchanged as a complete enqueue fix. The actual-subtype dependency propagation is retained, but the existing subtype regression passed on clean upstream; that change needs an isolated failing reproducer before being presented as a standalone upstream bug fix.

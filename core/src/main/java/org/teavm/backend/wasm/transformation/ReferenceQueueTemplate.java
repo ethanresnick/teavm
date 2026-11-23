@@ -44,10 +44,4 @@ class ReferenceQueueTemplate<T> {
         }
         end = entry;
     }
-
-    // Stands for ReferenceQueue.reportNext. ReferenceQueueTransformation does not copy this method, and it
-    // redirects calls to it to ReferenceQueue's own method.
-    protected boolean reportNext(Reference<T> reference) {
-        return false;
-    }
 }
