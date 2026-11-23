@@ -978,7 +978,7 @@ public class AstWriter {
             writer.ws();
         }
 
-        // + isn't associative (strings, floating point), and neither is * in floating point
+        // Addition can concatenate strings, and floating-point addition and multiplication are not associative.
         int rightPrecedence = switch (node.getType()) {
             case Token.ADD, Token.MUL, Token.DIV, Token.MOD, Token.SUB, Token.LSH, Token.RSH, Token.URSH, Token.IN,
                  Token.INSTANCEOF, Token.EQ, Token.NE, Token.SHEQ, Token.SHNE, Token.GT, Token.GE, Token.LT, Token.LE ->

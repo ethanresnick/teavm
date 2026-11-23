@@ -278,6 +278,7 @@ public class AstWriterTest {
         assertEquals("return a+(b -c);", transform("return a + (b - c);"));
         assertEquals("return a*(b*c);", transform("return a * (b * c);"));
         assertEquals("return a*(b/c);", transform("return a * (b / c);"));
+        assertEquals("return a*(b%c);", transform("return a * (b % c);"));
         assertEquals("return a*b/c;", transform("return (a * b) / c;"));
         assertEquals("return a+b*c;", transform("return a + (b * c);"));
         assertEquals("return a -b+c;", transform("return a - b + c;"));

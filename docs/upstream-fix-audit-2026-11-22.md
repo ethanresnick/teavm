@@ -58,7 +58,7 @@ Upstream `7248c2d7d` fixes the Java-expression StatementRenderer. JSBody scripts
 | `a + (b + c)`, with `1, 1e16, -1e16` | `1` | `0` |
 | `a * (b * c)`, with `1e308, 10, 0.1` | `1e308` | Infinity |
 
-This is independent of the `%` precedence defect. The sync retains the fork's AstWriter fix; adopting upstream PR #1387's StatementRenderer does not replace it.
+This is independent of the `%` precedence defect. The sync uses the exact AstWriter implementation and renderer tests proposed in upstream [#1388](https://github.com/konsoletyper/teavm/pull/1388); adopting upstream PR #1387's StatementRenderer does not replace this separate fix. Alignment with #1388 was reviewed by diff only; no additional local builds or tests were run.
 
 ### Concurrent-map null arguments
 
