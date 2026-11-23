@@ -8,6 +8,8 @@ The 139-commit inventory below defines the reviewed snapshot; later upstream com
 
 The [follow-up audit of incomplete upstream fixes](upstream-fix-audit-2026-11-22.md) corrects omissions in the earlier defect summary. It adds independently reproduced monitor, reference-queue, JSBody-grouping, and concurrent-map argument-validation gaps, distinguishes broader Random compatibility differences, and records the additional upstream/sync regression results.
 
+The [rejected approaches and API compatibility policy](#rejected-approaches-and-api-compatibility-policy) below preserve the reasons for excluding earlier work after its temporary worktrees and recovery copies were deleted.
+
 ## Major upstream changes
 
 ### Wasm GC generation
@@ -483,3 +485,43 @@ Chronological order, excluding commits already reachable from the fork:
 - `tools/junit/src/main/java/org/teavm/junit/TeaVMTestExecutionSupport.java`
 - `tools/junit/src/main/java/org/teavm/junit/TeaVMTestInfrastructure.java`
 - `tools/junit/src/main/java/org/teavm/junit/TestPlatformSupport.java`
+
+## Rejected approaches and API compatibility policy
+
+Recorded 2026-11-23, after reviewing and deleting obsolete worktrees and the recovery copies of excluded work. Keep this decision record even though the implementations were discarded. Historical measurements below come from the linked reviews; no new builds, tests or benchmarks were run to write this note.
+
+### Prefer missing APIs to broadly incorrect implementations
+
+APIs that cannot be implemented correctly are generally better left out than supplied with implementations that behave incorrectly for large classes of valid uses. Adding the signature and passing basic examples is insufficient if the implementation violates important lifecycle, interruption, concurrency or error semantics. A nominally available API can encourage applications to depend on behavior that TeaVM cannot provide.
+
+An intentionally supported subset needs an explicit, defensible contract and clear failures for unsupported operations. Do not silently return plausible results, skip required synchronization, or claim general compatibility when common valid cases are wrong. Such placeholders are not made acceptable merely because similar placeholders already exist in the class library; those existing gaps remain review candidates.
+
+When revisiting excluded work, identify the supported behavior, supply meaningful boundary and failure-path regressions, and assess runtime/code-size costs before restoring it. Prefer fixing a shared mechanism over adding separate incomplete implementations for each caller.
+
+### FileChannel and RandomAccessFile.getChannel
+
+The original work added a virtual-file-backed FileChannel, accessor/channel APIs, shared RandomAccessFile/channel close state, and directory-force behavior. Its interruptible lifecycle was incomplete. The full channel API and its ten original tests were removed from [fork PR #143](https://github.com/ethanresnick/teavm/pull/143); the narrower, existing RandomAccessFile lifecycle, resizing and synchronous-write fixes were retained and merged with replacement tests.
+
+Do not restore the old channel implementation merely to satisfy linkage. A future implementation needs its own review of the full supported channel lifecycle and interruption/close behavior. This exclusion is an application of the API policy above, rather than a rejection of FileChannel support in principle.
+
+### Monitor fairness through queue-empty acquisition guards
+
+[Fork PR #155](https://github.com/ethanresnick/teavm/pull/155) prevented an async thread from acquiring an unowned monitor while entrants were queued. It addressed cooperative-scheduler starvation and passed correctness checks, but forced repeated scheduled handoffs. The recorded two-contender workload regressed from about 58 microseconds to 4.9 milliseconds per acquisition on JS/Wasm GC, roughly 84 times slower. This was a specific contention workload, not a universal synchronized-block slowdown.
+
+The [closing assessment](https://github.com/ethanresnick/teavm/pull/155#issuecomment-6488091614) rejected the change on performance grounds. Both guards were needed for its proposed progress behavior, so retaining only one was not a correct compromise. The guards and their archived regression were discarded. Revisit the problem through a cheaper handoff/progress design; do not restore these guards or an unconditional yield policy without new evidence.
+
+### Broad coroutine optimization disabling
+
+Disabling conditional reconstruction and local-variable coalescing for coroutine-split functions was a temporary workaround. It was replaced with targeted branch-target fixes in both conditional-splitting paths, covered by standalone regressions and submitted as [upstream PR #1386](https://github.com/konsoletyper/teavm/pull/1386). The normal optimizer pipeline remains enabled. Do not resurrect the broad workaround from an older snapshot.
+
+### SecurityManager thread-group getter
+
+[Fork PR #151](https://github.com/ethanresnick/teavm/pull/151) added a getter delegating to the calling thread's ThreadGroup; it did not add security enforcement. The owner closed it without a recorded explanation. Preserve that distinction: there is no documented technical rejection to invent, and the closure does not establish that the getter itself was incorrect. Treat restoration as a new scope decision, rather than an omitted merge fix.
+
+### Optional retention of class-initializer failure causes
+
+[Fork PR #153](https://github.com/ethanresnick/teavm/pull/153) retained original initializer failures as causes of later NoClassDefFoundErrors. It was rejected as optional diagnostic behavior with disproportionate cross-backend complexity and size. The required first-failure conversion and subsequent erroneous-class behavior were already present; this proposal did not supply a separate required correctness fix. The [recorded decision](https://github.com/ethanresnick/teavm/pull/153#issuecomment-6482414554) therefore does not justify removing those required semantics, nor claiming the optional retention is required compatibility work.
+
+### Local validation setup
+
+Hard-coded paths to a developer's Chromium installation and temporary overrides that ran only optimized test configurations were local experiments. They do not belong in production defaults or the committed test runner: paths must be configurable, and normal validation must retain its intended configuration coverage. Their archived patches were deleted. A generally useful configurable feature would need a separate implementation and review.
