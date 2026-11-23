@@ -15,7 +15,7 @@
  */
 package org.teavm.backend.wasm.types;
 
-import java.util.function.Predicate;
+import org.teavm.backend.wasm.generate.classes.WasmGCTypeMapper;
 import org.teavm.model.ClassHierarchy;
 import org.teavm.model.MethodReference;
 import org.teavm.model.Program;
@@ -24,12 +24,12 @@ import org.teavm.model.util.VariableCategoryProvider;
 
 public class WasmGCVariableCategoryProvider implements VariableCategoryProvider {
     private ClassHierarchy hierarchy;
-    private Predicate<String> missingClass;
+    private WasmGCTypeMapper typeMapper;
     private boolean compactMode;
 
-    public WasmGCVariableCategoryProvider(ClassHierarchy hierarchy, Predicate<String> missingClass) {
+    public WasmGCVariableCategoryProvider(ClassHierarchy hierarchy, WasmGCTypeMapper typeMapper) {
         this.hierarchy = hierarchy;
-        this.missingClass = missingClass;
+        this.typeMapper = typeMapper;
     }
 
     public void setCompactMode(boolean compactMode) {
@@ -38,7 +38,7 @@ public class WasmGCVariableCategoryProvider implements VariableCategoryProvider 
 
     @Override
     public Object[] getCategories(Program program, MethodReference method) {
-        var inference = new PreciseTypeInference(program, method, hierarchy, missingClass);
+        var inference = new PreciseTypeInference(program, method, hierarchy, typeMapper);
         inference.setPhisSkipped(false);
         var result = new Object[program.variableCount()];
         for (int i = 0; i < program.variableCount(); ++i) {

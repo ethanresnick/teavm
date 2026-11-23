@@ -27,6 +27,7 @@ import java.util.List;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -37,6 +38,7 @@ import org.teavm.junit.TeaVMTest;
  * declared ones.
  */
 @TeaVMTest
+@AsyncEnabled
 public class MethodDescriptionTest {
     private static final String P = "org.teavm.classlib.java.lang.reflect.MethodDescriptionTest$";
 

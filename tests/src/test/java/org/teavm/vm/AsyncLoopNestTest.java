@@ -17,6 +17,7 @@ package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -34,6 +35,7 @@ import org.teavm.junit.TeaVMTest;
  * <p>Expected strings were produced by running the same code on the JVM.
  */
 @TeaVMTest
+@AsyncEnabled
 public class AsyncLoopNestTest {
     private static int counter;
 

@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
@@ -43,6 +44,7 @@ public class WasmTest {
     }
 
     @Test
+    @AsyncEnabled
     public void largeStartFunction() {
         // The start function fills the virtual tables of all generated classes. V8 does not compile
         // a function body larger than 7,654,321 bytes.
@@ -52,6 +54,7 @@ public class WasmTest {
     private static native int callManyVirtualMethods();
 
     @Test
+    @AsyncEnabled
     public void largeReflectionInitializer() {
         // teavm@initReflection creates the annotations of all generated classes.
         assertEquals(1, countAnnotationsOfGeneratedClass());

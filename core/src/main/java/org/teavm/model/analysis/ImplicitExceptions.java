@@ -30,7 +30,10 @@ import org.teavm.model.ValueType;
 import org.teavm.model.VariableReader;
 import org.teavm.model.instructions.AbstractInstructionReader;
 import org.teavm.model.instructions.ArrayElementType;
+import org.teavm.model.instructions.BinaryOperation;
 import org.teavm.model.instructions.InvocationType;
+import org.teavm.model.instructions.NumericOperandType;
+import org.teavm.model.transformation.DivisionCheckInsertion;
 
 /**
  * The exceptions that the instructions of a block can throw from the checks that the backends insert, after
@@ -39,6 +42,7 @@ import org.teavm.model.instructions.InvocationType;
  * block's handlers.
  */
 public final class ImplicitExceptions {
+    public static final String ARITHMETIC = ArithmeticException.class.getName();
     public static final String NULL_POINTER = NullPointerException.class.getName();
     public static final String ARRAY_INDEX_OUT_OF_BOUNDS = ArrayIndexOutOfBoundsException.class.getName();
     public static final String CLASS_CAST = ClassCastException.class.getName();
@@ -78,6 +82,9 @@ public final class ImplicitExceptions {
         }
         if (reader.negativeArraySize) {
             consumer.accept(NEGATIVE_ARRAY_SIZE);
+        }
+        if (reader.arithmetic) {
+            consumer.accept(ARITHMETIC);
         }
     }
 
@@ -156,8 +163,17 @@ public final class ImplicitExceptions {
         boolean arrayIndexOutOfBounds;
         boolean classCast;
         boolean negativeArraySize;
+        boolean arithmetic;
         final BitSet nonNegative = new BitSet();
         final BitSet nonNull = new BitSet();
+
+        @Override
+        public void binary(BinaryOperation operation, VariableReader receiver, VariableReader first,
+                VariableReader second, NumericOperandType type) {
+            arithmetic |= (type == NumericOperandType.INT || type == NumericOperandType.LONG)
+                    && (operation == BinaryOperation.DIVIDE || operation == BinaryOperation.MODULO
+                    || operation == BinaryOperation.DIVIDE_CHECKED || operation == BinaryOperation.MODULO_CHECKED);
+        }
 
         @Override
         public void create(VariableReader receiver, String type) {
@@ -252,6 +268,7 @@ public final class ImplicitExceptions {
         @Override
         public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
                 List<? extends VariableReader> arguments, InvocationType type) {
+            arithmetic |= DivisionCheckInsertion.isUnsignedDivision(method);
             // A constructor's receiver is the object just created.
             nullPointer |= instance != null && !method.getName().equals("<init>")
                     && !nonNull.get(instance.getIndex());

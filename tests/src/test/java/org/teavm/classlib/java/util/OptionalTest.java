@@ -22,6 +22,7 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /*
@@ -34,6 +35,7 @@ import org.teavm.junit.TeaVMTest;
  * requirement; TeaVM matches it because it costs nothing (the strings are shorter than the old ones).
  */
 @TeaVMTest
+@AsyncEnabled
 public class OptionalTest {
     @Test
     public void toStringIsTheOpenJdkOne() {

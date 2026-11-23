@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -295,6 +296,7 @@ public class StringBuilderTest {
     // insert(int dstOffset, CharSequence s): "If s is null, then the four characters "null" are inserted into
     // this sequence."
     @Test
+    @AsyncEnabled
     public void nullCharSequenceAppendedAsNull() {
         CharSequence nullSequence = null;
         assertEquals("abnull", new StringBuilder("ab").append(nullSequence).toString());
@@ -308,6 +310,7 @@ public class StringBuilderTest {
     }
 
     @Test
+    @AsyncEnabled
     public void nullCharSequenceInsertedAsNull() {
         CharSequence nullSequence = null;
         for (int index = 0; index <= 2; ++index) {
@@ -325,6 +328,7 @@ public class StringBuilderTest {
     // parameter was a sequence which contains the four characters "null"." It throws IndexOutOfBoundsException
     // "if start is negative, or start is greater than end or end is greater than s.length()".
     @Test
+    @AsyncEnabled
     public void nullCharSequenceRangeAppendedAsNull() {
         CharSequence nullSequence = null;
         for (int start = -1; start <= 5; ++start) {
@@ -344,6 +348,7 @@ public class StringBuilderTest {
     // IndexOutOfBoundsException "if dstOffset is negative or greater than this.length(), or start or end are
     // negative, or start is greater than end or end is greater than s.length()".
     @Test
+    @AsyncEnabled
     public void nullCharSequenceRangeInsertedAsNull() {
         CharSequence nullSequence = null;
         for (int index = -1; index <= 3; ++index) {
@@ -370,6 +375,7 @@ public class StringBuilderTest {
     // this.length()", and insert(int index, char[] str, int offset, int len) throws StringIndexOutOfBoundsException
     // "if index is negative or greater than length()".
     @Test
+    @AsyncEnabled
     @Disabled("insert(int, CharSequence, int, int) and insert(int, char[], int, int) don't check the insert index")
     public void rangeInsertRejectsInvalidIndex() {
         for (int index : new int[] { -1, 3, 4 }) {

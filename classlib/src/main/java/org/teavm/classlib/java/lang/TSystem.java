@@ -329,6 +329,10 @@ public final class TSystem extends TObject {
         outCache = out;
     }
 
+    @GeneratedBy(SystemNativeGenerator.class)
+    @Intrinsified
+    public static native void exit(int code);
+
     @DelegateTo("gcLowLevel")
     public static void gc() {
         // Do nothing
@@ -361,7 +365,7 @@ public final class TSystem extends TObject {
     public static String lineSeparator() {
         return "\n";
     }
-    
+
     // Native libraries cannot load. Callers that try to load one fall back to Java code when the load throws
     // UnsatisfiedLinkError, as it does on a JVM without the library.
     public static void load(String filename) {

@@ -42,10 +42,12 @@ import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
 @TeaVMTest
+@AsyncEnabled
 public class ConcurrentLinkedQueueTest extends JSR166TestCase {
 
     // android-note: Removed because the CTS runner does a bad job of

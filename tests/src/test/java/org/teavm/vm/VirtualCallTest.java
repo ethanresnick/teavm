@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.vm.subpackage.SubclassWithPrivateOverride;
@@ -261,6 +262,7 @@ public class VirtualCallTest {
     // Describer.describe receives an Integer and an Integer[]. Only Integer overrides toString, but an array is
     // still a receiver of Object.toString, so the call must not be devirtualized to Integer.toString.
     @Test
+    @AsyncEnabled
     public void objectMethodCalledOnArray() {
         Integer[] array = new Integer[0];
         Describer[] describers = { new PlainDescriber(), new PrefixDescriber() };

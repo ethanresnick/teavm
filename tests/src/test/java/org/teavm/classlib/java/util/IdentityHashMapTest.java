@@ -39,6 +39,7 @@ import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -131,6 +132,7 @@ public class IdentityHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void cloneDoesNotCallOverriddenPutOrPutAll() {
         var map = new FrozenIdentityHashMap();
         map.put("a", "1");

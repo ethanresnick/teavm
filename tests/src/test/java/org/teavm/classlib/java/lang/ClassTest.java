@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -40,6 +41,7 @@ import org.teavm.junit.TestPlatform;
 @TeaVMTest
 public class ClassTest {
     @Test
+    @AsyncEnabled
     public void getResourceFindsRelativeAndAbsoluteNames() {
         // A relative name is in the class's package, and a leading "/" makes the name absolute.
         assertNotNull(ClassTest.class.getResource("class-relative-resource"));
@@ -49,6 +51,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     public void getResourceResolvesNamesAsGetResourceAsStream() throws IOException {
         // A relative name is in the class's package, and a leading "/" makes the name absolute.
         try (var input = ClassTest.class.getResource("class-relative-resource").openStream()) {
@@ -192,6 +195,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void instanceCreatedThroughReflectionAsync() throws Exception {
         Runnable instance = TestObjectAsync.class.newInstance();
@@ -462,6 +466,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void forNameWaitsForSuspendingInitializer() throws Exception {
         // Class.forName(String) Javadoc: a call causes the named class to be initialized.
@@ -493,6 +498,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     public void failedInitializerThroughForNameIsNotRunAgain() throws Exception {
         // TeaVM finds a class by name only when the name is a constant at the call
         assertThrows(ExceptionInInitializerError.class, () -> Class.forName(
@@ -506,6 +512,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     public void failedInitializerBlocksReflectiveInstance() throws Exception {
         assertThrows(ExceptionInInitializerError.class, () -> Class.forName(
                 "org.teavm.classlib.java.lang.ClassTest$FailingInitializerForNewInstance", true,
@@ -547,6 +554,7 @@ public class ClassTest {
     }
 
     @Test
+    @AsyncEnabled
     public void classValuedAnnotationKeepsClassNames() {
         var annotation = AnnotatedWithClassValue.class.getAnnotation(ClassValued.class);
         assertEquals(ClassTest.class.getName() + "$AnnotationValueTarget", annotation.value().getName());
@@ -576,6 +584,7 @@ public class ClassTest {
     // and the built-in loaders give packages in named modules "no specification and implementation versioning
     // information". A TeaVM program has no manifest, so none of them is ever known.
     @Test
+    @AsyncEnabled
     public void packageWithoutManifest() {
         assertNoVersioningInfo(ClassTest.class.getPackage());
         assertNoVersioningInfo(Nested.class.getPackage());

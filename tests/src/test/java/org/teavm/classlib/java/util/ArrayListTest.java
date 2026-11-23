@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -392,6 +393,7 @@ public class ArrayListTest {
     // ArrayList.clone: "Returns a shallow copy of this ArrayList instance". Object.clone: by convention, the copy
     // comes from super.clone(), so "x.clone().getClass() == x.getClass()", and it is independent of the original.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unchecked")
     public void cloneKeepsClassAndIsIndependent() {
         var list = new CustomList();

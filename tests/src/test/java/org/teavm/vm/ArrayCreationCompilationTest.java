@@ -16,6 +16,7 @@
 package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.fail;
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Array;
@@ -30,6 +31,7 @@ import org.teavm.backend.c.generate.CNameProvider;
 import org.teavm.backend.javascript.JavaScriptTarget;
 import org.teavm.backend.wasm.WasmGCTarget;
 import org.teavm.model.MethodReference;
+import org.teavm.runtime.Fiber;
 import org.teavm.tooling.TeaVMProblemRenderer;
 import org.teavm.tooling.TeaVMToolLog;
 
@@ -42,6 +44,21 @@ import org.teavm.tooling.TeaVMToolLog;
 public class ArrayCreationCompilationTest {
     private static final MethodReference ARRAY_NEW_INSTANCE = new MethodReference(Array.class, "newInstance",
             Class.class, int.class, Object.class);
+
+    @Test
+    public void fiberObjectStackGrowthPreservesValues() throws ReflectiveOperationException {
+        var constructor = Fiber.class.getDeclaredConstructor(Fiber.FiberRunner.class, boolean.class);
+        constructor.setAccessible(true);
+        var fiber = constructor.newInstance(null, false);
+        Object[] values = new Object[64];
+        for (int i = 0; i < values.length; ++i) {
+            values[i] = i % 3 == 0 ? null : new Object();
+            fiber.push(values[i]);
+        }
+        for (int i = values.length - 1; i >= 0; --i) {
+            assertSame(values[i], fiber.popObject());
+        }
+    }
 
     @Test
     public void multiDimensionalArrays() {

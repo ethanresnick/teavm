@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -29,6 +30,7 @@ import org.teavm.junit.TeaVMTest;
  * therefore string literals.
  */
 @TeaVMTest
+@AsyncEnabled
 public class AnnotationClassValueTest {
     private static final String PREFIX = "org.teavm.classlib.java.lang.AnnotationClassValueTest$";
 

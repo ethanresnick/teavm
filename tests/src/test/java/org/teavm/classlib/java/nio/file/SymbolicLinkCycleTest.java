@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.runtime.fs.VirtualFileSystemProvider;
@@ -36,6 +37,7 @@ import org.teavm.runtime.fs.memory.InMemoryVirtualFileSystem;
 
 // A class of its own: the default file system keeps the first VirtualFileSystem that it finds.
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 public class SymbolicLinkCycleTest {
     // walkFileTree: "If the options parameter contains the FOLLOW_LINKS option then this method keeps track of

@@ -28,12 +28,14 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.teavm.jso.browser.Window;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
+@AsyncEnabled
 public class ExecutorRegressionTest {
     // Future Java SE 21 specifies immediate result/exception queries and the four terminal/running states.
     // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Future.html

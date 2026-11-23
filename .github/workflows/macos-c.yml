@@ -17,9 +17,10 @@ jobs:
           -Pteavm.tests.c=true \
           -Pteavm.tests.js=false \
           -Pteavm.tests.wasm-gc=false \
+          -Pteavm.tests.jvm=false \
           -Pteavm.tests.optimized=false \
           -Pteavm.tests.c.compiler=compile-c-macos-fast.sh \
-          -Pteavm.tests.c.runWrapper= \
+          -Pteavm.tests.c.runWrapper=none \
           "-Dorg.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m" \
           --stacktrace test
     - uses: actions/upload-artifact@v7

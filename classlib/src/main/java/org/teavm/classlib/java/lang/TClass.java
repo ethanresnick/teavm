@@ -187,7 +187,7 @@ public final class TClass<T> extends TObject implements TGenericDeclaration, TTy
     public boolean isInterface() {
         return (classInfo.modifiers() & ModifiersInfo.INTERFACE) != 0;
     }
-    
+
     public boolean isAnnotation() {
         return (classInfo.modifiers() & ModifiersInfo.ANNOTATION) != 0;
     }

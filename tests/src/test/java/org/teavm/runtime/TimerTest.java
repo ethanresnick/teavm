@@ -24,18 +24,18 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.Test;
-import org.teavm.classlib.PlatformDetector;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.jso.JSBody;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
-import org.teavm.platform.Platform;
 
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 @OnlyPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
 @EachTestCompiledSeparately
@@ -62,11 +62,7 @@ public class TimerTest {
 
     private static void timerClockReads(long delay, AsyncCallback<Integer> callback) {
         EventQueue.Event action = () -> callback.complete(clockReads());
-        if (PlatformDetector.isWebAssemblyGC()) {
-            EventQueue.scheduleAfter(action, delay);
-        } else {
-            Platform.scheduleAfter(action, delay);
-        }
+        EventQueue.scheduleAfter(action, delay);
     }
 
     @Test

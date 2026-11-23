@@ -56,6 +56,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.MapTest2Support;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @SuppressWarnings("MismatchedQueryAndUpdateOfCollection")
@@ -315,6 +316,7 @@ public class LinkedHashMapTest {
     // The clone and the original must not share the linked list. Iterates both maps to their ends, in insertion
     // and in access order.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unchecked")
     public void cloneIsIndependent() {
         for (var accessOrder : new boolean[] { false, true }) {

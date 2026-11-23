@@ -1191,8 +1191,8 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
         module.functions.add(function);
         var instanceLocal = new WasmLocal(standardClasses.objectClass().getType(), "instance");
         var originalLocal = new WasmLocal(objectStructure.getReference(), "original");
-        var originalDataLocal = new WasmLocal(arrayType.getNonNullReference(), "originalData");
-        var dataCopyLocal = new WasmLocal(arrayType.getNonNullReference(), "resultData");
+        var originalDataLocal = new WasmLocal(arrayType.getReference(), "originalData");
+        var dataCopyLocal = new WasmLocal(arrayType.getReference(), "resultData");
         function.add(instanceLocal);
         function.add(originalLocal);
         function.add(originalDataLocal);
@@ -1426,9 +1426,9 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
 
     @Override
     public WasmGlobal getStaticFieldLocation(FieldReference fieldRef) {
-        return staticFieldLocations.computeIfAbsent(fieldRef, this::generateStaticFieldLocation); 
+        return staticFieldLocations.computeIfAbsent(fieldRef, this::generateStaticFieldLocation);
     }
-    
+
     private WasmGlobal generateStaticFieldLocation(FieldReference fieldRef) {
         ValueType javaType = null;
         Object initValue = null;
@@ -1443,7 +1443,7 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
         if (javaType == null) {
             javaType = ValueType.object("java.lang.Object");
         }
-        
+
         var type = typeMapper.mapType(javaType);
         var wasmName = names.topLevel(names.suggestForStaticField(fieldRef));
         var global = new WasmGlobal(wasmName, type);
@@ -1602,7 +1602,7 @@ public class WasmGCClassGenerator implements WasmGCClassInfoProvider, WasmGCInit
             wasmArray = getObjectArrayType();
         }
 
-        classInfo.structure.getFields().add(new WasmField(wasmArray.getNonNullReference().asStorage(),
+        classInfo.structure.getFields().add(new WasmField(wasmArray.getReference().asStorage(),
                 arrayDataFieldName()));
     }
 

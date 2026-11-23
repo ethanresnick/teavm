@@ -27,11 +27,13 @@ import java.util.Random;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 // Compares ArrayBlockingQueue with a model: an ArrayList that holds the elements from head to tail, and the capacity.
 // The JVM run checks the model against the JDK's class.
 @TeaVMTest
+@AsyncEnabled
 public class ArrayBlockingQueueModelTest {
     private static final int[] CAPACITIES = { 1, 2, 3, 4, 7 };
     private static final int OPERATIONS = 250;

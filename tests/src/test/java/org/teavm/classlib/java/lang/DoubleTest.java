@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.util.Random;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -210,6 +211,7 @@ public class DoubleTest {
     // set of all decimals in R with length 1 or 2." Double.valueOf(String): the exact decimal value "is then
     // rounded to type double by the usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
     @Test
+    @AsyncEnabled
     public void subnormalToStringAndParse() {
         // The rounding interval of a subnormal is half of its own ulp, not of its normalized mantissa.
         assertEquals("4.9E-324", Double.toString(Double.MIN_VALUE));
@@ -237,6 +239,7 @@ public class DoubleTest {
     // Double.toString: "Let R be the set of all decimals that round to m according to the usual round to nearest
     // rounding policy of IEEE 754 floating-point arithmetic." The selected decimal is in R, so it parses back.
     @Test
+    @AsyncEnabled
     public void smallSubnormalsRoundTrip() {
         for (long bits = 1; bits <= 100000; ++bits) {
             double d = Double.longBitsToDouble(bits);
@@ -251,6 +254,7 @@ public class DoubleTest {
     // rounding policy of IEEE 754 floating-point arithmetic." Round to nearest breaks a tie to the even
     // significand, so a decimal on the edge of the interval is in R exactly when m has an even significand.
     @Test
+    @AsyncEnabled
     public void toStringOnRoundingIntervalEdge() {
         // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
         assertEquals("1.0E23", Double.toString(1E23));
@@ -267,6 +271,7 @@ public class DoubleTest {
     // Double.toString: "Define d_m as the decimal in T that is closest to m. Or if there are two such decimals in
     // T, select the one with the even significand."
     @Test
+    @AsyncEnabled
     public void toStringHalfwayTakesEvenDigit() {
         // 2116974939765710.25 is exactly halfway between ...102 and ...103
         assertEquals("2.1169749397657102E15", Double.toString(2.1169749397657102E15));
@@ -275,6 +280,7 @@ public class DoubleTest {
 
     // Double.toString: R is the set of decimals that round to m, and below a power of two the neighbor is closer
     @Test
+    @AsyncEnabled
     public void toStringBelowPowerOfTwo() {
         // Below a power of two the next double is closer, so the rounding interval is narrower on that side
         assertEquals("1.7800590868057611E-307", Double.toString(Math.scalb(1.0, -1019)));
@@ -284,6 +290,7 @@ public class DoubleTest {
     // value that is then rounded to type double by the usual round-to-nearest rule of IEEE 754 floating-point
     // arithmetic". That rule breaks a tie to the even significand.
     @Test
+    @AsyncEnabled
     public void parseExactMidpointTakesEvenDouble() {
         // Each decimal is exactly halfway between two doubles, and the JDK takes the double with the even mantissa
         assertEquals(2.238987874235451E16, Double.parseDouble("2.238987874235451E16"), 0);
@@ -294,6 +301,7 @@ public class DoubleTest {
     }
 
     @Test
+    @AsyncEnabled
     public void largeDoublesRoundTrip() {
         // Double.toString writes such doubles as the decimal halfway to a neighbor when that decimal is shortest
         var random = new Random(4);
@@ -308,6 +316,7 @@ public class DoubleTest {
     // below is written differently from the JDK, and the subnormal ones and 1.6439167945475462E-67 are written as
     // a decimal that does not parse back. Expected strings are the JDK's.
     @Test
+    @AsyncEnabled
     @Disabled("Known gap: precision of the power-of-ten table in DoubleAnalyzer")
     public void toStringNearIntervalEdgeKnownGap() {
         var failures = new StringBuilder();
@@ -340,6 +349,7 @@ public class DoubleTest {
     // conceptually converted to an 'infinitely precise' binary value that is then rounded to type double by the
     // usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
     @Test
+    @AsyncEnabled
     @Disabled("Known gap: precision of the power-of-ten table in DoubleSynthesizer")
     public void parseNearMidpointKnownGap() {
         var failures = new StringBuilder();

@@ -15,9 +15,6 @@
  */
 package org.teavm.dependency;
 
-import com.carrotsearch.hppc.IntHashSet;
-import com.carrotsearch.hppc.IntSet;
-import com.carrotsearch.hppc.cursors.IntCursor;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,7 +106,9 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private ClassHierarchy classHierarchy;
     IncrementalCache incrementalCache = new IncrementalCache();
     boolean asyncSupported;
-    boolean integerDivisionChecked;
+    boolean arrayBoundsChecked;
+    boolean nullChecked;
+    boolean divisionChecked;
     private ReferenceCache referenceCache;
     private Set<String> generatedClassNames = new HashSet<>();
     DependencyType classType;
@@ -170,12 +169,20 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         this.asyncSupported = asyncSupported;
     }
 
+    public void setArrayBoundsChecked(boolean arrayBoundsChecked) {
+        this.arrayBoundsChecked = arrayBoundsChecked;
+    }
+
     /**
-     * Tells the analysis that the target makes an integer division by zero throw ArithmeticException, so that
-     * the exception type reaches the handlers.
+     * Specifies that null checks will be inserted after the analysis, so instructions that dereference
+     * a value can throw {@link NullPointerException}.
      */
-    public void setIntegerDivisionChecked(boolean integerDivisionChecked) {
-        this.integerDivisionChecked = integerDivisionChecked;
+    public void setNullChecked(boolean nullChecked) {
+        this.nullChecked = nullChecked;
+    }
+
+    public void setDivisionChecked(boolean divisionChecked) {
+        this.divisionChecked = divisionChecked;
     }
 
     public DependencyAgent getAgent() {
@@ -279,7 +286,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
             MethodHolder method = new MethodHolder(methodRef.getDescriptor());
             method.getModifiers().add(ElementModifier.STATIC);
             method.setProgram(ProgramUtils.copy(program));
-            new UnreachableBasicBlockEliminator().optimize(program);
+            new UnreachableBasicBlockEliminator().optimize(program, methodRef.parameterCount());
             cls.addMethod(method);
         } else {
             MethodDependency dep = getMethod(methodRef);
@@ -296,7 +303,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
             }
             method.getModifiers().remove(ElementModifier.NATIVE);
             method.setProgram(ProgramUtils.copy(program));
-            new UnreachableBasicBlockEliminator().optimize(method.getProgram());
+            new UnreachableBasicBlockEliminator().optimize(method.getProgram(), method.parameterCount());
 
             dep.used = false;
             lock(dep, false);
@@ -351,7 +358,7 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         } else {
             if (consumer.pendingTypes == null) {
                 pendingTransitions.add(consumer);
-                consumer.pendingTypes = new IntHashSet(50);
+                consumer.pendingTypes = new PendingTypes();
             }
             consumer.pendingTypes.add(type.index);
         }
@@ -374,9 +381,8 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
         } else {
             if (consumer.pendingTypes == null) {
                 pendingTransitions.add(consumer);
-                consumer.pendingTypes = new IntHashSet(Math.max(50, types.length));
+                consumer.pendingTypes = new PendingTypes();
             }
-            consumer.pendingTypes.ensureCapacity(types.length + consumer.pendingTypes.size());
             for (DependencyType type : types) {
                 consumer.pendingTypes.add(type.index);
             }
@@ -710,16 +716,16 @@ public abstract class DependencyAnalyzer implements DependencyInfo {
     private void processNodeToNodeTransitionQueue() {
         while (!pendingTransitions.isEmpty()) {
             Transition transition = pendingTransitions.remove();
-            IntSet pendingTypes = transition.pendingTypes;
+            PendingTypes pendingTypes = transition.pendingTypes;
             transition.pendingTypes = null;
-            if (pendingTypes.size() == 1) {
-                DependencyType type = types.get(pendingTypes.iterator().next().value);
-                transition.consume(type);
+            // PendingTypes returns indices in ascending order, which keeps analysis deterministic
+            int[] indexes = pendingTypes.toArray();
+            if (indexes.length == 1) {
+                transition.consume(types.get(indexes[0]));
             } else {
-                DependencyType[] typesToPropagate = new DependencyType[pendingTypes.size()];
-                int index = 0;
-                for (IntCursor cursor : pendingTypes) {
-                    typesToPropagate[index++] = types.get(cursor.value);
+                DependencyType[] typesToPropagate = new DependencyType[indexes.length];
+                for (int i = 0; i < indexes.length; ++i) {
+                    typesToPropagate[i] = types.get(indexes[i]);
                 }
                 transition.consume(typesToPropagate);
             }

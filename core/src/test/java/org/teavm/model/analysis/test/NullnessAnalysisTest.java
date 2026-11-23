@@ -41,6 +41,7 @@ import org.teavm.model.analysis.NullnessInformation;
 import org.teavm.model.text.ListingBuilder;
 import org.teavm.model.util.ProgramUtils;
 
+
 public class NullnessAnalysisTest {
     @Rule
     public TestName name = new TestName();
@@ -75,6 +76,11 @@ public class NullnessAnalysisTest {
     }
 
     @Test
+    public void dereferenceInHandler() {
+        test();
+    }
+
+    @Test
     public void loop() {
         test();
     }
@@ -105,7 +111,7 @@ public class NullnessAnalysisTest {
     }
 
     @Test
-    public void handlerPhi() {
+    public void existingExceptionPhi() {
         test();
     }
 
@@ -201,5 +207,10 @@ public class NullnessAnalysisTest {
             }
         }
         return result;
+    }
+
+    @Test
+    public void handlerPhi() {
+        test();
     }
 }

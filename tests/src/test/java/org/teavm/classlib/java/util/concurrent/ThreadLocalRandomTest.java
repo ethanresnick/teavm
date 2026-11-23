@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.HashSet;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -34,6 +35,7 @@ public class ThreadLocalRandomTest {
     }
 
     @Test
+    @AsyncEnabled
     public void boundedValuesStayInRange() {
         var rnd = ThreadLocalRandom.current();
         var trues = 0;

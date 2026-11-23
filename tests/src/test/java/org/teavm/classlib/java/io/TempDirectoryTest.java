@@ -22,6 +22,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
@@ -33,6 +34,7 @@ import org.teavm.runtime.fs.memory.InMemoryVirtualFileSystem;
 // Files.createTempFile(String, String, FileAttribute...) and Files.createTempDirectory(String, FileAttribute...)
 // create their file "in the default temporary-file directory".
 @TeaVMTest
+@AsyncEnabled
 // The JDK reads java.io.tmpdir once, at startup, so System.setProperty does not move its temporary files.
 @SkipJVM
 @EachTestCompiledSeparately

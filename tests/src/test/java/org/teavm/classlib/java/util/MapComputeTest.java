@@ -37,12 +37,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
  * computeIfAbsent, computeIfPresent, compute and merge of HashMap, LinkedHashMap, TreeMap and Hashtable.
  */
 @TeaVMTest
+@AsyncEnabled
 public class MapComputeTest {
     private static final List<String> KINDS = List.of("HashMap", "LinkedHashMap", "TreeMap", "Hashtable");
 

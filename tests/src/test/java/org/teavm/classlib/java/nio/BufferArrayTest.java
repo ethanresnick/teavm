@@ -31,6 +31,7 @@ import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -38,6 +39,7 @@ import org.teavm.junit.TeaVMTest;
  * and asReadOnlyBuffer(), and bulk put(XBuffer) between buffers at different positions.
  */
 @TeaVMTest
+@AsyncEnabled
 public class BufferArrayTest {
     private static final int SIZE = 12;
     private static final int[] POSITIONS = { 0, 1, 3 };

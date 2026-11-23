@@ -203,7 +203,7 @@ public class CoroutineTransformation {
             while (insn != null) {
                 var next = insn.getNext();
                 if (collector.isSuspending(insn)) {
-                    if (insn instanceof WasmBlock block && !block.isLoop() && block.getType() == null) {
+                    if (insn instanceof WasmBlock block && isOptimizableBlock(block)) {
                         processOptimizedBlock(block);
                         insn = next;
                         continue;
@@ -249,19 +249,28 @@ public class CoroutineTransformation {
             }
         }
 
+        private boolean isOptimizableBlock(WasmBlock block) {
+            return !block.isLoop() && block.getType() == null
+                    && (typeInference.typeStack.isEmpty() || !usedBreakTargets.contains(block));
+        }
+
         private void processOptimizedBlock(WasmBlock block) {
             var start = block.getBody().getFirst();
+            var outputTypes = List.copyOf(typeInference.typeStack);
             moveAllPreviousTo(block, block.getBody());
             process(start);
-            if (!typeInference.typeStack.isEmpty() || inputTypes.isEmpty()) {
-                block.setType(functionTypes.get(new WasmSignature(List.copyOf(typeInference.typeStack),
-                        List.copyOf(inputTypes))).asBlock());
+            if (!outputTypes.isEmpty() || inputTypes.isEmpty()) {
+                block.setType(functionTypes.get(new WasmSignature(outputTypes, List.copyOf(inputTypes))).asBlock());
             }
+            typeInference.typeStack.clear();
+            typeInference.typeStack.addAll(outputTypes);
         }
 
         private boolean isOptimizableConditional(WasmConditional conditional) {
-            return conditional.getType() == null
-                    || (conditional.getType().getInputTypes().isEmpty() && !usedBreakTargets.contains(conditional));
+            if (conditional.getType() == null) {
+                return typeInference.typeStack.size() == 1 || !usedBreakTargets.contains(conditional);
+            }
+            return conditional.getType().getInputTypes().isEmpty() && !usedBreakTargets.contains(conditional);
         }
 
         private void processOptimizedConditional(WasmConditional conditional) {
@@ -272,7 +281,7 @@ public class CoroutineTransformation {
                 outputTypes.addAll(conditional.getType().getOutputTypes());
             }
             var wrapper = new WasmBlock(false);
-            if (!outputTypes.isEmpty() || inputTypes.isEmpty()) {
+            if (!outputTypes.isEmpty() || !inputTypes.isEmpty()) {
                 wrapper.setType(functionTypes.get(new WasmSignature(outputTypes, List.copyOf(inputTypes)))
                         .asBlock());
             }
@@ -317,9 +326,10 @@ public class CoroutineTransformation {
                 minDepth = backupMinDepth;
                 process(thenWrapper.getNext());
 
+                // Original arm exits leave the entire conditional, rather than falling through into else.
                 var replacement = new BreakTargetReplacement(target -> {
                     if (target == conditional.getThenBlock()) {
-                        return thenWrapper.getBody();
+                        return wrapper.getBody();
                     } else if (target == conditional.getElseBlock()) {
                         return wrapper.getBody();
                     } else {
@@ -479,6 +489,10 @@ public class CoroutineTransformation {
         block.insertPrevious(breakLabel);
         block.delete();
         block.setLoop(false);
+        // Branches to former loop now continue new loop, but falling through end of loop body means exit from loop
+        if (block.getBody().isEmpty() || !block.getBody().getLast().isTerminating()) {
+            block.getBody().add(new WasmBreak(breakLabel.getBody()));
+        }
         newLoop.getBody().add(block);
         newLoop.getBody().add(new WasmInt32Constant(stateIndex));
         newLoop.getBody().add(new WasmSetLocal(stateLocal));
@@ -516,7 +530,7 @@ public class CoroutineTransformation {
             var thenWrapper = new WasmBlock(false);
             thenWrapper.setType(functionTypes.get(new WasmSignature(Collections.emptyList(), inputTypes)).asBlock());
             thenWrapper.getBody().add(new WasmIntUnary(WasmIntType.INT32, WasmIntUnaryOperation.EQZ));
-            thenWrapper.getBody().add(new WasmBranch(conditional.getThenBlock()));
+            thenWrapper.getBody().add(new WasmBranch(thenWrapper.getBody()));
             thenWrapper.getBody().transferFrom(conditional.getThenBlock());
             var splitter = new ListSplitter(inputTypes, outputTypes, wrapper.getBody());
             var first = thenWrapper.getBody().getFirst();
@@ -533,9 +547,10 @@ public class CoroutineTransformation {
             }
             splitter.process(wrapper.getBody().getFirst().getNext());
 
+            // Original arm exits leave the entire conditional. Only the synthetic branch above enters else.
             var replacement = new BreakTargetReplacement(target -> {
                 if (target == conditional.getThenBlock()) {
-                    return thenWrapper.getBody();
+                    return wrapper.getBody();
                 } else if (target == conditional.getElseBlock()) {
                     return wrapper.getBody();
                 } else {

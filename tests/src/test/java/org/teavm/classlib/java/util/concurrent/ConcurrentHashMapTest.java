@@ -34,7 +34,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
+
 
 @TeaVMTest
 public class ConcurrentHashMapTest {
@@ -321,6 +323,30 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    public void computeIfAbsentDoesNotInsertNull() {
+        var map = new ConcurrentHashMap<String, String>();
+
+        assertNull(map.computeIfAbsent("key", _ -> null));
+
+        assertFalse(map.containsKey("key"));
+        assertEquals(0, map.size());
+        assertEquals("default", map.getOrDefault("key", "default"));
+    }
+
+    @Test
+    public void computeIfPresentRemovesMappingOnNull() {
+        var map = new ConcurrentHashMap<String, String>();
+        map.put("key", "value");
+
+        assertNull(map.computeIfPresent("key", (_, _) -> null));
+
+        assertFalse(map.containsKey("key"));
+        assertEquals(0, map.size());
+        assertEquals("default", map.getOrDefault("key", "default"));
+    }
+
+    @Test
+    @AsyncEnabled
     public void nullKeysAndValuesThrow() {
         var map = new ConcurrentHashMap<String, Integer>();
         assertThrows(NullPointerException.class, () -> map.put(null, 1));
@@ -334,6 +360,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void computeWithNullResultStoresNothing() {
         var map = new ConcurrentHashMap<String, Integer>();
         assertNull(map.computeIfAbsent("x", k -> null));
@@ -344,6 +371,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void iteratorIsWeaklyConsistent() {
         var map = new ConcurrentHashMap<String, Integer>();
         for (var i = 0; i < 100; i++) {
@@ -368,6 +396,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void keySetViews() {
         var map = new ConcurrentHashMap<String, Integer>();
         map.put("a", 1);
@@ -387,6 +416,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void keysDifferingInHighBitsIterateInJdkOrder() {
         var map = new ConcurrentHashMap<FixedHashKey, Integer>();
         // The hash codes of two keys that a masked raw hash puts in one bucket.
@@ -441,6 +471,7 @@ public class ConcurrentHashMapTest {
     // ConcurrentHashMap: "Like Hashtable but unlike HashMap, this class does not allow null to be used as a key
     // or value."
     @Test
+    @AsyncEnabled
     public void nullKeysAndValuesThrowInEveryOperation() {
         var map = new ConcurrentHashMap<String, Integer>();
         map.put("a", 1);
@@ -470,6 +501,7 @@ public class ConcurrentHashMapTest {
     // Map.compute: "If the remapping function returns null, the mapping is removed (or remains absent if
     // initially absent)."
     @Test
+    @AsyncEnabled
     public void computeWithNullResultRemovesOrStoresNothing() {
         var map = new ConcurrentHashMap<String, Integer>();
         assertNull(map.compute("x", (k, v) -> null));
@@ -489,6 +521,7 @@ public class ConcurrentHashMapTest {
     // they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications
     // subsequent to construction." ConcurrentHashMap: iterators "do not throw ConcurrentModificationException".
     @Test
+    @AsyncEnabled
     public void iteratorTraversesEntriesThatSurviveExactlyOnce() {
         for (var seed = 0; seed < 50; ++seed) {
             var random = new Random(seed);
@@ -546,6 +579,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void iteratorRemoveRequiresNext() {
         var map = new ConcurrentHashMap<String, Integer>();
         map.put("a", 1);
@@ -560,6 +594,7 @@ public class ConcurrentHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void iteratorSurvivesClear() {
         var map = new ConcurrentHashMap<String, Integer>();
         map.put("a", 1);
@@ -579,6 +614,7 @@ public class ConcurrentHashMapTest {
     // forEach and replaceAll traverse like the weakly consistent iterators, so an action that adds entries (and
     // resizes the table) still visits every original entry exactly once
     @Test
+    @AsyncEnabled
     public void bulkTraversalVisitsOriginalEntriesExactlyOnceWhileTableGrows() {
         var map = new ConcurrentHashMap<Integer, Integer>();
         for (var i = 0; i < 12; ++i) {
@@ -616,6 +652,7 @@ public class ConcurrentHashMapTest {
 
     // An entry that an iterator returned stays a view of its mapping after the table grows
     @Test
+    @AsyncEnabled
     public void entryWritesThroughAfterTableGrows() {
         var map = new ConcurrentHashMap<Integer, Integer>();
         map.put(1, 10);
@@ -656,6 +693,7 @@ public class ConcurrentHashMapTest {
     // Map.Entry.equals: two entries are equal if "(e1.getKey()==null ? e2.getKey()==null : e1.getKey().equals(
     // e2.getKey())) && (e1.getValue()==null ? e2.getValue()==null : e1.getValue().equals(e2.getValue()))"
     @Test
+    @AsyncEnabled
     public void entriesAreEqualByKeyAndValue() {
         var map = new ConcurrentHashMap<String, Integer>();
         map.put("a", 1);
@@ -669,6 +707,7 @@ public class ConcurrentHashMapTest {
 
     // KeySetView.add: "UnsupportedOperationException - if no default mapped value for additions was provided"
     @Test
+    @AsyncEnabled
     public void keySetViewWithoutMappedValueRejectsAdditions() {
         var map = new ConcurrentHashMap<String, Integer>();
         var view = map.keySet();

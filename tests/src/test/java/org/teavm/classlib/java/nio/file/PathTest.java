@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
@@ -166,6 +167,7 @@ public class PathTest {
     }
 
     @Test
+    @AsyncEnabled
     public void emptyPathIsOnlyEndOfEmptyPath() {
         var fs = FileSystems.getDefault();
         assertFalse(fs.getPath("/").endsWith(fs.getPath("")));
@@ -193,6 +195,7 @@ public class PathTest {
     }
 
     @Test
+    @AsyncEnabled
     public void normalizeRelative() {
         var fs = FileSystems.getDefault();
         assertEquals("a", fs.getPath("a").normalize().toString());
@@ -217,6 +220,7 @@ public class PathTest {
     }
 
     @Test
+    @AsyncEnabled
     public void resolveAgainstEmptyAndRoot() {
         var fs = FileSystems.getDefault();
         assertEquals("a", fs.getPath("").resolve(fs.getPath("a")).toString());
@@ -242,6 +246,7 @@ public class PathTest {
     }
 
     @Test
+    @AsyncEnabled
     public void relativizeJdkCases() {
         var fs = FileSystems.getDefault();
         assertEquals("..", fs.getPath("a/b").relativize(fs.getPath("a")).toString());

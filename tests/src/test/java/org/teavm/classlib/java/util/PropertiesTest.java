@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -118,6 +119,7 @@ public class PropertiesTest {
      */
 
     @Test
+    @AsyncEnabled
     public void stringPropertyNamesSkipsNonStringKeysAndValues() {
         Properties props = new Properties();
         props.setProperty("a", "1");
@@ -147,6 +149,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void stringPropertyNamesIsUnmodifiableSnapshot() {
         Properties props = new Properties();
         props.setProperty("a", "1");
@@ -169,6 +172,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void propertyNamesRejectsNonStringKey() {
         Properties props = new Properties();
         props.setProperty("a", "1");
@@ -194,6 +198,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void propertyNamesAcceptsNonStringValue() {
         // Only a non-String key makes propertyNames fail
         Properties props = new Properties();
@@ -210,6 +215,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void storeRejectsNonStringKeyOrValue() {
         Properties badKey = new Properties();
         badKey.setProperty("a", "1");
@@ -225,6 +231,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void storeRoundTrips() throws IOException {
         Properties props = new Properties();
         props.setProperty("a", "1");
@@ -249,6 +256,7 @@ public class PropertiesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void getPropertyIgnoresNonStringValue() {
         Properties defaults = new Properties();
         defaults.setProperty("a", "d");

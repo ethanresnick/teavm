@@ -56,7 +56,10 @@ public final class Fiber {
         if (intValues == null) {
             intValues = new int[4];
         } else if (intTop + 1 == intValues.length) {
+            var savedCurrent = current;
+            current = null;
             intValues = Arrays.copyOf(intValues, intValues.length * 3 / 2);
+            current = savedCurrent;
         }
         intValues[intTop++] = value;
     }
@@ -65,7 +68,10 @@ public final class Fiber {
         if (longValues == null) {
             longValues = new long[4];
         } else if (longTop + 1 == longValues.length) {
+            var savedCurrent = current;
+            current = null;
             longValues = Arrays.copyOf(longValues, longValues.length * 3 / 2);
+            current = savedCurrent;
         }
         longValues[longTop++] = value;
     }
@@ -74,7 +80,10 @@ public final class Fiber {
         if (floatValues == null) {
             floatValues = new float[4];
         } else if (floatTop + 1 == floatValues.length) {
+            var savedCurrent = current;
+            current = null;
             floatValues = Arrays.copyOf(floatValues, floatValues.length * 3 / 2);
+            current = savedCurrent;
         }
         floatValues[floatTop++] = value;
     }
@@ -83,7 +92,10 @@ public final class Fiber {
         if (doubleValues == null) {
             doubleValues = new double[4];
         } else if (doubleTop + 1 == doubleValues.length) {
+            var savedCurrent = current;
+            current = null;
             doubleValues = Arrays.copyOf(doubleValues, doubleValues.length * 3 / 2);
+            current = savedCurrent;
         }
         doubleValues[doubleTop++] = value;
     }
@@ -92,13 +104,13 @@ public final class Fiber {
         if (objectValues == null) {
             objectValues = new Object[4];
         } else if (objectTop + 1 == objectValues.length) {
-            // Arrays.copyOf(Object[]) calls Array.newInstance, which can be suspendable.
-            // This method runs while the fiber suspends, so it must not call suspendable code.
-            var newObjectValues = new Object[objectValues.length * 3 / 2];
-            for (var i = 0; i < objectTop; ++i) {
-                newObjectValues[i] = objectValues[i];
-            }
-            objectValues = newObjectValues;
+            var savedCurrent = current;
+            current = null;
+            // The stack is always Object[], so growing it must not link reflective array allocation.
+            var newValues = new Object[objectValues.length * 3 / 2];
+            System.arraycopy(objectValues, 0, newValues, 0, objectValues.length);
+            objectValues = newValues;
+            current = savedCurrent;
         }
         objectValues[objectTop++] = value;
     }
@@ -262,30 +274,49 @@ public final class Fiber {
             }
             return result;
         }
-        // Thread.currentThread() can be suspendable (it can initialize Thread). Suspendable code reads the fiber's
-        // state, so it must not run while the fiber resumes.
         Thread javaThread = Thread.currentThread();
-        PendingCall pendingCall = new PendingCall(call, lastPendingCall);
-        if (lastPendingCall != null) {
-            lastPendingCall.next = pendingCall;
-        }
-        lastPendingCall = pendingCall;
-        pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
         if (isJspi()) {
+            var pendingCall = new PendingCall(call, lastPendingCall);
+            if (lastPendingCall != null) {
+                lastPendingCall.next = pendingCall;
+            }
+            lastPendingCall = pendingCall;
+            pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
             return suspendOnJspiStack(fiber, javaThread, call, pendingCall);
         }
-
-        // The call can run suspendable code that does not suspend. That code must see a running fiber,
-        // otherwise it unwinds as if it suspended.
-        call.run(pendingCall.callback);
-        fiber.state = STATE_SUSPENDING;
+        current = null;
+        try {
+            var pendingCall = new PendingCall(call, lastPendingCall);
+            pendingCall.callback = new AsyncCallbackImpl(pendingCall, javaThread, fiber);
+            call.run(pendingCall.callback);
+            if (pendingCall.callback.state == AsyncCallbackImpl.RESOLVED_WITH_VALUE) {
+                return pendingCall.callback.resolvedResult;
+            } else if (pendingCall.callback.state == AsyncCallbackImpl.RESOLVED_WITH_EXCEPTION) {
+                throw (Throwable) pendingCall.callback.resolvedResult;
+            } else {
+                if (lastPendingCall != null) {
+                    lastPendingCall.next = pendingCall;
+                }
+                lastPendingCall = pendingCall;
+                fiber.state = STATE_SUSPENDING;
+                pendingCall.callback.state = AsyncCallbackImpl.SUSPENDED;
+            }
+        } finally {
+            current = fiber;
+        }
         return null;
     }
 
     static class AsyncCallbackImpl implements AsyncCallback<Object> {
+        static final int SUSPENDED = 1;
+        static final int RESOLVED_WITH_VALUE = 2;
+        static final int RESOLVED_WITH_EXCEPTION = 3;
+
         PendingCall pendingCall;
         Thread javaThread;
         Fiber fiber;
+        int state;
+        Object resolvedResult;
 
         AsyncCallbackImpl(PendingCall pendingCall, Thread javaThread, Fiber fiber) {
             this.pendingCall = pendingCall;
@@ -295,47 +326,55 @@ public final class Fiber {
 
         @Override
         public void complete(Object result) {
-            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
-                fiber.result = result;
-                fiber.isPendingResume = true;
-                removePendingCall();
-            } else {
-                if (!isJspi()) {
-                    setCurrentThread(javaThread);
-                }
+            if (isJspi()) {
+                completeJspi(result, null);
+                return;
+            }
+            if (state == SUSPENDED) {
+                setCurrentThread(javaThread);
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.result = result;
                 removePendingCall();
-                if (isJspi()) {
-                    jspiUnpark(fiber);
-                } else {
-                    fiber.resume();
-                }
+                fiber.resume();
+            } else {
+                state = RESOLVED_WITH_VALUE;
+                resolvedResult = result;
             }
         }
 
         @Override
         public void error(Throwable e) {
-            if (Fiber.current == this.fiber || isJspi() && fiber.state == STATE_RUNNING) {
-                fiber.exception = e;
-                fiber.isPendingResume = true;
-                removePendingCall();
-            } else {
-                if (!isJspi()) {
-                    setCurrentThread(javaThread);
-                }
+            if (isJspi()) {
+                completeJspi(null, e);
+                return;
+            }
+            if (state == SUSPENDED) {
+                setCurrentThread(javaThread);
                 javaThread = null;
                 Fiber fiber = this.fiber;
                 this.fiber = null;
                 fiber.exception = e;
                 removePendingCall();
-                if (isJspi()) {
-                    jspiUnpark(fiber);
-                } else {
-                    fiber.resume();
-                }
+                fiber.resume();
+            } else {
+                state = RESOLVED_WITH_EXCEPTION;
+                resolvedResult = e;
+            }
+        }
+
+        private void completeJspi(Object result, Throwable error) {
+            Fiber fiber = this.fiber;
+            fiber.result = result;
+            fiber.exception = error;
+            removePendingCall();
+            this.fiber = null;
+            javaThread = null;
+            if (fiber.state == STATE_RUNNING) {
+                fiber.isPendingResume = true;
+            } else {
+                jspiUnpark(fiber);
             }
         }
 

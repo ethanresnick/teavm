@@ -32,6 +32,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -91,6 +92,7 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void blockingAddition() throws InterruptedException {
         BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(1);
         assertTrue(queue.offer(1));
@@ -114,6 +116,7 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void blockingRemoval() throws InterruptedException {
         BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(10);
         assertNull(queue.poll());
@@ -136,6 +139,28 @@ public class ArrayBlockingQueueTest {
         assertTrue(start + 100 < end && start + 5000 > end, "Wait time " + (end - start));
         assertEquals(1, a);
         assertEquals(2, b);
+    }
+
+    @Test
+    @AsyncEnabled
+    public void pollTimesOut() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        long start = System.currentTimeMillis();
+        assertNull(queue.poll(100, TimeUnit.MILLISECONDS));
+        long end = System.currentTimeMillis();
+        assertTrue(end - start >= 50, "Wait time " + (end - start));
+    }
+
+    @Test
+    @AsyncEnabled
+    public void offerTimesOut() throws InterruptedException {
+        var queue = new ArrayBlockingQueue<Integer>(1);
+        assertTrue(queue.offer(1));
+        long start = System.currentTimeMillis();
+        assertFalse(queue.offer(2, 100, TimeUnit.MILLISECONDS));
+        long end = System.currentTimeMillis();
+        assertTrue(end - start >= 50, "Wait time " + (end - start));
+        assertEquals(1, queue.size());
     }
 
     @Test
@@ -253,6 +278,7 @@ public class ArrayBlockingQueueTest {
     // and "its interrupt status will be cleared". The JDK's ArrayBlockingQueue waits in Condition.await(), which
     // also clears the status when it throws.
     @Test
+    @AsyncEnabled
     public void takeCanBeInterruptedAgain() throws InterruptedException {
         var queue = new ArrayBlockingQueue<Integer>(1);
         var interrupts = new int[1];
@@ -287,6 +313,7 @@ public class ArrayBlockingQueueTest {
     // Condition.await(), which the JDK's ArrayBlockingQueue waits in, throws if the thread "has its interrupted
     // status set on entry to this method", and clears the status.
     @Test
+    @AsyncEnabled
     public void blockingCallsThrowForEarlierInterrupt() {
         var current = Thread.currentThread();
         var names = List.of("take()", "poll(5 s)", "put()", "offer(5 s)");
@@ -325,6 +352,7 @@ public class ArrayBlockingQueueTest {
     // itself, and the interrupting thread must stay itself. A pool worker blocks in take() again after the
     // interrupt, so cover that too.
     @Test
+    @AsyncEnabled
     public void currentThreadAfterInterruptingTake() throws InterruptedException {
         for (var blocksAgain : new boolean[] { false, true }) {
             var name = blocksAgain ? "take() again after the interrupt" : "one take()";
@@ -368,6 +396,7 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void endedWaitDoesNotClearAnotherThreadsInterruptHandler() throws InterruptedException {
         var names = List.of("poll(100 ms) timed out", "offer(100 ms) timed out", "take() woken by add()");
         for (var i = 0; i < names.size(); ++i) {
@@ -407,6 +436,7 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void endedWaitsDoNotKeepThreadsAlive() throws InterruptedException {
         // Each case waits on its own queue: a change to a queue wakes and removes all of its waiters, which would
         // hide a dead waiter of an earlier case.
@@ -435,6 +465,7 @@ public class ArrayBlockingQueueTest {
     }
 
     @Test
+    @AsyncEnabled
     public void interruptedWaitsDoNotKeepThreadsAlive() throws InterruptedException {
         var queues = new ArrayList<BlockingQueue<Integer>>();
         var names = new ArrayList<String>();
@@ -475,6 +506,7 @@ public class ArrayBlockingQueueTest {
     // AbstractQueue.addAll: "Attempts to addAll of a queue to itself result in IllegalArgumentException."
     // Throws: "IllegalArgumentException - ... or if the specified collection is this queue"
     @Test
+    @AsyncEnabled
     public void addAllOfItselfThrows() {
         // Empty, partly filled, and full queues of capacity 3.
         for (int size = 0; size <= 3; ++size) {
@@ -540,6 +572,7 @@ public class ArrayBlockingQueueTest {
     // A timeout longer than a host timer can hold (2^31 - 1 ms), or too long to add to the current time, must not
     // end the wait at once.
     @Test
+    @AsyncEnabled
     public void timedPollAndOfferWithLongTimeoutsWait() throws InterruptedException {
         long[] timeouts = { 3_000_000_000L, Long.MAX_VALUE - 1, Long.MAX_VALUE };
         TimeUnit[] units = { TimeUnit.MILLISECONDS, TimeUnit.NANOSECONDS, TimeUnit.DAYS };
@@ -587,6 +620,7 @@ public class ArrayBlockingQueueTest {
 
     // A timeout "less than or equal to zero" does not wait, and a short one ends after about that time.
     @Test
+    @AsyncEnabled
     public void timedPollAndOfferTimeOut() throws InterruptedException {
         long[] timeouts = { 0, -1, Long.MIN_VALUE, 1, 30 };
         TimeUnit[] units = { TimeUnit.MILLISECONDS, TimeUnit.NANOSECONDS };

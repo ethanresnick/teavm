@@ -23,6 +23,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -90,6 +91,7 @@ public class AsciiTest {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeHighSurrogateBeforeOtherChar() {
         ByteBuffer buffer = StandardCharsets.US_ASCII.encode("a\uD800b");
         byte[] result = new byte[buffer.remaining()];
@@ -101,6 +103,7 @@ public class AsciiTest {
     // considered malformed". And for a malformed result, "The malformed characters begin at the input buffer's
     // (possibly incremented) position".
     @Test
+    @AsyncEnabled
     public void loneLowSurrogateIsMalformed() {
         assertTrue(StandardCharsets.US_ASCII.newEncoder()
                 .encode(CharBuffer.wrap("\uDC00"), ByteBuffer.allocate(4), true).isMalformed());
@@ -109,6 +112,7 @@ public class AsciiTest {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeEveryShortSequenceAsJdk() {
         CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.US_ASCII);
         CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 5, sequence -> {
@@ -118,6 +122,7 @@ public class AsciiTest {
     }
 
     @Test
+    @AsyncEnabled
     public void encodeAcrossEndOfInternalBuffer() {
         CharsetEncoder encoder = CharsetTestCommon.replacingEncoder(StandardCharsets.US_ASCII);
         CharsetTestCommon.forEachSequence(CharsetTestCommon.CHARS, 3, sequence -> {

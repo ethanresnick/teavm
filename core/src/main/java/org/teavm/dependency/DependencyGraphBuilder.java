@@ -29,6 +29,7 @@ import org.teavm.model.ClassHierarchy;
 import org.teavm.model.ClassReader;
 import org.teavm.model.ClassReaderSource;
 import org.teavm.model.ElementModifier;
+import org.teavm.model.FieldReference;
 import org.teavm.model.IncomingReader;
 import org.teavm.model.MethodDescriptor;
 import org.teavm.model.MethodHolder;
@@ -42,6 +43,7 @@ import org.teavm.model.VariableReader;
 import org.teavm.model.analysis.ImplicitExceptions;
 import org.teavm.model.instructions.ArrayElementType;
 import org.teavm.model.instructions.BinaryOperation;
+import org.teavm.model.instructions.InvocationType;
 import org.teavm.model.instructions.NumericOperandType;
 import org.teavm.model.text.ListingBuilder;
 import org.teavm.model.transformation.DivisionCheckInsertion;
@@ -257,20 +259,6 @@ class DependencyGraphBuilder {
             }
         }
 
-        // The division check is inserted after this analysis, so no instruction here throws the exception yet.
-        @Override
-        public void binary(BinaryOperation op, VariableReader receiver, VariableReader first, VariableReader second,
-                NumericOperandType type) {
-            super.binary(op, receiver, first, second, type);
-            if (dependencyAnalyzer.integerDivisionChecked && DivisionCheckInsertion.isIntegerDivision(op, type)) {
-                throwsArithmeticException();
-            }
-        }
-
-        private void throwsArithmeticException() {
-            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(ArithmeticException.class.getName()));
-        }
-
         @Override
         public void cast(VariableReader receiver, VariableReader value, ValueType targetType, boolean weak) {
             super.cast(receiver, value, targetType, weak);
@@ -322,10 +310,54 @@ class DependencyGraphBuilder {
         @Override
         public void raise(VariableReader exception) {
             nodes[exception.getIndex()].addConsumer(currentExceptionConsumer);
+            consumeNullPointer(exception);
+        }
+
+        @Override
+        public void getField(VariableReader receiver, VariableReader instance, FieldReference field,
+                ValueType fieldType) {
+            super.getField(receiver, instance, field, fieldType);
+            consumeNullPointer(instance);
+        }
+
+        @Override
+        public void putField(VariableReader instance, FieldReference field, VariableReader value,
+                ValueType fieldType) {
+            super.putField(instance, field, value, fieldType);
+            consumeNullPointer(instance);
+        }
+
+        @Override
+        public void invoke(VariableReader receiver, VariableReader instance, MethodReference method,
+                List<? extends VariableReader> arguments, InvocationType type) {
+            super.invoke(receiver, instance, method, arguments, type);
+            consumeNullPointer(instance);
+        }
+
+        @Override
+        public void monitorEnter(VariableReader objectRef) {
+            super.monitorEnter(objectRef);
+            consumeNullPointer(objectRef);
+        }
+
+        @Override
+        public void monitorExit(VariableReader objectRef) {
+            super.monitorExit(objectRef);
+            consumeNullPointer(objectRef);
+        }
+
+        // Covers the instructions NullCheckInsertion guards, so their exceptions reach handlers and callers.
+        // NullCheckInsertion treats variable 0, the receiver, as non-null.
+        private void consumeNullPointer(VariableReader value) {
+            if (dependencyAnalyzer.nullChecked && value != null && value.getIndex() != 0) {
+                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                        NullPointerException.class.getName()));
+            }
         }
 
         @Override
         public void unwrapArray(VariableReader receiver, VariableReader array, ArrayElementType elementType) {
+            consumeNullPointer(array);
             DependencyNode arrayNode = nodes[array.getIndex()];
             DependencyNode receiverNode = nodes[receiver.getIndex()];
             if (arrayNode != null && receiverNode != null) {
@@ -335,6 +367,7 @@ class DependencyGraphBuilder {
 
         @Override
         public void cloneArray(VariableReader receiver, VariableReader array) {
+            consumeNullPointer(array);
             DependencyNode arrayNode = getNode(array);
             DependencyNode receiverNode = getNode(receiver);
             if (arrayNode != null && receiverNode != null) {
@@ -352,6 +385,10 @@ class DependencyGraphBuilder {
         @Override
         public void getElement(VariableReader receiver, VariableReader array, VariableReader index,
                 ArrayElementType type) {
+            super.getElement(receiver, array, index, type);
+            if (dependencyAnalyzer.arrayBoundsChecked) {
+                consumeArrayIndexOutOfBounds();
+            }
             if (isPrimitive(type)) {
                 return;
             }
@@ -365,6 +402,10 @@ class DependencyGraphBuilder {
         @Override
         public void putElement(VariableReader array, VariableReader index, VariableReader value,
                 ArrayElementType type) {
+            super.putElement(array, index, value, type);
+            if (dependencyAnalyzer.arrayBoundsChecked) {
+                consumeArrayIndexOutOfBounds();
+            }
             if (isPrimitive(type)) {
                 return;
             }
@@ -372,6 +413,42 @@ class DependencyGraphBuilder {
             DependencyNode arrayNode = nodes[array.getIndex()];
             if (valueNode != null && arrayNode != null && valueNode != arrayNode.getArrayItem()) {
                 valueNode.connect(arrayNode.getArrayItem());
+            }
+        }
+
+        @Override
+        public void boundCheck(VariableReader receiver, VariableReader index, VariableReader array,
+                boolean lower) {
+            super.boundCheck(receiver, index, array, lower);
+            consumeArrayIndexOutOfBounds();
+        }
+
+        private void consumeArrayIndexOutOfBounds() {
+            currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                    ArrayIndexOutOfBoundsException.class.getName()));
+        }
+
+        @Override
+        public void binary(BinaryOperation op, VariableReader receiver, VariableReader first,
+                VariableReader second, NumericOperandType type) {
+            super.binary(op, receiver, first, second, type);
+            if (isCheckedDivision(op, type)) {
+                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                        ArithmeticException.class.getName()));
+            }
+        }
+
+        private boolean isCheckedDivision(BinaryOperation op, NumericOperandType type) {
+            switch (op) {
+                case DIVIDE_CHECKED:
+                case MODULO_CHECKED:
+                    return true;
+                case DIVIDE:
+                case MODULO:
+                    return dependencyAnalyzer.divisionChecked
+                            && (type == NumericOperandType.INT || type == NumericOperandType.LONG);
+                default:
+                    return false;
             }
         }
 
@@ -385,9 +462,11 @@ class DependencyGraphBuilder {
             if (handleSpecialMethod(receiver, instance, method)) {
                 return;
             }
-            if (dependencyAnalyzer.integerDivisionChecked && instance == null
+
+            if (dependencyAnalyzer.divisionChecked && instance == null
                     && DivisionCheckInsertion.isUnsignedDivision(method)) {
-                throwsArithmeticException();
+                currentExceptionConsumer.consume(dependencyAnalyzer.getClassType(
+                        ArithmeticException.class.getName()));
             }
 
             CallLocation callLocation = getCallLocation();

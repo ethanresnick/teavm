@@ -46,6 +46,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 
@@ -1676,6 +1677,7 @@ public class PatternTest {
     // Pattern, "Groups and capturing": "The captured input associated with a group is always the subsequence that
     // the group most recently matched."
     @Test
+    @AsyncEnabled
     public void repeatedGroupCapturesLastIteration() {
         var matcher = Pattern.compile("(.)+x").matcher("abcx");
         assertTrue(matcher.find());
@@ -1696,6 +1698,7 @@ public class PatternTest {
     // Pattern: "X{n,m}? X, at least n but not more than m times" (reluctant), and the same for X{n,m}. A failed
     // attempt at one start must not count towards the next one.
     @Test
+    @AsyncEnabled
     public void countedGroupQuantifiersCountEachAttempt() {
         assertFalse(Pattern.compile("(ab){1,2}?").matcher("ba").find());
         assertFalse(Pattern.compile("(ab){1,2}").matcher("ba").find());
@@ -1713,6 +1716,7 @@ public class PatternTest {
 
     // Before, these recursed without end and threw StackOverflowError.
     @Test
+    @AsyncEnabled
     public void countedGroupsThatMatchEmptyTerminate() {
         assertFalse(Pattern.compile("(?:.|\\b){2}?").matcher("caacc").matches());
         var matcher = Pattern.compile("(?:.|\\b){2}?").matcher("caacc");
@@ -1727,6 +1731,7 @@ public class PatternTest {
 
     // Without the fix, the first pattern loops forever, so this test hangs instead of failing.
     @Test
+    @AsyncEnabled
     public void possessiveQuantifiersOverGroups() {
         assertTrue(Pattern.compile("(a?)*+b").matcher("aab").matches());
         assertTrue(Pattern.compile("(\\b)*+x").matcher("x").matches());
@@ -1736,6 +1741,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void alternativeFollowedBySpecialToken() {
         // Pattern's construct table defines X|Y as either X or Y, including every token in Y.
         String[][] cases = {
@@ -1758,6 +1764,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void alternativeFollowedByNul() {
         // NUL is an ordinary character, not the end of the regular expression.
         String nul = new String(new char[] { 0 });
@@ -1777,6 +1784,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void unicodeBlockNameAliases() {
         // Pattern's Unicode support delegates block names to UnicodeBlock.forName, which accepts
         // canonical names, names with spaces removed, and constant identifiers, ignoring case.
@@ -1822,6 +1830,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void unicodeBlockNameCaseMappings() {
         // UnicodeBlock.forName specifies en_US case mapping, including full uppercase expansions.
         String[][] blocks = {
@@ -1843,6 +1852,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void unicodeBlockAliasesRejectInvalidNames() {
         // UnicodeBlock.forName specifies three forms, not arbitrary insertion/removal of separators.
         for (String name : new String[] { "Basic-Latin", "B a s i c Latin", "Basic__Latin", " Basic Latin",
@@ -1857,6 +1867,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     public void unicodeBlockAliasesPreserveExactNonBlocks() {
         for (String name : new String[] { "ALL", "a_l_l", "A-L-L", "a l l", "lu", "L_u", "ascii" }) {
             for (String property : new String[] { "p", "P" }) {
@@ -1869,6 +1880,7 @@ public class PatternTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void exactAllPropertyRemainsSupported() {
         // Preserve TeaVM's existing non-block extension without adding aliases for it.

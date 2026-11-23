@@ -26,9 +26,11 @@ import java.nio.LongBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.nio.ShortBuffer;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class BufferBulkBoundsTest {
     // Absolute bulk operations must validate both ranges against the respective limits before copying.
     // https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/ByteBuffer.html

@@ -39,6 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -148,6 +149,7 @@ public class SplitTest {
     }
 
     @Test
+    @AsyncEnabled
     public void zeroWidthMatchAtStartGivesNoLeadingEmptyString() {
         assertArrayEquals(new String[] { "a", "bc" }, "abc".split("(?=b)"));
         assertArrayEquals(new String[] { "a", "b", "c" }, "abc".split(""));

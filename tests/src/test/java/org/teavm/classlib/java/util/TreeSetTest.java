@@ -27,6 +27,7 @@ import java.util.NoSuchElementException;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -218,6 +219,7 @@ public class TreeSetTest {
     // TreeSet.clone: "Returns a shallow copy of this TreeSet instance". Object.clone: by convention,
     // "x.clone().getClass() == x.getClass()", and the clone is independent of the original.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unchecked")
     public void cloneKeepsClassAndComparatorAndIsIndependent() {
         var set = new CustomTreeSet(Comparator.reverseOrder());

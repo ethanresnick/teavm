@@ -24,8 +24,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
+
 
 @TeaVMTest
 public class RandomAccessFileTest {
@@ -49,6 +51,30 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    public void skipBytes() throws IOException {
+        var file = new File("test-randomAccess-skip.bin");
+        try {
+            try (var writer = new FileOutputStream(file)) {
+                writer.write(new byte[] { 10, 11, 12, 13, 14, 15 });
+            }
+            try (var raf = new RandomAccessFile(file, "r")) {
+                assertEquals(0, raf.skipBytes(0));
+                assertEquals(10, raf.read());
+                assertEquals(2, raf.skipBytes(2));
+                assertEquals(13, raf.read());
+                assertEquals(0, raf.skipBytes(0));
+                assertEquals(0, raf.skipBytes(-1));
+                assertEquals(14, raf.read());
+                assertEquals(1, raf.skipBytes(5));
+                assertEquals(-1, raf.read());
+            }
+        } finally {
+            file.delete();
+        }
+    }
+
+    @Test
+    @AsyncEnabled
     public void writableModesCreateMissingFilesAndPreserveExistingContents() throws IOException {
         // RandomAccessFile constructors: writable modes create a missing file and permit reads and writes.
         for (String mode : new String[] { "rw", "rwd", "rws" }) {
@@ -75,6 +101,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void readModeDoesNotCreateAndCannotWriteOrResize() throws IOException {
         var file = new File("random-access-read-only");
         try {
@@ -96,6 +123,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void resizingPreservesOrClampsPosition() throws IOException {
         var file = new File("random-access-resize");
         try (var out = new FileOutputStream(file)) {
@@ -118,6 +146,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void closeIsIdempotentAndPreventsFurtherAccess() throws IOException {
         var file = new File("random-access-close");
         try {
@@ -136,6 +165,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void invalidNegativeOffsetsDoNotChangeFile() throws IOException {
         var file = new File("random-access-negative");
         try (var out = new FileOutputStream(file)) {
@@ -153,6 +183,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void offsetsBeyondAccessorRangeFailWithoutWrapping() throws IOException {
         var file = new File("random-access-range");
@@ -173,6 +204,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void readsAndWritesAlternateAtTheSharedPointer() throws IOException {
         var file = new File("random-access-alternate");
         try {
@@ -201,6 +233,7 @@ public class RandomAccessFileTest {
     }
 
     @Test
+    @AsyncEnabled
     public void readWriteOpenPreservesExistingContents() throws IOException {
         var file = new File("random-access-preserve");
         try {

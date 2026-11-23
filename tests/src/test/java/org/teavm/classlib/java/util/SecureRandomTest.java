@@ -24,12 +24,13 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.teavm.junit.OnlyPlatform;
+import org.teavm.junit.AsyncEnabled;
+import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
-@OnlyPlatform({TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC})
+@SkipPlatform(TestPlatform.C)
 public class SecureRandomTest {
     @Test
     public void nextInt() {
@@ -48,6 +49,7 @@ public class SecureRandomTest {
     // specified in the securerandom.strongAlgorithms Security property." On Linux and macOS the JDK's
     // default value of that property starts with NativePRNGBlocking, the name TeaVM also uses.
     @Test
+    @AsyncEnabled
     public void strongInstanceReportsItsAlgorithm() throws NoSuchAlgorithmException {
         var random = SecureRandom.getInstanceStrong();
         assertEquals(SecureRandom.class, random.getClass());
@@ -55,6 +57,7 @@ public class SecureRandomTest {
     }
 
     @Test
+    @AsyncEnabled
     public void strongInstanceGivesRandomBytes() throws NoSuchAlgorithmException {
         var first = SecureRandom.getInstanceStrong();
         var second = SecureRandom.getInstanceStrong();
@@ -71,6 +74,7 @@ public class SecureRandomTest {
 
     // getAlgorithm: "Returns the name of the algorithm implemented by this SecureRandom object."
     @Test
+    @AsyncEnabled
     public void getInstanceReportsRequestedAlgorithm() throws NoSuchAlgorithmException {
         for (var algorithm : List.of("NativePRNG", "NativePRNGBlocking", "NativePRNGNonBlocking")) {
             assertEquals(algorithm, SecureRandom.getInstance(algorithm).getAlgorithm());

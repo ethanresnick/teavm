@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -50,12 +51,14 @@ public class TimeUnitTest {
     }
 
     @Test
+    @AsyncEnabled
     public void sleepWithNonPositiveTimeoutReturns() throws InterruptedException {
         TimeUnit.SECONDS.sleep(0);
         TimeUnit.SECONDS.sleep(-1);
     }
 
     @Test
+    @AsyncEnabled
     public void timedWaitWithZeroTimeoutReturns() throws InterruptedException {
         Object lock = new Object();
         // Wakes the wait below if it waits forever, so the test fails instead of hanging.
@@ -82,6 +85,7 @@ public class TimeUnitTest {
     // Javadoc of convert(Duration): "Returns: the converted duration in this unit, or Long.MIN_VALUE if
     // conversion would negatively overflow, or Long.MAX_VALUE if it would positively overflow."
     @Test
+    @AsyncEnabled
     public void convertDuration() {
         assertEquals(3004005, TimeUnit.MICROSECONDS.convert(Duration.ofSeconds(3, 4_005_006)));
         assertEquals(2, TimeUnit.DAYS.convert(Duration.ofHours(49)));
@@ -114,6 +118,7 @@ public class TimeUnitTest {
     // Checks convert(Duration) against the exact quotient, rounded toward zero and clamped to the long range,
     // for every unit and for seconds near zero and near each overflow boundary.
     @Test
+    @AsyncEnabled
     public void convertDurationMatchesExactQuotient() {
         var random = new Random(73);
         var nanosPerSecond = BigInteger.valueOf(1_000_000_000);
@@ -161,6 +166,7 @@ public class TimeUnitTest {
     // unit.convert(n, NANOSECONDS), and unit.convert(Duration.of(n, unit.toChronoUnit())) is equivalent to n (in
     // the absence of overflow)."
     @Test
+    @AsyncEnabled
     public void convertDurationSpecEquivalences() {
         var random = new Random(37);
         var samples = new ArrayList<Long>(List.of(0L, 1L, -1L, 999L, -999L, 1000L, -1000L, 999_999_999L,
@@ -187,6 +193,7 @@ public class TimeUnitTest {
     // ChronoUnit to the equivalent TimeUnit. Throws: IllegalArgumentException - if chronoUnit has no equivalent
     // TimeUnit; NullPointerException - if chronoUnit is null".
     @Test
+    @AsyncEnabled
     public void chronoUnitMapping() {
         var units = TimeUnit.values();
         var chronoUnits = new ChronoUnit[] { ChronoUnit.NANOS, ChronoUnit.MICROS, ChronoUnit.MILLIS,

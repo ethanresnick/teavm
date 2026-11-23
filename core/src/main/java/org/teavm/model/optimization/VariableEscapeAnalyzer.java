@@ -20,7 +20,6 @@ import java.util.List;
 import org.teavm.model.*;
 import org.teavm.model.instructions.*;
 import org.teavm.model.optimization.UnusedVariableElimination.ImplicitExceptions;
-import org.teavm.model.transformation.DivisionCheckInsertion;
 
 public final class VariableEscapeAnalyzer {
     private VariableEscapeAnalyzer() {
@@ -31,8 +30,13 @@ public final class VariableEscapeAnalyzer {
      *                           are kept even when nothing uses their result.
      */
     public static boolean[] findEscapingVariables(Program program, ImplicitExceptions implicitExceptions) {
+        return findEscapingVariables(program, implicitExceptions, false);
+    }
+
+    public static boolean[] findEscapingVariables(Program program, ImplicitExceptions implicitExceptions,
+            boolean allDivisionsUnsafe) {
         boolean[] escaping = new boolean[program.variableCount()];
-        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping, implicitExceptions);
+        InstructionAnalyzer analyzer = new InstructionAnalyzer(escaping, implicitExceptions, allDivisionsUnsafe);
         for (int i = 0; i < program.basicBlockCount(); ++i) {
             BasicBlock block = program.basicBlockAt(i);
             for (Instruction insn : block) {
@@ -47,12 +51,14 @@ public final class VariableEscapeAnalyzer {
     private static class InstructionAnalyzer extends AbstractInstructionVisitor {
         private boolean[] escaping;
         private ImplicitExceptions implicitExceptions;
+        private boolean allDivisionsUnsafe;
         private boolean[] nonNegativeConstant;
         private List<Instruction> arrayAllocations;
         private boolean[] nonZeroConstant;
         private List<BinaryInstruction> divisions;
 
-        InstructionAnalyzer(boolean[] escaping, ImplicitExceptions implicitExceptions) {
+        InstructionAnalyzer(boolean[] escaping, ImplicitExceptions implicitExceptions, boolean allDivisionsUnsafe) {
+            this.allDivisionsUnsafe = allDivisionsUnsafe;
             this.escaping = escaping;
             this.implicitExceptions = implicitExceptions;
             if (implicitExceptions != ImplicitExceptions.REMOVE) {
@@ -72,7 +78,7 @@ public final class VariableEscapeAnalyzer {
                 return;
             }
             for (var insn : divisions) {
-                if (!nonZeroConstant[insn.getSecondOperand().getIndex()]) {
+                if (allDivisionsUnsafe || !nonZeroConstant[insn.getSecondOperand().getIndex()]) {
                     escaping[insn.getReceiver().getIndex()] = true;
                 }
             }
@@ -128,8 +134,13 @@ public final class VariableEscapeAnalyzer {
 
         @Override
         public void visit(BinaryInstruction insn) {
-            if (divisions != null && DivisionCheckInsertion.isIntegerDivision(insn.getOperation(),
-                    insn.getOperandType())) {
+            if (insn.getOperation() == BinaryOperation.DIVIDE_CHECKED
+                    || insn.getOperation() == BinaryOperation.MODULO_CHECKED) {
+                escaping[insn.getReceiver().getIndex()] = true;
+            } else if (divisions != null && (insn.getOperation() == BinaryOperation.DIVIDE
+                    || insn.getOperation() == BinaryOperation.MODULO)
+                    && (insn.getOperandType() == NumericOperandType.INT
+                    || insn.getOperandType() == NumericOperandType.LONG)) {
                 divisions.add(insn);
             }
         }

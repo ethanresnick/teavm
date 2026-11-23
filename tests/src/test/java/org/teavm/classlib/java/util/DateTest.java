@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.time.Instant;
 import java.util.Date;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -51,6 +52,7 @@ public class DateTest {
     // Date.toInstant(): "Converts this Date object to an Instant. The conversion creates an Instant that
     // represents the same point on the time-line as this Date."
     @Test
+    @AsyncEnabled
     public void toInstant() {
         for (var millis : new long[] { 0, 1, -1, 1600000000123L, -1600000000123L, Long.MAX_VALUE }) {
             assertEquals(Instant.ofEpochMilli(millis), new Date(millis).toInstant(), String.valueOf(millis));
@@ -64,6 +66,7 @@ public class DateTest {
     // "Throws: NullPointerException - if instant is null. IllegalArgumentException - if the instant is too
     // large to represent as a Date"
     @Test
+    @AsyncEnabled
     public void from() {
         assertEquals(5, Date.from(Instant.ofEpochMilli(5)).getTime());
         assertEquals(-5, Date.from(Instant.ofEpochMilli(-5)).getTime());

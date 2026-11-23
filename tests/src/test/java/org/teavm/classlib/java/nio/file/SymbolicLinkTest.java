@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.runtime.fs.VirtualFile;
@@ -41,6 +42,7 @@ import org.teavm.runtime.fs.VirtualFileSystemProvider;
 import org.teavm.runtime.fs.memory.InMemoryVirtualFileSystem;
 
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 public class SymbolicLinkTest {
     // The default file system keeps the VirtualFileSystem that it finds first, so this class installs one with

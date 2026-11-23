@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.runtime.fs.VirtualFile;
@@ -27,6 +28,7 @@ import org.teavm.runtime.fs.memory.InMemoryVirtualFileSystem;
 import org.teavm.runtime.fs.memory.VirtualFileImpl;
 
 @TeaVMTest
+@AsyncEnabled
 @SkipJVM
 public class FileAccessorLifecycleTest {
     @Test

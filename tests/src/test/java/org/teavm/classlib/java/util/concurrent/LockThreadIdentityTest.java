@@ -26,6 +26,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -33,6 +34,7 @@ import org.teavm.junit.TeaVMTest;
  * resumes, however it was woken, and an interrupt wakes only the thread it targets.
  */
 @TeaVMTest
+@AsyncEnabled
 public class LockThreadIdentityTest {
     // Every way out of park: unpark, timeout, interrupt. After each, Thread.currentThread() must be the parked thread,
     // although the thread that woke it (or the main thread, for a timeout) ran last.

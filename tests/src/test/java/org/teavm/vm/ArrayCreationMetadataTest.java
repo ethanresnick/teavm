@@ -24,6 +24,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -33,6 +34,7 @@ import org.teavm.junit.TeaVMTest;
  * links {@code java.lang.reflect.Array.newInstance} and thereby makes the metadata available.
  */
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class ArrayCreationMetadataTest {
     @Test

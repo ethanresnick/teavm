@@ -29,6 +29,7 @@ import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 // Deflater.deflate(byte[], int, int, int), Java SE 21 Javadoc: "A return value of 0 in this flush mode [NO_FLUSH]
@@ -37,6 +38,7 @@ import org.teavm.junit.TeaVMTest;
 // compressed data can get all input data available so far". It throws "IllegalArgumentException - if the flush mode
 // is invalid".
 @TeaVMTest
+@AsyncEnabled
 public class DeflaterTest {
     @Test
     public void callWithoutProgressReturnsZero() {

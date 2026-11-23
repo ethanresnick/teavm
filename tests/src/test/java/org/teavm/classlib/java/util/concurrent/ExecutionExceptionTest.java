@@ -19,9 +19,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import java.util.concurrent.ExecutionException;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class ExecutionExceptionTest {
     @Test
     public void protectedConstructorsLeaveCauseUninitialized() {

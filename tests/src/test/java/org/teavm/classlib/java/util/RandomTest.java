@@ -35,6 +35,7 @@ import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
@@ -205,6 +206,16 @@ public class RandomTest {
     }
 
     @Test
+    public void intsBoundsWithSeed() {
+        var rand = new Random(1);
+        var array = new int[10];
+        for (var i = 0; i < 10; ++i) {
+            array[i] = rand.nextInt(11);
+        }
+        assertArrayEquals(new int[] { 4, 6, 8, 8, 9, 2, 6, 3, 1, 4 }, array);
+    }
+
+    @Test
     public void longsWithSeed() {
         var rand = new Random(1);
         var array = new long[10];
@@ -224,6 +235,7 @@ public class RandomTest {
     }
 
     @Test
+    @AsyncEnabled
     public void seededBoundedIntsAreTheJdkOnes() {
         Random rand = new Random(42);
         assertArrayEquals(new int[] { 6, 41, 34, 54, 2, 59, 3, 32 },
@@ -242,6 +254,7 @@ public class RandomTest {
     }
 
     @Test
+    @AsyncEnabled
     public void seededBoundedLongsAreTheJdkOnes() {
         Random rand = new Random(42);
         assertArrayEquals(new long[] { 891, 940, 997, 398, 717 },
@@ -417,6 +430,7 @@ public class RandomTest {
     }
 
     @Test
+    @AsyncEnabled
     public void seededSequencesAreTheJdkOnes() {
         assertEquals(List.of(), differences(Random::new, cases(), new long[] {
             4529353865962221036L, 0L, -2504160376756047863L, -353363204274166157L, -5092111782408733453L,
@@ -453,6 +467,7 @@ public class RandomTest {
     // The JS backend computes it in double precision and rounds once, and C compilers may fuse it into an fma
     // (clang on arm64 does), so those backends give other floats.
     @Test
+    @AsyncEnabled
     @SkipPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.C })
     public void seededFloatRangesAreTheJdkOnes() {
         assertEquals(List.of(), differences(Random::new, floatRangeCases(), new long[] {
@@ -478,6 +493,7 @@ public class RandomTest {
     // RandomGenerator's defaults are specified only loosely (e.g. nextInt(bound) "invokes nextInt() one or more
     // times to ensure a uniform distribution"); these are the sequences of OpenJDK's RandomSupport.
     @Test
+    @AsyncEnabled
     public void randomGeneratorDefaultsGiveTheJdkSequences() {
         assertEquals(List.of(), differences(RandomTest::splitMix, cases(), new long[] {
             4689174034723483047L, 0L, -4279955162694099647L, 7682993040954019456L, 3334772236648341504L,
@@ -506,6 +522,7 @@ public class RandomTest {
     }
 
     @Test
+    @AsyncEnabled
     @Disabled("RandomGenerator.nextGaussian() uses the polar method, not the JDK's McFarland ziggurat")
     public void randomGeneratorDefaultGaussiansAreTheJdkOnes() {
         RandomGenerator rng = splitMix(42);
@@ -536,6 +553,7 @@ public class RandomTest {
     // A subclass that overrides next(bits) gets the as-if algorithms: e.g. nextBoolean() is "return next(1) != 0;",
     // nextInt(bound) starts with next(31), and nextBytes takes the bytes of nextInt(), low byte first.
     @Test
+    @AsyncEnabled
     public void subclassesGetTheSpecifiedCallsToNext() {
         assertEquals(List.of("32 -> -511900244", "31 -> 48", "31 -> 404", "32 -> 15",
                 "32 32 -> -2198594807818220712", "32 32 -> 452", "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 -> 13107",

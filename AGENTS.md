@@ -17,7 +17,7 @@ Currently, three backends are supported:
   - `org.teavm.model` - main IR (LLMV-like, SSA-like)
   - `org.teavm.ast` - secondary IR (AST-like)
   - `org.teavm.dependency` - points-to analysis (called 'dependency' for historical reasons)
-  - `org.teavm.parsing` - frontent that takes JVM bytecode and transforms it into the main IR.
+  - `org.teavm.parsing` - frontend that takes JVM bytecode and transforms it into the main IR.
   - `org.teavm.runtime` - runtime
   - `org.teavm.vm` - main launcher
 * `/interop` - annotations and interfaces for low-level interop and C interop.
@@ -27,9 +27,10 @@ Currently, three backends are supported:
 * `/tools` - integration with tooling, build systems, IDEs, etc.
   - `./gradle`
   - `./maven`
-  - `./core` - basic tool intergration API, used by Gradle and Maven plugins
+  - `./core` - basic tool integration API, used by Gradle and Maven plugins
   - `./idea`
   - `./perf` - runner of JMH-compatible benchmarks compiled by TeaVM
+  - `./benchmark-report` - compares JMH JSON results, produces text/HTML/Markdown reports (used by `perf` and `/compiler-benchmarks`)
 * `/test` - test suite
 * `/benchmarks` - performance benchmarks (JMH-style) for code produced by TeaVM, see `benchmarks/README.md`
 * `/samples` - samples for end users
@@ -61,6 +62,9 @@ Also, setting `teavm.tests.optimized` to true will compile each test twice: once
 
 ALWAYS pass all of these properties to Gradle, since user may override their value in local Gradle config.
 
+When you write or update a pass that *can* change IR, you SHOULD run tests with `teavm.tests.checkIr`.
+This will make tests run longer, but this option will turn verification of IR integrity after each pass.
+
 
 # Performance benchmarks
 
@@ -71,10 +75,16 @@ code generators), consider measuring the effect with `benchmarks/compare-stash.s
 `HEAD`) or `benchmarks/compare-commit.sh <commit>`. See `benchmarks/README.md` for Gradle tasks, properties
 and the supported subset of JMH.
 
+Performance of the compiler itself is measured by `/compiler-benchmarks` module (JMH on JVM).
+
+Both modules are configured with `benchmark.*` properties, listed with descriptions in
+`gradle-local-template.properties` of each module. Users keep their settings in `gradle-local.properties`
+(gitignored, read by `local-properties` plugin from `build-logic`); `-P` options override it.
+
 
 # Checking code style
 
-This project uses checkstyle, rules avaiable here: `config/checkstyle/checkstyle.xml`. You must ensure that the code conforms to these rules by running `checkstyleMain` Gradle task.
+This project uses checkstyle, rules available here: `config/checkstyle/checkstyle.xml`. You must ensure that the code conforms to these rules by running `checkstyleMain` Gradle task.
 
 
 # Documentation

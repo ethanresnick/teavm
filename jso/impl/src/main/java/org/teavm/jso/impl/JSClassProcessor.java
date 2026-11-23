@@ -90,6 +90,7 @@ import org.teavm.model.instructions.InvokeInstruction;
 import org.teavm.model.instructions.IsInstanceInstruction;
 import org.teavm.model.instructions.PutElementInstruction;
 import org.teavm.model.instructions.PutFieldInstruction;
+import org.teavm.model.util.DefinitionExtractor;
 import org.teavm.model.util.InstructionVariableMapper;
 import org.teavm.model.util.ModelUtils;
 import org.teavm.model.util.ProgramUtils;
@@ -392,7 +393,7 @@ class JSClassProcessor {
                             wrap.setMethod(new MethodReference(JS_WRAPPER_CLASS, "wrap", JS_OBJECT, OBJECT));
                             wrap.setArguments(incoming.getValue());
                             wrap.setReceiver(program.createVariable());
-                            incoming.getSource().getLastInstruction().insertPrevious(wrap);
+                            insertPhiInputWrap(block, incoming.getSource(), incoming.getValue(), wrap);
                             incoming.setValue(wrap.getReceiver());
                         }
                     }
@@ -403,6 +404,35 @@ class JSClassProcessor {
             types = new JSTypeInference(typeHelper, classSource, program, methodReference, wasmGC);
             types.ensure();
         }
+    }
+
+    private void insertPhiInputWrap(BasicBlock target, BasicBlock source, Variable value, Instruction wrap) {
+        var isExceptionEdge = false;
+        for (var tryCatch : source.getTryCatchBlocks()) {
+            if (tryCatch.getHandler() == target) {
+                isExceptionEdge = true;
+                break;
+            }
+        }
+        if (!isExceptionEdge) {
+            source.getLastInstruction().insertPrevious(wrap);
+            return;
+        }
+
+        // Value of exception handler phi input is bound to the position of its definition within
+        // protected block, so wrapper must go immediately after the definition. If value is defined
+        // outside of the protected block, it's the value at block entry, so wrapper goes first.
+        var definitionExtractor = new DefinitionExtractor();
+        for (var insn : source) {
+            insn.acceptVisitor(definitionExtractor);
+            for (var definedVar : definitionExtractor.getDefinedVariables()) {
+                if (definedVar == value) {
+                    insn.insertNext(wrap);
+                    return;
+                }
+            }
+        }
+        source.addFirst(wrap);
     }
 
     private void processInvokeArgs(InvokeInstruction invoke, MethodReader methodToInvoke) {
@@ -607,10 +637,10 @@ class JSClassProcessor {
                 var firstOperand = instruction.getFirstOperand();
                 var secondOperand = instruction.getSecondOperand();
                 if (first != JSType.JS) {
-                    firstOperand = convertToJs(firstOperand, instruction);
+                    firstOperand = unwrapJavaToJs(instruction, firstOperand);
                 }
                 if (second != JSType.JS) {
-                    secondOperand = convertToJs(secondOperand, instruction);
+                    secondOperand = unwrapJavaToJs(instruction, secondOperand);
                 }
                 call.setMethod(new MethodReference(JS_CLASS, "sameRef", JS_OBJECT, JS_OBJECT, ValueType.BOOLEAN));
                 call.setArguments(firstOperand, secondOperand);
@@ -660,17 +690,6 @@ class JSClassProcessor {
         }
     }
 
-    private Variable convertToJs(Variable value, Instruction instruction) {
-        var call = new InvokeInstruction();
-        call.setType(InvocationType.SPECIAL);
-        call.setMethod(new MethodReference(JS_CLASS, "directJavaToJs", OBJECT, JS_OBJECT));
-        call.setArguments(value);
-        call.setReceiver(program.createVariable());
-        call.setLocation(instruction.getLocation());
-        instruction.insertPrevious(call);
-        return call.getReceiver();
-    }
-
     private ValueType processType(ValueType type) {
         return processType(typeHelper, type);
     }
@@ -709,6 +728,7 @@ class JSClassProcessor {
 
         String targetClassName = ((ValueType.Object) cast.getTargetType()).getClassName();
         if (!typeHelper.isJavaScriptClass(targetClassName)) {
+            cast.setValue(convertJsValueToJava(cast, cast.getValue()));
             return false;
         }
 
@@ -731,6 +751,7 @@ class JSClassProcessor {
                 invoke.setMethod(JSMethods.THROW_CCE_IF_FALSE);
                 invoke.setArguments(instanceOfResult, cast.getValue());
                 invoke.setReceiver(cast.getReceiver());
+                invoke.setLocation(cast.getLocation());
                 replacement.add(invoke);
             }
             return true;
@@ -754,6 +775,7 @@ class JSClassProcessor {
 
         String targetClassName = ((ValueType.Object) isInstance.getType()).getClassName();
         if (!typeHelper.isJavaScriptClass(targetClassName)) {
+            isInstance.setValue(convertJsValueToJava(isInstance, isInstance.getValue()));
             return;
         }
 
@@ -882,7 +904,9 @@ class JSClassProcessor {
         }
         var wrap = new InvokeInstruction();
         wrap.setType(InvocationType.SPECIAL);
-        wrap.setMethod(varType == JSType.JS ? JSMethods.WRAP : JSMethods.MAYBE_WRAP);
+        // In JS backend JS value may be an exported Java object, which should be returned as is rather than wrapped.
+        // In Wasm GC wrapping already takes care of this
+        wrap.setMethod(varType == JSType.JS && wasmGC ? JSMethods.WRAP : JSMethods.MAYBE_WRAP);
         wrap.setArguments(var);
         wrap.setReceiver(program.createVariable());
         wrap.setLocation(instruction.getLocation());

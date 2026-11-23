@@ -83,8 +83,8 @@ public final class TeaVMJupiterExtension implements InvocationInterceptor, Execu
 
         if (skipJvm && !hasBackend) {
             return ConditionEvaluationResult.disabled("Neither the JVM nor any TeaVM backend would run this "
-                    + "test (teavm.junit.target is not set, @SkipJVM is present, or no backend is enabled "
-                    + "for it)");
+                    + "test (teavm.junit.target is not set, @SkipJVM is present or JVM runs are disabled, "
+                    + "or no backend is enabled for it)");
         }
         return ConditionEvaluationResult.enabled("TeaVM test");
     }
@@ -294,7 +294,7 @@ public final class TeaVMJupiterExtension implements InvocationInterceptor, Execu
                 throw error;
             }
             if (results == null) {
-                Map<TestPlatform, List<TestRun>> compiled;
+                Map<TestPlatformSupport<?>, List<TestRun>> compiled;
                 try {
                     JupiterArgumentsPlan plan = null;
                     if (TeaVMTestExecutionSupport.hasParticipatingPlatform(method, testClass)) {
@@ -307,7 +307,7 @@ public final class TeaVMJupiterExtension implements InvocationInterceptor, Execu
                 }
                 var runs = new ArrayList<TestRun>();
                 for (var platform : TeaVMTestInfrastructure.platforms) {
-                    var platformRuns = compiled.get(platform.getPlatform());
+                    var platformRuns = compiled.get(platform);
                     if (platformRuns != null) {
                         runs.addAll(platformRuns);
                     }

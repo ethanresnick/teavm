@@ -47,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -76,6 +77,7 @@ import org.teavm.model.ReferenceCache;
 import org.teavm.parsing.RenamingClassHolderSource;
 import org.teavm.parsing.resource.ResourceBytecodeClassHolderSource;
 import org.teavm.parsing.resource.ResourceProvider;
+import org.teavm.parsing.resource.SPITransformingResourceProvider;
 import org.teavm.parsing.substitution.DefaultSubstituteClassNameMapping;
 import org.teavm.tooling.EmptyTeaVMToolLog;
 import org.teavm.tooling.TeaVMProblemRenderer;
@@ -124,6 +126,7 @@ public class CodeServlet extends JettyWebSocketServlet {
     private List<String> preservedClasses = new ArrayList<>();
     private JSModuleType jsModuleType;
     private boolean wasmSharedBuffer;
+    private boolean asyncEnabled;
     private boolean wasmModularRuntime;
 
     private Map<String, Supplier<InputStream>> sourceFileCache = new HashMap<>();
@@ -272,6 +275,10 @@ public class CodeServlet extends JettyWebSocketServlet {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public void setAsyncEnabled(boolean asyncEnabled) {
+        this.asyncEnabled = asyncEnabled;
     }
 
     public void setWasmSharedBuffer(boolean wasmSharedBuffer) {
@@ -1011,6 +1018,9 @@ public class CodeServlet extends JettyWebSocketServlet {
 
         ClassLoader classLoader = initClassLoader();
         var reader = ResourceProvider.ofClassPath(Stream.of(classPath).map(File::new).collect(Collectors.toList()));
+        var props = new Properties();
+        props.putAll(properties);
+        reader = SPITransformingResourceProvider.wrap(classLoader, props, reader);
         ResourceBytecodeClassHolderSource rawMapper = new ResourceBytecodeClassHolderSource(reader, referenceCache);
         var classPathMapper = new RenamingClassHolderSource(reader, referenceCache,
                 rawMapper, DefaultSubstituteClassNameMapping.createWithSPI(classLoader));
@@ -1055,6 +1065,7 @@ public class CodeServlet extends JettyWebSocketServlet {
         };
         backend.setup(target, astCache, referenceCache, settings);
         vm.setOptimizationLevel(TeaVMOptimizationLevel.SIMPLE);
+        vm.setAsyncEnabled(asyncEnabled);
         vm.setCacheStatus(classSource);
         vm.addVirtualMethods(m -> true);
         vm.setProgressListener(progressListener);

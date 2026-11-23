@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -103,6 +104,7 @@ public class ThrowableTest {
     }
 
     @Test
+    @AsyncEnabled
     @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
     public void stackTraceHasFrameOfMethodThatEndsInInlinedCode() {
         StackTraceElement[][] stack = new StackTraceElement[1][];
@@ -111,6 +113,7 @@ public class ThrowableTest {
     }
 
     @Test
+    @AsyncEnabled
     @OnlyPlatform(TestPlatform.WEBASSEMBLY_GC)
     public void stackTraceHasFrameOfMethodThatEndsInNestedInlinedCode() {
         StackTraceElement[][] stack = new StackTraceElement[1][];

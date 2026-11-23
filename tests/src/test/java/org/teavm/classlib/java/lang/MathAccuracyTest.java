@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.math.BigInteger;
 import java.util.function.DoubleUnaryOperator;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -33,6 +34,7 @@ import org.teavm.junit.TeaVMTest;
  * compared with StrictMath.log10, an fdlibm port that StrictMathTest checks bit for bit against the JVM.
  */
 @TeaVMTest
+@AsyncEnabled
 public class MathAccuracyTest {
     private static final double[] LOG10 = {
             Double.MIN_VALUE, -323.3062153431158, 1.0E-320, -320.000004834948, Double.MIN_NORMAL, -307.6526555685888,

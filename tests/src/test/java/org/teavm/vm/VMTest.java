@@ -26,6 +26,8 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.PlatformDetector;
@@ -33,12 +35,14 @@ import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSByRef;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
+
 
 @TeaVMTest
 @EachTestCompiledSeparately
@@ -150,7 +154,7 @@ public class VMTest {
         }
         assertEquals(List.of("1", "2", "3"), list);
     }
-    
+
     @Test
     public void finallyWithEmptyTryBody() {
         Object result;
@@ -324,6 +328,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     @SkipPlatform(TestPlatform.C)
     public void asyncClinit() {
@@ -337,12 +342,14 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void asyncClinitField() {
         assertEquals("ok", AsyncClinitClass.state);
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void asyncClinitInstance() {
         AsyncClinitClass acl = new AsyncClinitClass();
@@ -351,6 +358,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void asyncWait() {
         AsyncClinitClass acl = new AsyncClinitClass();
@@ -377,6 +385,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void asyncTryCatch() {
         try {
@@ -388,6 +397,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     public void asyncExceptionHandler() {
         try {
@@ -414,7 +424,7 @@ public class VMTest {
         initCount = 23;
         assertEquals(23, ReadingStateInClinit.state);
     }
-    
+
     private static int[] createArray() {
         if (PlatformDetector.isC()) {
             return new int[] { 1, 2 };
@@ -588,7 +598,505 @@ public class VMTest {
         }
     }
 
+    static class Cell {
+        Object value;
+
+        void set(Object value) {
+            this.value = value;
+        }
+
+        void clear() {
+            value = null;
+        }
+    }
+
     @Test
+    public void exceptionHandlerChecksArrayBounds() {
+        var array = new int[] { 23 };
+        assertEquals(24, readOrDefault(array, 0, () -> 1));
+        try {
+            readOrDefault(array, -1, () -> {
+                throw new IllegalStateException();
+            });
+            fail("ArrayIndexOutOfBoundsException expected");
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // expected
+        }
+    }
+
+    // Offset supplier is polymorphic, so the call isn't inlined and the array access stays
+    // in the same basic block, which is protected by the exception handler. The handler must not
+    // rely on 'index >= 0' proven by the array access in the protected block, since the exception
+    // leaves the block before the access runs. A negative index reveals a missing lower bound check.
+    private static int readOrDefault(int[] array, int index, IntSupplier offset) {
+        try {
+            int n = offset.getAsInt();
+            return array[index] + n;
+        } catch (IllegalStateException e) {
+            return array[index];
+        }
+    }
+
+    @Test
+    public void branchBypassChecksArrayBounds() {
+        var array = new int[] { 23 };
+        assertEquals(23, readIfNonNegativeOr(array, 0, () -> false));
+        try {
+            readIfNonNegativeOr(array, -1, () -> true);
+            fail("ArrayIndexOutOfBoundsException expected");
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // expected
+        }
+    }
+
+    // The array access is dominated by the 'index >= 0' check, but it's also reachable through
+    // the second operand of '||', bypassing the edge where the check holds. Therefore, the lower
+    // bound check must be preserved. Condition supplier is polymorphic to prevent inlining.
+    private static int readIfNonNegativeOr(int[] array, int index, BooleanSupplier condition) {
+        if (0 <= index || condition.getAsBoolean()) {
+            return array[index];
+        }
+        return -1;
+    }
+
+    @Test
+    @AsyncEnabled
+    public void arrayMonitor() throws InterruptedException {
+        int[] array = { 1, 2, 3 };
+        synchronized (array) {
+            array.wait(1);
+        }
+    }
+
+    @Test
+    public void castMultiArray() {
+        Object o = new String[0][0];
+        assertEquals(0, ((String[][]) o).length);
+        o = new String[0][];
+        assertEquals(0, ((String[][]) o).length);
+        o = new int[0][0];
+        assertEquals(0, ((int[][]) o).length);
+        o = new int[0][];
+        assertEquals(0, ((int[][]) o).length);
+    }
+
+    @Test
+    public void precedence() {
+        float a = count(3);
+        float b = count(7);
+        float c = 5;
+        assertEquals(1, a * b % c, 0.1f);
+        assertEquals(6, a * (b % c), 0.1f);
+    }
+
+    private int count(int value) {
+        int result = 0;
+        for (int i = 0; i < value; ++i) {
+            result += 1;
+        }
+        return result;
+    }
+
+    @Test
+    public void typeInferenceForArrayMerge() {
+        int[][] a = falseBoolean() ? null : array();
+        assertEquals(23, a[0][0]);
+    }
+
+    @Test
+    public void nanComparison() {
+        var d = Double.NaN;
+        assertFalse(d == 1);
+        assertFalse(d > 1);
+        assertFalse(d < 1);
+        assertTrue(d != 1);
+        assertFalse(d == Double.NaN);
+        assertFalse(d > Double.NaN);
+        assertFalse(d < Double.NaN);
+        assertTrue(d != Double.NaN);
+
+        d = doubleNaN();
+        assertFalse(d == 1);
+        assertFalse(d > 1);
+        assertFalse(d < 1);
+        assertTrue(d != 1);
+        assertFalse(d == Double.NaN);
+        assertFalse(d > Double.NaN);
+        assertFalse(d < Double.NaN);
+        assertTrue(d != Double.NaN);
+
+        assertFalse(doubleNaN() == 1);
+        assertFalse(doubleNaN() > 1);
+        assertFalse(doubleNaN() < 1);
+        assertTrue(doubleNaN() != 1);
+        assertFalse(doubleNaN() == Double.NaN);
+        assertFalse(doubleNaN() > Double.NaN);
+        assertFalse(doubleNaN() < Double.NaN);
+        assertTrue(doubleNaN() != Double.NaN);
+    }
+
+    @Test
+    public void nanComparisonFloat() {
+        var f = Float.NaN;
+        assertFalse(f == 1);
+        assertFalse(f > 1);
+        assertFalse(f < 1);
+        assertTrue(f != 1);
+        assertFalse(f == Float.NaN);
+        assertFalse(f > Float.NaN);
+        assertFalse(f < Float.NaN);
+        assertTrue(f != Float.NaN);
+
+        f = floatNaN();
+        assertFalse(f == 1);
+        assertFalse(f > 1);
+        assertFalse(f < 1);
+        assertTrue(f != 1);
+        assertFalse(f == Float.NaN);
+        assertFalse(f > Float.NaN);
+        assertFalse(f < Float.NaN);
+        assertTrue(f != Float.NaN);
+
+        assertFalse(floatNaN() == 1);
+        assertFalse(floatNaN() > 1);
+        assertFalse(floatNaN() < 1);
+        assertTrue(floatNaN() != 1);
+        assertFalse(floatNaN() == Float.NaN);
+        assertFalse(floatNaN() > Float.NaN);
+        assertFalse(floatNaN() < Float.NaN);
+        assertTrue(floatNaN() != Float.NaN);
+    }
+
+    private double doubleNaN() {
+        return Double.NaN;
+    }
+
+    private float floatNaN() {
+        return Float.NaN;
+    }
+
+    private boolean falseBoolean() {
+        return false;
+    }
+
+    private int[][] array() {
+        return new int[][] { { 23 } };
+    }
+
+    @Test
+    public void variableJoiningPrimitiveAndReferenceArrays() {
+        // the shape of scala.Array$.copyOf (Scala 2.13): one variable receives
+        // either a primitive array or a reference array depending on the branch
+        assertEquals("copied 3", copyAs(new String[] { "a", "b" }, 3));
+        assertEquals("copied 3", copyAs(new int[] { 1, 2 }, 3));
+    }
+
+    private static String copyAs(Object original, int newLength) {
+        Object copy;
+        if (original instanceof int[]) {
+            copy = Arrays.copyOf((int[]) original, newLength);
+        } else {
+            copy = Arrays.copyOf((Object[]) original, newLength);
+        }
+        if (copy == original) {
+            return "same";
+        }
+        return "copied " + java.lang.reflect.Array.getLength(copy);
+    }
+
+    @Test
+    public void exceptionHandlerInitializesClass() {
+        assertEquals("B", classInitInHandler(true));
+        assertEquals("A", classInitInHandler(false));
+    }
+
+    private static String classInitInHandler(boolean fail) {
+        try {
+            failIf(fail);
+            return InitInHandler.A.name();
+        } catch (IllegalStateException e) {
+            return InitInHandler.B.name();
+        }
+    }
+
+    private static void failIf(boolean fail) {
+        if (fail) {
+            throw new IllegalStateException();
+        }
+    }
+
+    @Test
+    public void constantIndexBeyondConstantArraySizeThrows() {
+        var array = new int[2];
+        var caught = false;
+        try {
+            array[2] = 1;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            caught = true;
+        }
+        assertTrue(caught, "Exception was not caught (upper bound)");
+
+        caught = false;
+        try {
+            array[-1] = 1;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            caught = true;
+        }
+        assertTrue(caught, "Exception was not caught (lower bound)");
+    }
+
+    @Test
+    public void arithmeticExceptionDeliveredToHandler() {
+        var handled = false;
+        try {
+            divisionResult = 23 / divisor(0);
+        } catch (ArithmeticException e) {
+            // A virtual method that the test harness itself does not call,
+            // so that only the type of the caught exception makes it reachable
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    @Test
+    public void arithmeticExceptionPropagatesToCaller() {
+        var handled = false;
+        try {
+            divisionResult = remainder(23L, divisor(0));
+        } catch (ArithmeticException e) {
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    private static long divisionResult;
+
+    private static int divisor(int value) {
+        return value;
+    }
+
+    private static long remainder(long a, long b) {
+        return a % b;
+    }
+
+    @Test
+    public void arrayIndexOutOfBoundsDeliveredToHandler() {
+        var array = new int[2];
+        var handled = false;
+        try {
+            array[arrayIndex(2)] = 1;
+        } catch (ArrayIndexOutOfBoundsException e) {
+            // A virtual method that the test harness itself does not call,
+            // so that only the type of the caught exception makes it reachable
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    @Test
+    public void arrayIndexOutOfBoundsPropagatesToCaller() {
+        var handled = false;
+        try {
+            storeAt(new int[2], arrayIndex(2));
+        } catch (IndexOutOfBoundsException e) {
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    private static int arrayIndex(int value) {
+        return value;
+    }
+
+    private static void storeAt(int[] array, int index) {
+        array[index] = 1;
+    }
+
+    @Test
+    public void nullPointerExceptionDeliveredToHandler() {
+        var handled = false;
+        try {
+            nullableCell(true).set("x");
+        } catch (NullPointerException e) {
+            // A virtual method that the test harness itself does not call,
+            // so that only the type of the caught exception makes it reachable
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    @Test
+    public void nullPointerExceptionPropagatesToCaller() {
+        var handled = false;
+        try {
+            setOn(nullableCell(true), "x");
+        } catch (NullPointerException e) {
+            e.getLocalizedMessage();
+            handled = true;
+        }
+        assertTrue(handled);
+    }
+
+    private static Cell nullableCell(boolean isNull) {
+        return isNull ? null : new Cell();
+    }
+
+    private static void setOn(Cell cell, Object value) {
+        cell.set(value);
+    }
+
+    enum InitInHandler {
+        A,
+        B
+    }
+
+    @Test
+    public void exceptionHandlerSeesParameterBeforeNullCheck() {
+        var key = newKey();
+        assertEquals("attached built", attachOrCancel(new WorkingBuilder(), key));
+        assertTrue(key.valid);
+        key = newKey();
+        assertEquals("cancelled: build failed", attachOrCancel(new FailingBuilder(), key));
+        assertFalse(key.valid);
+    }
+
+    @Test
+    public void exceptionHandlerSeesLocalBeforeNullCheck() {
+        assertEquals("attached built", assignAndAttach(new WorkingBuilder()));
+        assertEquals("key assigned: build failed", assignAndAttach(new FailingBuilder()));
+    }
+
+    @Test
+    public void repeatedFieldReadEliminationWithCatch() {
+        assertEquals(1, Holder.WARMUP);
+        assertEquals(7, readHolderValueAfterException());
+    }
+
+    @Test
+    public void negatingZeroFlipsSign() {
+        double[] doubles = { 0.0, -0.0 };
+        float[] floats = { 0f, -0f };
+        assertEquals(Double.NEGATIVE_INFINITY, 1 / -doubles[0], 0);
+        assertEquals(Double.POSITIVE_INFINITY, 1 / -doubles[1], 0);
+        assertEquals(Float.NEGATIVE_INFINITY, 1 / -floats[0], 0);
+        assertEquals(Float.POSITIVE_INFINITY, 1 / -floats[1], 0);
+    }
+
+    private static int readHolderValueAfterException() {
+        try {
+            Integer.parseInt("invalid");
+            return Holder.VALUE;
+        } catch (NumberFormatException e) {
+            return Holder.VALUE;
+        }
+    }
+
+    static class Holder {
+        static final int WARMUP = Integer.parseInt("1");
+        static final int VALUE = Integer.parseInt("7");
+    }
+
+    private static String attachOrCancel(Builder builder, Key key) {
+        try {
+            Object built = builder.build(key);
+            key.attach(built);
+            return "attached " + built;
+        } catch (IllegalStateException e) {
+            key.cancel();
+            return "cancelled: " + e.getMessage();
+        }
+    }
+
+    private static String assignAndAttach(Builder builder) {
+        Key key = null;
+        try {
+            key = newKey();
+            Object built = builder.build(key);
+            key.attach(built);
+            return "attached " + built;
+        } catch (IllegalStateException e) {
+            return (key != null ? "key assigned: " : "key not assigned: ") + e.getMessage();
+        }
+    }
+
+    private static final List<Key> KEYS = new ArrayList<>();
+
+    // The compiler cannot prove that the result is not null, so each call on it gets a null check
+    private static Key newKey() {
+        KEYS.add(new Key());
+        return KEYS.get(KEYS.size() - 1);
+    }
+
+    interface Builder {
+        Object build(Key key);
+    }
+
+    static class WorkingBuilder implements Builder {
+        @Override
+        public Object build(Key key) {
+            return "built";
+        }
+    }
+
+    static class FailingBuilder implements Builder {
+        @Override
+        public Object build(Key key) {
+            throw new IllegalStateException("build failed");
+        }
+    }
+
+    @Test
+    public void nullConstantAsExceptionHandlerPhiInput() {
+        var result = new ArrayList<String>();
+        var nulls = new ArrayList<Object>();
+        for (var i = 0; i < 3; ++i) {
+            // the same null constant is used both by instruction and by exception handler phi
+            String s = null;
+            nulls.add(s);
+            try {
+                s = valueOrThrow(i);
+                throwIfZero(i);
+            } catch (IllegalStateException e) {
+                result.add(String.valueOf(s));
+            }
+        }
+        assertEquals(List.of("v0", "null"), result);
+        assertEquals(3, nulls.size());
+    }
+
+    private static String valueOrThrow(int i) {
+        if (i == 1) {
+            throw new IllegalStateException();
+        }
+        return "v" + i;
+    }
+
+    private static void throwIfZero(int i) {
+        if (i == 0) {
+            throw new IllegalStateException();
+        }
+    }
+
+    static class Key {
+        boolean valid = true;
+        Object attachment;
+
+        void attach(Object attachment) {
+            this.attachment = attachment;
+        }
+
+        void cancel() {
+            valid = false;
+        }
+    }
+
+    @Test
+    @AsyncEnabled
     public void exceptionHandlerSuccessorChecksNull() {
         var cell = new Cell();
         setAfterCatch(new Cell[] { cell }, false);
@@ -617,6 +1125,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void nestedExceptionHandlerChecksNull() {
         assertEquals("value", readInNestedHandler(new Cell[] { new Cell() }, false, false));
         assertEquals("inner", readInNestedHandler(new Cell[] { new Cell() }, false, true));
@@ -654,6 +1163,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerChecksBounds() {
         for (var fail : new boolean[] { false, true }) {
             var array = new int[2];
@@ -683,6 +1193,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerSuccessorChecksBounds() {
         for (var fail : new boolean[] { false, true }) {
             var array = new int[2];
@@ -712,6 +1223,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionPathChecksParameters() {
         for (var fail : new boolean[] { false, true }) {
             try {
@@ -765,19 +1277,8 @@ public class VMTest {
         }
     }
 
-    static class Cell {
-        Object value;
-
-        void set(Object value) {
-            this.value = value;
-        }
-
-        void clear() {
-            value = null;
-        }
-    }
-
     @Test
+    @AsyncEnabled
     public void exceptionHandlerReliesOnCheckBeforeTryBlock() {
         assertEquals("cleared", checkBeforeTryBlock(new Cell[] { new Cell() }));
         assertThrowsNpe(() -> checkBeforeTryBlock(new Cell[] { null }));
@@ -796,6 +1297,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerOfSeveralBlocksChecksNull() {
         assertEquals("cleared", checkInLaterBlock(new Cell[] { new Cell() }, 1));
         assertThrowsNpe(() -> checkInLaterBlock(new Cell[] { null }, 0));
@@ -816,6 +1318,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void nestedExceptionHandlersCheckNull() {
         assertEquals("inner cleared", checkInNestedTry(new Cell[] { new Cell() }, false, true));
         assertEquals("outer cleared", checkInNestedTry(new Cell[] { new Cell() }, true, false));
@@ -841,6 +1344,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerInLoopChecksNull() {
         assertEquals("cs", checkInLoop(new Cell[] { new Cell() }));
         assertThrowsNpe(() -> checkInLoop(new Cell[] { null }));
@@ -863,6 +1367,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void finallyBlockChecksNull() {
         assertEquals("set", checkInFinally(new Cell[] { new Cell() }, false));
         assertThrowsNpe(() -> checkInFinally(new Cell[] { null }, true));
@@ -889,165 +1394,7 @@ public class VMTest {
     }
 
     @Test
-    public void arrayMonitor() throws InterruptedException {
-        int[] array = { 1, 2, 3 };
-        synchronized (array) {
-            array.wait(1);
-        }
-    }
-
-    @Test
-    public void castMultiArray() {
-        Object o = new String[0][0];
-        assertEquals(0, ((String[][]) o).length);
-        o = new String[0][];
-        assertEquals(0, ((String[][]) o).length);
-        o = new int[0][0];
-        assertEquals(0, ((int[][]) o).length);
-        o = new int[0][];
-        assertEquals(0, ((int[][]) o).length);
-    }
-
-    @Test
-    public void precedence() {
-        float a = count(3);
-        float b = count(7);
-        float c = 5;
-        assertEquals(1, a * b % c, 0.1f);
-        assertEquals(6, a * (b % c), 0.1f);
-    }
-
-    private int count(int value) {
-        int result = 0;
-        for (int i = 0; i < value; ++i) {
-            result += 1;
-        }
-        return result;
-    }
-    
-    @Test
-    public void typeInferenceForArrayMerge() {
-        int[][] a = falseBoolean() ? null : array();
-        assertEquals(23, a[0][0]);
-    }
-
-    @Test
-    public void nanComparison() {
-        var d = Double.NaN;
-        assertFalse(d == 1);
-        assertFalse(d > 1);
-        assertFalse(d < 1);
-        assertTrue(d != 1);
-        assertFalse(d == Double.NaN);
-        assertFalse(d > Double.NaN);
-        assertFalse(d < Double.NaN);
-        assertTrue(d != Double.NaN);
-        
-        d = doubleNaN();
-        assertFalse(d == 1);
-        assertFalse(d > 1);
-        assertFalse(d < 1);
-        assertTrue(d != 1);
-        assertFalse(d == Double.NaN);
-        assertFalse(d > Double.NaN);
-        assertFalse(d < Double.NaN);
-        assertTrue(d != Double.NaN);
-
-        assertFalse(doubleNaN() == 1);
-        assertFalse(doubleNaN() > 1);
-        assertFalse(doubleNaN() < 1);
-        assertTrue(doubleNaN() != 1);
-        assertFalse(doubleNaN() == Double.NaN);
-        assertFalse(doubleNaN() > Double.NaN);
-        assertFalse(doubleNaN() < Double.NaN);
-        assertTrue(doubleNaN() != Double.NaN);
-    }
-    
-    @Test
-    public void nanComparisonFloat() {
-        var f = Float.NaN;
-        assertFalse(f == 1);
-        assertFalse(f > 1);
-        assertFalse(f < 1);
-        assertTrue(f != 1);
-        assertFalse(f == Float.NaN);
-        assertFalse(f > Float.NaN);
-        assertFalse(f < Float.NaN);
-        assertTrue(f != Float.NaN);
-
-        f = floatNaN();
-        assertFalse(f == 1);
-        assertFalse(f > 1);
-        assertFalse(f < 1);
-        assertTrue(f != 1);
-        assertFalse(f == Float.NaN);
-        assertFalse(f > Float.NaN);
-        assertFalse(f < Float.NaN);
-        assertTrue(f != Float.NaN);
-
-        assertFalse(floatNaN() == 1);
-        assertFalse(floatNaN() > 1);
-        assertFalse(floatNaN() < 1);
-        assertTrue(floatNaN() != 1);
-        assertFalse(floatNaN() == Float.NaN);
-        assertFalse(floatNaN() > Float.NaN);
-        assertFalse(floatNaN() < Float.NaN);
-        assertTrue(floatNaN() != Float.NaN);
-    }
-    
-    private double doubleNaN() {
-        return Double.NaN;
-    }
-
-    private float floatNaN() {
-        return Float.NaN;
-    }
-
-    private boolean falseBoolean() {
-        return false;
-    }
-
-    private int[][] array() {
-        return new int[][] { { 23 } };
-    }
-
-    @Test
-    public void variableJoiningPrimitiveAndReferenceArrays() {
-        // the shape of scala.Array$.copyOf (Scala 2.13): one variable receives
-        // either a primitive array or a reference array depending on the branch
-        assertEquals("copied 3", copyAs(new String[] { "a", "b" }, 3));
-        assertEquals("copied 3", copyAs(new int[] { 1, 2 }, 3));
-    }
-
-    private static String copyAs(Object original, int newLength) {
-        Object copy;
-        if (original instanceof int[]) {
-            copy = Arrays.copyOf((int[]) original, newLength);
-        } else {
-            copy = Arrays.copyOf((Object[]) original, newLength);
-        }
-        if (copy == original) {
-            return "same";
-        }
-        return "copied " + java.lang.reflect.Array.getLength(copy);
-    }
-
-    @Test
-    public void exceptionHandlerInitializesClass() {
-        assertEquals("B", classInitInHandler(true));
-        assertEquals("A", classInitInHandler(false));
-    }
-
-    private static String classInitInHandler(boolean fail) {
-        try {
-            failIf(fail);
-            return InitInHandler.A.name();
-        } catch (IllegalStateException e) {
-            return InitInHandler.B.name();
-        }
-    }
-
-    @Test
+    @AsyncEnabled
     public void exceptionHandlerSuccessorInitializesClass() {
         assertEquals("initialized", readAfterCatch(true));
         assertEquals("initialized", readAfterCatch(false));
@@ -1076,18 +1423,8 @@ public class VMTest {
         }
     }
 
-    private static void failIf(boolean fail) {
-        if (fail) {
-            throw new IllegalStateException();
-        }
-    }
-
-    enum InitInHandler {
-        A,
-        B
-    }
-
     @Test
+    @AsyncEnabled
     public void interfaceCallDoesNotInitializeInterface() {
         assertEquals("ok", readInterfaceConstant(new InterfaceWithConstantA()));
         assertEquals("ok", readInterfaceConstant(new InterfaceWithConstantB()));
@@ -1117,6 +1454,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionFromClassInitializerReachesHandler() {
         try {
             ThrowingInitializer.value();
@@ -1154,6 +1492,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void failedClassInitializerIsNotRunAgain() {
         try {
             FailingInitializer.value();
@@ -1170,6 +1509,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void errorFromClassInitializerIsNotWrapped() {
         try {
             FailingInitializerWithError.value();
@@ -1186,6 +1526,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void failedAsyncClassInitializerIsNotRunAgain() {
         try {
@@ -1254,6 +1595,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void errorsFromFailedClassInitializerReachHandlers() {
         try {
             FailingInitializerForHandlers.value();
@@ -1293,6 +1635,7 @@ public class VMTest {
     // thrown." JVMS multianewarray: "If any count value is less than zero, multianewarray throws a
     // NegativeArraySizeException", so every dimension is checked, even one that is never allocated.
     @Test
+    @AsyncEnabled
     public void negativeArrayLengthThrows() {
         int[] lengths = { -1, -2, -1000, Integer.MIN_VALUE + 1, Integer.MIN_VALUE };
         for (var length : lengths) {
@@ -1328,6 +1671,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void nonNegativeArrayLengthDoesNotThrow() {
         for (int length = 0; length <= 3; ++length) {
             assertEquals(length, new byte[length].length);
@@ -1346,6 +1690,7 @@ public class VMTest {
     // The exception is thrown at the allocation, so a handler in the same method sees the state from before the
     // allocation, and code after the allocation does not run.
     @Test
+    @AsyncEnabled
     public void negativeArrayLengthCaughtInSameMethod() {
         int[] lengths = { 1, -1, 0, Integer.MIN_VALUE };
         var log = new StringBuilder();
@@ -1368,6 +1713,7 @@ public class VMTest {
 
     // In strict mode, an allocation whose result nothing uses still checks its length.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void negativeLengthOfUnusedArrayThrows() {
         int length = minusOne();
@@ -1381,6 +1727,7 @@ public class VMTest {
 
     // In strict mode, an instruction whose result nothing uses still throws its implicit exception.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedResultStillThrows() {
         int[] nullArray = nullArray();
@@ -1417,6 +1764,7 @@ public class VMTest {
 
     // The same instructions don't throw when their operands are valid.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedResultWithValidOperandsDoesNotThrow() {
         int[] array = new int[2];
@@ -1450,47 +1798,9 @@ public class VMTest {
         return 0;
     }
 
-    @Test
-    public void exceptionHandlerSeesParameterBeforeNullCheck() {
-        var key = newKey();
-        assertEquals("attached built", attachOrCancel(new WorkingBuilder(), key));
-        assertTrue(key.valid);
-        key = newKey();
-        assertEquals("cancelled: build failed", attachOrCancel(new FailingBuilder(), key));
-        assertFalse(key.valid);
-    }
-
-    @Test
-    public void exceptionHandlerSeesLocalBeforeNullCheck() {
-        assertEquals("attached built", assignAndAttach(new WorkingBuilder()));
-        assertEquals("key assigned: build failed", assignAndAttach(new FailingBuilder()));
-    }
-
-    private static String attachOrCancel(Builder builder, Key key) {
-        try {
-            Object built = builder.build(key);
-            key.attach(built);
-            return "attached " + built;
-        } catch (IllegalStateException e) {
-            key.cancel();
-            return "cancelled: " + e.getMessage();
-        }
-    }
-
-    private static String assignAndAttach(Builder builder) {
-        Key key = null;
-        try {
-            key = newKey();
-            Object built = builder.build(key);
-            key.attach(built);
-            return "attached " + built;
-        } catch (IllegalStateException e) {
-            return (key != null ? "key assigned: " : "key not assigned: ") + e.getMessage();
-        }
-    }
-
     // Each stage reassigns the variable, so a handler must see the version assigned before the stage that threw
     @Test
+    @AsyncEnabled
     public void exceptionHandlerSeesVersionOfLocalAtThrowPoint() {
         assertEquals("caught v0", reassignLocal(0));
         assertEquals("caught v1", reassignLocal(1));
@@ -1499,6 +1809,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerSeesVersionOfParameterAtThrowPoint() {
         assertEquals("caught p", reassignParameter(0, "p"));
         assertEquals("caught p1", reassignParameter(1, "p"));
@@ -1507,6 +1818,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     public void exceptionHandlerSeesParameterAtEachNullCheck() {
         for (var failAt = 0; failAt < 3; ++failAt) {
             var key = newKey();
@@ -1568,49 +1880,11 @@ public class VMTest {
         }
     }
 
-    private static final List<Key> KEYS = new ArrayList<>();
-
-    // The compiler cannot prove that the result is not null, so each call on it gets a null check
-    private static Key newKey() {
-        KEYS.add(new Key());
-        return KEYS.get(KEYS.size() - 1);
-    }
-
-    interface Builder {
-        Object build(Key key);
-    }
-
-    static class WorkingBuilder implements Builder {
-        @Override
-        public Object build(Key key) {
-            return "built";
-        }
-    }
-
-    static class FailingBuilder implements Builder {
-        @Override
-        public Object build(Key key) {
-            throw new IllegalStateException("build failed");
-        }
-    }
-
-    static class Key {
-        boolean valid = true;
-        Object attachment;
-
-        void attach(Object attachment) {
-            this.attachment = attachment;
-        }
-
-        void cancel() {
-            valid = false;
-        }
-    }
-
 
     // The C backend does not support a class initializer that suspends, so asyncClinit, asyncClinitField,
     // asyncClinitInstance and failedAsyncClassInitializerIsNotRunAgain also skip it
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void otherThreadWaitsForAsyncClassInitializer() throws InterruptedException {
         var result = new String[1];
@@ -1624,6 +1898,7 @@ public class VMTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void otherThreadSeesFailureOfAsyncClassInitializer() throws InterruptedException {
         var result = new Throwable[1];
@@ -1676,6 +1951,7 @@ public class VMTest {
     // JLS 12.4.2 steps 2-3: a thread that uses a class whose initializer another thread runs waits until the
     // initializer ends. The initializer of LoggingSlowInitializer writes to the log before and after it suspends.
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void otherThreadWaitsUntilAsyncClassInitializerEnds() throws InterruptedException {
         var thread = new Thread(LoggingSlowInitializer::value);
@@ -1692,6 +1968,7 @@ public class VMTest {
     // JLS 12.4.2 step 5: after an initializer fails, every later use of the class throws NoClassDefFoundError, on
     // any thread, and the initializer does not run again.
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void laterUsesOfFailedAsyncClassInitializerAlsoThrow() throws InterruptedException {
         var thread = new Thread(() -> {
@@ -1758,6 +2035,7 @@ public class VMTest {
     // JLS 12.4.2 step 3: a recursive use on the thread that runs the initializer returns at once, also after the
     // initializer has suspended. RecursiveSlowInitializer uses itself through RecursiveSlowInitializerUser.
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void recursiveUseOfAsyncClassInitializerReturnsAtOnce() {
         assertEquals("initialized", RecursiveSlowInitializer.value());
@@ -1786,6 +2064,7 @@ public class VMTest {
 
     // Several threads wait for the same initializer, and all of them see it ended
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void severalThreadsWaitForAsyncClassInitializer() throws InterruptedException {
         var results = new String[4];

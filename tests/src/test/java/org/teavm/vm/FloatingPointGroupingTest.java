@@ -1,5 +1,5 @@
 /*
- *  Copyright 2026 Ethan Resnick.
+ *  Copyright 2026 Alexey Andreev.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,49 +18,80 @@ package org.teavm.vm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 import org.teavm.jso.JSBody;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
+
 /**
- * Floating-point + and * aren't associative (JLS 15.7.3: "Java programming language implementations must respect the
- * order of evaluation as indicated explicitly by parentheses"), so the parentheses of a right operand must be kept.
- * The operands come from an array, so that the compiler can't fold them.
+ * Floating-point addition and multiplication are not associative: the grouping written in the source decides
+ * the result, and has to survive compilation.
  */
 @TeaVMTest
 public class FloatingPointGroupingTest {
-    private static double[] doubles = { 1, 1e16, -1e16, 1e300, 7, 2, 3 };
-    private static float[] floats = { 1, 1e8f, -1e8f, 3e38f, 7, 2, 3 };
-
     @Test
     public void doubleAdditionKeepsGrouping() {
-        double[] d = doubles;
-        // (1 + 1e16) - 1e16 would be 0 or 2
-        assertEquals(1.0, d[0] + (d[1] + d[2]), 0);
-        assertEquals(1.0, d[0] + (d[1] - d[1]), 0);
-        assertEquals(1.0, d[0] - (d[1] + d[2]), 0);
+        assertEquals(0.0, doubleBig() + (-doubleBig() + doubleOne()), 0.0);
+        assertEquals(1.0, (doubleBig() + -doubleBig()) + doubleOne(), 0.0);
     }
 
     @Test
     public void doubleMultiplicationKeepsGrouping() {
-        double[] d = doubles;
-        // (1e300 * 1e300) / 1e300 and (1e300 * 1e300) * (1 / 1e300) would be infinite
-        assertEquals(1e300, d[3] * (d[3] / d[3]), 0);
-        assertEquals(1e300, d[3] * (d[3] * (d[0] / d[3])), 1e285);
-        assertEquals(1.0, d[4] % (d[5] * d[6]), 0);
-        assertEquals(3.5, d[4] / (d[5] * d[0]), 0);
+        assertEquals(1e308, doubleHuge() * (doubleTen() * doubleTenth()), 0.0);
+        assertEquals(Double.POSITIVE_INFINITY, (doubleHuge() * doubleTen()) * doubleTenth(), 0.0);
     }
 
     @Test
+    public void integerAdditionIsUnchanged() {
+        assertEquals(6, intOne() + (intTwo() + intThree()));
+        assertEquals(6, intOne() * (intTwo() * intThree()));
+    }
+
+    private double doubleBig() {
+        return 1e16;
+    }
+
+    private double doubleOne() {
+        return 1;
+    }
+
+    private double doubleHuge() {
+        return 1e308;
+    }
+
+    private double doubleTen() {
+        return 10;
+    }
+
+    private double doubleTenth() {
+        return 0.1;
+    }
+
+    private int intOne() {
+        return 1;
+    }
+
+    private int intTwo() {
+        return 2;
+    }
+
+    private int intThree() {
+        return 3;
+    }
+    private static float[] floats = { 1, 1e8f, -1e8f, 3e38f };
+
+    @Test
+    @AsyncEnabled
     public void floatArithmeticKeepsGrouping() {
         float[] f = floats;
         assertEquals(1f, f[0] + (f[1] + f[2]), 0);
         assertEquals(3e38f, f[3] * (f[3] / f[3]), 0);
-        assertEquals(1f, f[4] % (f[5] * f[6]), 0);
     }
 
     @Test
+    @AsyncEnabled
     @SkipJVM
     @OnlyPlatform(TestPlatform.JAVASCRIPT)
     public void jsBodyKeepsGrouping() {

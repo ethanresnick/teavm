@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -182,6 +183,7 @@ public class ListTest {
     // List: "Unmodifiable Lists ... disallow null elements. Attempts to create them with null elements result in
     // NullPointerException." Checked for every overload of List.of and every position of the null.
     @Test
+    @AsyncEnabled
     public void ofRejectsNull() {
         for (int size = 1; size <= 11; ++size) {
             for (int nullAt = 0; nullAt < size; ++nullAt) {
@@ -215,6 +217,7 @@ public class ListTest {
     // element is null and this list does not permit null elements (optional)". As in OpenJDK, the lists of
     // List.of and List.copyOf throw.
     @Test
+    @AsyncEnabled
     public void queriesRejectNull() {
         for (int size = 0; size <= 11; ++size) {
             Object[] elements = new Object[size];
@@ -228,6 +231,7 @@ public class ListTest {
 
     // Stream.toList: "The returned List may contain null elements", so its queries accept null.
     @Test
+    @AsyncEnabled
     public void streamToListAcceptsNull() {
         List<String> list = Stream.of("a", null).toList();
         assertTrue(list.contains(null));

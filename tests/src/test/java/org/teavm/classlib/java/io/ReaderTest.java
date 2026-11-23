@@ -24,9 +24,11 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class ReaderTest {
     // Sizes around the buffer sizes an implementation is likely to use, plus 0 and 1.
     private static final int[] SIZES = { 0, 1, 2, 1023, 1024, 1025, 2047, 2048, 2049, 4096, 8191, 8192, 8193,

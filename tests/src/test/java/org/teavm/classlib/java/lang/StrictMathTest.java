@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.function.DoubleUnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.teavm.jso.JSBody;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
@@ -38,6 +39,7 @@ import org.teavm.junit.TestPlatform;
  * 0x3FD18FA30D0C6D54. With -ffp-contract=off (or {@code #pragma STDC FP_CONTRACT OFF}) they pass on C.
  */
 @TeaVMTest
+@AsyncEnabled
 public class StrictMathTest {
     @Test
     @SkipPlatform(TestPlatform.C)

@@ -30,6 +30,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 // Inflater.inflate(byte[], int, int), Java SE 21 Javadoc: "A return value of 0 indicates that needsInput() or
@@ -39,6 +40,7 @@ import org.teavm.junit.TeaVMTest;
 // (window larger than 32K). FDICT (bit 5 of FLG) means a 4-byte DICTID, the Adler-32 of the preset dictionary, follows.
 // These tests also run on the JVM, which checks their expectations against the JDK's zlib.
 @TeaVMTest
+@AsyncEnabled
 public class InflaterTest {
     private static final byte[] TEXT = ("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod "
             + "tempor incididunt ut labore et dolore magna aliqua. Lorem ipsum dolor sit amet.")

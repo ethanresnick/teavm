@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -44,6 +45,7 @@ import org.teavm.junit.TeaVMTest;
  * queue) returns them in insertion order. After every operation the collection must equal the model.
  */
 @TeaVMTest
+@AsyncEnabled
 public class ConcurrentLinkedRandomOpsTest {
     private static final int SEEDS = 20;
     private static final int OPS = 600;

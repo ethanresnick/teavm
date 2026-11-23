@@ -20,11 +20,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.ServiceLoader;
+import org.teavm.junit.spi.TestPlatformProvider;
 import org.teavm.model.ClassHolderSource;
 import org.teavm.model.PreOptimizingClassHolderSource;
 import org.teavm.model.ReferenceCache;
 import org.teavm.parsing.ClasspathClassHolderSource;
 import org.teavm.parsing.ClasspathResourceProvider;
+import org.teavm.parsing.resource.ResourceProvider;
+import org.teavm.parsing.resource.SPITransformingResourceProvider;
 
 /**
  * Holds the state that's shared between every test-framework front end (JUnit 4/TestNG's
@@ -35,13 +40,17 @@ import org.teavm.parsing.ClasspathResourceProvider;
 final class TeaVMTestInfrastructure {
     static final ReferenceCache referenceCache = new ReferenceCache();
     static final ClassLoader classLoader;
+    // Shared across compilations, since some compiler plugins cache data (e.g. CLDR, Unicode tables)
+    // as long as they get the same resource provider
+    static final ResourceProvider resourceProvider;
     static final ClassHolderSource classSource;
     static final File outputDir;
     static final List<TestPlatformSupport<?>> platforms = new ArrayList<>();
-    static final Map<TestPlatform, TestRunStrategy> runners = new HashMap<>();
+    static final Map<TestPlatformSupport<?>, TestRunStrategy> runners = new HashMap<>();
 
     static {
         classLoader = TeaVMTestInfrastructure.class.getClassLoader();
+        resourceProvider = new ClasspathResourceProvider(classLoader);
         classSource = getClassSource(classLoader);
 
         String outputPath = System.getProperty(PropertyNames.PATH_PARAM);
@@ -51,12 +60,13 @@ final class TeaVMTestInfrastructure {
         platforms.add(new WebAssemblyGCPlatformSupport(classSource, referenceCache,
                 Boolean.parseBoolean(System.getProperty(PropertyNames.WASM_GC_DISASM))));
         platforms.add(new CPlatformSupport(classSource, referenceCache));
+        addExternalPlatforms();
 
         for (var platform : platforms) {
             if (platform.isEnabled() && !platform.getConfigurations().isEmpty()) {
                 var runStrategy = platform.createRunStrategy(outputDir);
                 if (runStrategy != null) {
-                    runners.put(platform.getPlatform(), runStrategy);
+                    runners.put(platform, runStrategy);
                 }
             }
         }
@@ -69,14 +79,28 @@ final class TeaVMTestInfrastructure {
             for (var strategy : runners.values()) {
                 strategy.afterAll();
             }
+            for (var platform : platforms) {
+                if (platform instanceof ExternalWasmGCPlatformSupport) {
+                    ((ExternalWasmGCPlatformSupport) platform).close();
+                }
+            }
         }));
     }
 
     private TeaVMTestInfrastructure() {
     }
 
+    private static void addExternalPlatforms() {
+        for (var provider : ServiceLoader.load(TestPlatformProvider.class, classLoader)) {
+            for (var external : provider.getPlatforms()) {
+                platforms.add(new ExternalWasmGCPlatformSupport(classSource, referenceCache, external));
+            }
+        }
+    }
+
     private static ClassHolderSource getClassSource(ClassLoader classLoader) {
-        var resourceProvider = new ClasspathResourceProvider(classLoader, false);
+        var resourceProvider = SPITransformingResourceProvider.wrap(classLoader, new Properties(),
+                new ClasspathResourceProvider(classLoader, false));
         return new PreOptimizingClassHolderSource(new ClasspathClassHolderSource(resourceProvider, referenceCache,
                 classLoader));
     }

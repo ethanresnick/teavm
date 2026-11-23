@@ -180,7 +180,7 @@ public class WasmGCIntrinsics {
             var annotationClassName = className.substring(0, nameLength);
             return new AnnotationDataIntrinsic(classInfoProvider, ctx.classes(), annotationClassName);
         });
-        
+
         var proxyIntrinsicContext = new ProxyIntrinsicContext(ctx);
         reg.registerIntrinsic(Proxy.class, new ProxyIntrinsic(reflection, ctx, proxyIntrinsicContext));
         reg.registerIntrinsic(new ProxyMethodIntrinsicProvider(reflection, proxyIntrinsicContext));

@@ -81,6 +81,7 @@ public class HostModuleIsolationTest {
                 TeaVMTestInfrastructure.referenceCache);
         var result = support.compile(TeaVMTestConfiguration.JS_DEFAULT, JavaScriptTarget::new,
                 Program.class.getName(), output, ".js", null, vm -> {
+                    vm.setAsyncEnabled(true);
                     assertNull(vm.getResourceProvider().getResource("javax/crypto/Cipher.class"));
                     assertNotNull(vm.getResourceProvider()
                             .getResource("org/teavm/classlib/java/util/concurrent/TFuture.class"));
@@ -109,6 +110,7 @@ public class HostModuleIsolationTest {
                 for (var level : List.of(TeaVMOptimizationLevel.SIMPLE, TeaVMOptimizationLevel.FULL)) {
                     var vm = new TeaVMBuilder(factory.get()).setClassLoader(loader)
                             .setClassSource(source).setResourceProvider(provider).build();
+                    vm.setAsyncEnabled(true);
                     vm.installPlugins();
                     vm.setEntryPoint(Program.class.getName());
                     vm.setOptimizationLevel(level);

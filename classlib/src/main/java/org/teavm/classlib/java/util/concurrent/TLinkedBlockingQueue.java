@@ -24,21 +24,21 @@
 // CHECKSTYLE.OFF: WhitespaceAfter|WhitespaceAround
 package org.teavm.classlib.java.util.concurrent;
 
-import org.teavm.classlib.java.util.concurrent.locks.TCondition;
-import org.teavm.classlib.java.util.concurrent.locks.TReentrantLock;
-
 import java.util.AbstractQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import org.teavm.classlib.java.util.concurrent.locks.TCondition;
+import org.teavm.classlib.java.util.concurrent.locks.TReentrantLock;
+
 
 /**
  * An optionally-bounded {@linkplain BlockingQueue blocking queue} based on

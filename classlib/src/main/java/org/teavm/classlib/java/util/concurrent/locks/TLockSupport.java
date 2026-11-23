@@ -144,9 +144,7 @@ public final class TLockSupport {
     private static void parkImpl(ParkState s, long timeoutMillis, AsyncCallback<Void> callback) {
         s.callback = callback;
         if (timeoutMillis > 0) {
-            s.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.scheduleAfter(s, timeoutMillis)
-                    : Platform.scheduleAfter(s, timeoutMillis);
+            s.timer = EventQueue.scheduleAfter(s, timeoutMillis);
         }
         s.thread.interruptHandler = s;
     }

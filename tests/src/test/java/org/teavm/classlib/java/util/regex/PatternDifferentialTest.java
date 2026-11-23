@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.Arrays;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 /**
@@ -29,6 +30,7 @@ import org.teavm.junit.TeaVMTest;
  * case of the block.
  */
 @TeaVMTest
+@AsyncEnabled
 public class PatternDifferentialTest {
     private static final int CASES_PER_BLOCK = 10;
 

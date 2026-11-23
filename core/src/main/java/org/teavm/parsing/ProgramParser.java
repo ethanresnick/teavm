@@ -231,8 +231,7 @@ public class ProgramParser {
     }
 
     public Map<Integer, String> getDebugNames(Instruction insn) {
-        Map<Integer, String> map = variableDebugNames.get(insn);
-        return map != null ? Collections.unmodifiableMap(map) : Collections.emptyMap();
+        return variableDebugNames.get(insn);
     }
 
     private void prepare(MethodNode method) {
@@ -341,6 +340,9 @@ public class ProgramParser {
                 if (basicBlock != null && !hasProperLastInstruction(basicBlock)) {
                     JumpInstruction insn = new JumpInstruction();
                     insn.setTarget(newBasicBlock);
+                    if (basicBlock.getLastInstruction() != null) {
+                        insn.setLocation(basicBlock.getLastInstruction().getLocation());
+                    }
                     basicBlock.add(insn);
                 }
                 basicBlock = newBasicBlock;

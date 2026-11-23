@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -191,6 +192,7 @@ public class FloatTest {
     // set of all decimals in R with length 1 or 2." Float.valueOf(String): the exact decimal value "is then
     // rounded to type float by the usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
     @Test
+    @AsyncEnabled
     public void subnormalToStringAndParse() {
         // The rounding interval of a subnormal is half of its own ulp, not of its normalized mantissa.
         assertEquals("1.4E-45", Float.toString(Float.MIN_VALUE));
@@ -212,6 +214,7 @@ public class FloatTest {
     // Float.toString: "Let R be the set of all decimals that round to m according to the usual round to nearest
     // rounding policy of IEEE 754 floating-point arithmetic." The selected decimal is in R, so it parses back.
     @Test
+    @AsyncEnabled
     public void smallSubnormalsRoundTrip() {
         for (int bits = 1; bits <= 65536; ++bits) {
             float f = Float.intBitsToFloat(bits);
@@ -226,6 +229,7 @@ public class FloatTest {
     // rounding policy of IEEE 754 floating-point arithmetic." Round to nearest breaks a tie to the even
     // significand, so a decimal on the edge of the interval is in R exactly when m has an even significand.
     @Test
+    @AsyncEnabled
     public void toStringOnRoundingIntervalEdge() {
         // A decimal exactly on the edge of the rounding interval is used only when the mantissa is even
         assertEquals("5.383987E7", Float.toString(53839872f));
@@ -246,6 +250,7 @@ public class FloatTest {
     // Float.toString: "Define d_m as the decimal in T that is closest to m. Or if there are two such decimals in
     // T, select the one with the even significand."
     @Test
+    @AsyncEnabled
     public void toStringHalfwayTakesEvenDigit() {
         // 2831949.25 is exactly halfway between 2831949.2 and 2831949.3
         assertEquals("2831949.2", Float.toString(2831949.25f));
@@ -253,6 +258,7 @@ public class FloatTest {
 
     // Float.toString: R is the set of decimals that round to m, and below a power of two the neighbor is closer
     @Test
+    @AsyncEnabled
     public void toStringBelowPowerOfTwo() {
         // Below a power of two the next float is closer, so the rounding interval is narrower on that side
         assertEquals("8.4703295E-22", Float.toString(Math.scalb(1f, -70)));
@@ -263,6 +269,7 @@ public class FloatTest {
     // value that is then rounded to type float by the usual round-to-nearest rule of IEEE 754 floating-point
     // arithmetic". That rule breaks a tie to the even significand.
     @Test
+    @AsyncEnabled
     public void parseExactMidpointTakesEvenFloat() {
         // Each decimal is exactly halfway between two floats, and the JDK takes the float with the even mantissa
         assertEquals(494621968f, Float.parseFloat("494621968"), 0);
@@ -276,6 +283,7 @@ public class FloatTest {
     // below is written differently from the JDK, and most are written as a decimal that does not parse back.
     // Expected strings are the JDK's.
     @Test
+    @AsyncEnabled
     @Disabled("Known gap: precision of the power-of-ten table in FloatAnalyzer")
     public void toStringNearIntervalEdgeKnownGap() {
         var failures = new StringBuilder();
@@ -306,6 +314,7 @@ public class FloatTest {
     // conceptually converted to an 'infinitely precise' binary value that is then rounded to type float by the
     // usual round-to-nearest rule of IEEE 754 floating-point arithmetic".
     @Test
+    @AsyncEnabled
     @Disabled("Known gap: precision of the power-of-ten table in FloatSynthesizer")
     public void parseNearMidpointKnownGap() {
         var failures = new StringBuilder();

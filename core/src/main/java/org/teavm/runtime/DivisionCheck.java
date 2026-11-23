@@ -16,7 +16,7 @@
 package org.teavm.runtime;
 
 /**
- * The divisor checks that DivisionCheckInsertion puts before an integer division or remainder.
+ * The divisor checks that DivisionCheckInsertion puts before an unsigned integer division or remainder.
  */
 public final class DivisionCheck {
     private DivisionCheck() {

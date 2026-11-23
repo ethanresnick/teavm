@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.Reflectable;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
@@ -34,6 +35,7 @@ import org.teavm.junit.TestPlatform;
  * class initializers. Each test has classes of its own, since a class is initialized once.
  */
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class ReflectiveClassInitializationTest {
     static void pause() {

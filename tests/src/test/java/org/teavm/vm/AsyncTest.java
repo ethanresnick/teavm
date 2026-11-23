@@ -24,17 +24,21 @@ import java.util.function.IntSupplier;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.PlatformDetector;
+import org.teavm.compiler.bootstrap.junit.platform.BootstrapWasmGCTestPlatform;
 import org.teavm.interop.Async;
 import org.teavm.interop.AsyncCallback;
 import org.teavm.jso.browser.Window;
 import org.teavm.jso.core.JSPromise;
 import org.teavm.jso.core.JSString;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
+import org.teavm.junit.OnlyPlatform;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 import org.teavm.runtime.EventQueue;
+
 
 @TeaVMTest
 @EachTestCompiledSeparately
@@ -44,8 +48,21 @@ public class AsyncTest {
     private String concatenated;
 
     @Test
+    @AsyncEnabled
     public void primitives() {
         assertEquals(23, getPrimitive());
+    }
+
+    @Test
+    @AsyncEnabled
+    public void suspensionInNestedConditionalAfterSuspendingOperand() {
+        assertEquals(24, addNestedConditional(true, true));
+        assertEquals(25, addNestedConditional(false, true));
+        assertEquals(46, addNestedConditional(false, false));
+    }
+
+    private int addNestedConditional(boolean first, boolean second) {
+        return getPrimitive() + (first ? 1 : (second ? 2 : getPrimitive()));
     }
 
     @Async
@@ -56,6 +73,7 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void jsObjects() {
         var str = getJsString();
@@ -64,6 +82,7 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     public void switchAsyncArgument() {
         var sb = new StringBuilder();
         for (var i = 0; i < 4; ++i) {
@@ -83,11 +102,13 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     public void doublePrimitive() {
         assertEquals(2.5, returnSamePrimitive(2.5), 0.01);
     }
 
     @Test
+    @AsyncEnabled
     public void conditionalBranch() {
         var list = List.of(1, 2);
         var sb = new StringBuilder();
@@ -98,6 +119,7 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     public void conditionalBranchOfDistinctTypesBeforeSuspension() {
         var sb = new StringBuilder();
         for (var i = 0; i < 2; ++i) {
@@ -114,6 +136,7 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     public void constantBeneathSuspendingConditional() {
         var sb = new StringBuilder();
         for (var i = 0; i < 2; ++i) {
@@ -127,11 +150,30 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
+    public void arraysAndObjectsLiveAcrossSuspension() {
+        var floats = new float[] { 1.5f, 2.5f };
+        var matrix = new int[][] { { 3 }, { 4, 5 } };
+        var flags = new boolean[] { true };
+        var strings = new String[] { "a", "b" };
+        var sb = new StringBuilder("foo");
+        Object nothing = null;
+        assertEquals(23, getPrimitive());
+        assertEquals(4f, floats[0] + floats[1], 0.01f);
+        assertEquals(5, matrix[1][1]);
+        assertEquals(true, flags[0]);
+        assertEquals("ab", strings[0] + strings[1]);
+        assertEquals("foo", sb.append(nothing == null ? "" : "!").toString());
+    }
+
+    @Test
+    @AsyncEnabled
     public void passStringConstant() {
         assertEquals("foo", returnSamePrimitive("foo"));
     }
 
     @Test
+    @AsyncEnabled
     public void collectionAddAll() {
         var list = new ArrayList<>() {
             @Override
@@ -167,6 +209,7 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
     @SkipPlatform(TestPlatform.C)
     public void awaitPromise() {
         var promise = new JSPromise<String>((resolve, _) -> {
@@ -176,16 +219,205 @@ public class AsyncTest {
     }
 
     @Test
+    @AsyncEnabled
+    @OnlyPlatform({ TestPlatform.JAVASCRIPT, TestPlatform.WEBASSEMBLY_GC, BootstrapWasmGCTestPlatform.ID })
     public void suspendFunctionFromJs() {
-        // On C, wrapWithJsCall runs the function from the event queue, outside any fiber
         assertEquals(23, wrapWithJsCall(() -> perhapsSuspend(false, 23)));
-        var e = assertThrows(RuntimeException.class, () -> wrapWithJsCall(() -> perhapsSuspend(true, 42)));
-        if (!PlatformDetector.isJavaScript()) {
-            assertEquals(IllegalStateException.class, e.getClass());
+        assertThrows(RuntimeException.class, () -> wrapWithJsCall(() -> perhapsSuspend(true, 42)));
+    }
+
+    @Test
+    public void monitorTest() {
+        dummySyncStaticMethod();
+    }
+
+    @Test
+    // On C, the suspendable Arrays.toString methods that this test creates fail to compile.
+    @SkipPlatform(TestPlatform.C)
+    @AsyncEnabled
+    public void suspendWithSuspendableArrayCopy() throws InterruptedException {
+        // This override makes every Throwable constructor suspendable. Arrays.copyOf can throw,
+        // so it becomes suspendable too.
+        new SuspendableStackTraceException();
+        var thread = new Thread(() -> concatenated = concatAcrossSuspension(4, "x"));
+        thread.setDaemon(true);
+        thread.start();
+        thread.join(5000);
+        assertEquals("x4,x43,x432,x4321,x43210,x43210", concatenated);
+    }
+
+    @Test
+    @SkipPlatform(TestPlatform.C)
+    @AsyncEnabled
+    public void suspendWithSuspendableArrayCopyGrowsStackRepeatedly() throws InterruptedException {
+        // Enough frames that the fiber's object stack grows several times while it unwinds and rewinds
+        new SuspendableStackTraceException();
+        var depth = 40;
+        var thread = new Thread(() -> concatenated = concatAcrossSuspension(depth, "x"));
+        thread.setDaemon(true);
+        thread.start();
+        thread.join(5000);
+        var expected = new StringBuilder();
+        var local = "x";
+        for (var i = depth; i >= 0; --i) {
+            local += i;
+            expected.append(local).append(',');
+        }
+        expected.append(local);
+        assertEquals(expected.toString(), concatenated);
+    }
+
+    private String concatAcrossSuspension(int depth, String prefix) {
+        var local = prefix + depth;
+        var rest = depth == 0 ? returnSamePrimitive(local) : concatAcrossSuspension(depth - 1, local);
+        return local + "," + rest;
+    }
+
+    private class SuspendableStackTraceException extends RuntimeException {
+        @Override
+        public Throwable fillInStackTrace() {
+            perhapsSuspend(false, 0);
+            return this;
+        }
+    }
+
+    private static synchronized void dummySyncStaticMethod() {
+    }
+
+    @Test
+    @AsyncEnabled
+    public void asyncBodyCallsSuspendableCode() throws InterruptedException {
+        var thread = new Thread(() -> sum = sumInAsyncBody());
+        thread.setDaemon(true);
+        thread.start();
+        thread.join(5000);
+        assertEquals(3, sum);
+    }
+
+    @Async
+    private native int sumInAsyncBody();
+
+    private void sumInAsyncBody(AsyncCallback<Integer> callback) {
+        // perhapsSuspend can suspend, so this method is compiled as suspendable too. Here it does not suspend.
+        var result = perhapsSuspend(false, 1) + perhapsSuspend(false, 2);
+        // Not setTimeout(Runnable): the thread above makes Runnable.run suspendable, and on C a suspendable
+        // Runnable can not run from the event queue.
+        if (PlatformDetector.isC()) {
+            EventQueue.offer(() -> callback.complete(result));
+        } else {
+            Window.setTimeout(() -> callback.complete(result), 0);
         }
     }
 
     @Test
+    @AsyncEnabled
+    public void interfaceCallToInheritedSuspendingMethod() throws InterruptedException {
+        SuspendingCall[] calls = { new InheritsSuspending(), new PlainCall(), new InheritsSuspending() };
+        var sb = new StringBuilder();
+        for (var i = 0; i < calls.length; ++i) {
+            sb.append(callThroughInterface(calls[i], i + 2, sb)).append(' ');
+        }
+        assertEquals("[614 [421 [1228 ", sb.toString());
+    }
+
+    private static int callThroughInterface(SuspendingCall call, int x, StringBuilder sb)
+            throws InterruptedException {
+        var before = x * 7;
+        sb.append('[');
+        var result = call.m(x);
+        return before + result * 100;
+    }
+
+    interface SuspendingCall {
+        int m(int x) throws InterruptedException;
+    }
+
+    static class SuspendingBase {
+        public int m(int x) throws InterruptedException {
+            Thread.sleep(5);
+            return x * 3;
+        }
+    }
+
+    static final class InheritsSuspending extends SuspendingBase implements SuspendingCall {
+    }
+
+    static final class PlainCall implements SuspendingCall {
+        @Override
+        public int m(int x) {
+            return x + 1;
+        }
+    }
+
+    @Async
+    private native JSString getJsString();
+
+    private void getJsString(AsyncCallback<JSString> callback) {
+        setTimeout(() -> callback.complete(JSString.valueOf("foo")));
+    }
+
+    @Async
+    private native int returnSamePrimitive(int value);
+
+    private void returnSamePrimitive(int value, AsyncCallback<Integer> callback) {
+        setTimeout(() -> callback.complete(value));
+    }
+
+    @Async
+    private native double returnSamePrimitive(double value);
+
+    private void returnSamePrimitive(double value, AsyncCallback<Double> callback) {
+        setTimeout(() -> callback.complete(value));
+    }
+
+    @Async
+    private native Object returnSameObject(Object value);
+
+    private void returnSameObject(Object value, AsyncCallback<Object> callback) {
+        setTimeout(() -> callback.complete(value));
+    }
+
+    @Async
+    private native String returnSamePrimitive(String value);
+
+    private void returnSamePrimitive(String value, AsyncCallback<String> callback) {
+        setTimeout(() -> callback.complete(value));
+    }
+
+    private void setTimeout(Runnable callback) {
+        if (PlatformDetector.isC()) {
+            EventQueue.offer(callback::run);
+        } else {
+            Window.setTimeout(callback::run, 0);
+        }
+    }
+
+    private int perhapsSuspend(boolean shouldSuspend, int value) {
+        if (shouldSuspend) {
+            try {
+                Thread.sleep(0);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        return value;
+    }
+
+    @Async
+    private static native int wrapWithJsCall(IntSupplier fn);
+
+    private static void wrapWithJsCall(IntSupplier fn, AsyncCallback<Integer> callback) {
+        Window.setTimeout(() -> {
+            try {
+                callback.complete(fn.getAsInt());
+            } catch (Throwable e) {
+                callback.error(e);
+            }
+        }, 0);
+    }
+
+    @Test
+    @AsyncEnabled
     public void primitiveArrayElementsAfterSuspension() throws InterruptedException {
         // A coroutine restores these arrays with Fiber.popObject() after Thread.sleep, so their variables can
         // lose their array types. The elements must still have their primitive types.
@@ -229,6 +461,7 @@ public class AsyncTest {
     // The inner loop starts at k - 1, and its body uses k - 1 again after a suspension point. On C, the resume
     // entry gives the loops a second entry point, so the loop body is copied and the copy must read the current k.
     @Test
+    @AsyncEnabled
     public void outerLoopExpressionAfterSuspensionInInnerLoop() throws InterruptedException {
         var sb = new StringBuilder();
         for (var k = 1; k < 4; k++) {
@@ -242,6 +475,7 @@ public class AsyncTest {
 
     // The same, but the inner loop body uses both i and k - 1.
     @Test
+    @AsyncEnabled
     public void outerLoopExpressionAndIndexAfterSuspensionInInnerLoop() throws InterruptedException {
         var sb = new StringBuilder();
         for (var k = 1; k < 4; k++) {
@@ -255,32 +489,7 @@ public class AsyncTest {
     }
 
     @Test
-    public void monitorTest() {
-        dummySyncStaticMethod();
-    }
-
-    private static synchronized void dummySyncStaticMethod() {
-    }
-
-    @Test
-    public void asyncBodyCallsSuspendableCode() throws InterruptedException {
-        var thread = new Thread(() -> sum = sumInAsyncBody());
-        thread.setDaemon(true);
-        thread.start();
-        thread.join(5000);
-        assertEquals(3, sum);
-    }
-
-    @Async
-    private native int sumInAsyncBody();
-
-    private void sumInAsyncBody(AsyncCallback<Integer> callback) {
-        // perhapsSuspend can suspend, so this method is compiled as suspendable too. Here it does not suspend.
-        var result = perhapsSuspend(false, 1) + perhapsSuspend(false, 2);
-        setTimeout(() -> callback.complete(result));
-    }
-
-    @Test
+    @AsyncEnabled
     public void timedWaitAfterSuspendingInterfaceIterator() throws InterruptedException {
         // This Iterator.next() can suspend, so every Iterator.next() call is a suspension point, including the one
         // in Object's notify-listener bookkeeping. The timeout of the wait below fires from the event queue,
@@ -315,156 +524,5 @@ public class AsyncTest {
         });
         thread.start();
         thread.join();
-    }
-
-    @Test
-    public void interfaceCallToInheritedSuspendingMethod() throws InterruptedException {
-        SuspendingCall[] calls = { new InheritsSuspending(), new PlainCall(), new InheritsSuspending() };
-        var sb = new StringBuilder();
-        for (var i = 0; i < calls.length; ++i) {
-            sb.append(callThroughInterface(calls[i], i + 2, sb)).append(' ');
-        }
-        assertEquals("[614 [421 [1228 ", sb.toString());
-    }
-
-    private static int callThroughInterface(SuspendingCall call, int x, StringBuilder sb)
-            throws InterruptedException {
-        var before = x * 7;
-        sb.append('[');
-        var result = call.m(x);
-        return before + result * 100;
-    }
-
-    interface SuspendingCall {
-        int m(int x) throws InterruptedException;
-    }
-
-    static class SuspendingBase {
-        public int m(int x) throws InterruptedException {
-            Thread.sleep(5);
-            return x * 3;
-        }
-    }
-
-    static final class InheritsSuspending extends SuspendingBase implements SuspendingCall {
-    }
-
-    static final class PlainCall implements SuspendingCall {
-        @Override
-        public int m(int x) {
-            return x + 1;
-        }
-    }
-
-    @Test
-    public void suspendWithSuspendableArrayCopy() throws InterruptedException {
-        // This override makes every Throwable constructor suspendable. Arrays.copyOf can throw,
-        // so it becomes suspendable too.
-        new SuspendableStackTraceException();
-        var thread = new Thread(() -> concatenated = concatAcrossSuspension(4, "x"));
-        thread.setDaemon(true);
-        thread.start();
-        thread.join(5000);
-        assertEquals("x4,x43,x432,x4321,x43210,x43210", concatenated);
-    }
-
-    @Test
-    public void suspendWithSuspendableArrayCopyGrowsStackRepeatedly() throws InterruptedException {
-        // Enough frames that the fiber's object stack grows several times while it unwinds and rewinds
-        new SuspendableStackTraceException();
-        var depth = 40;
-        var thread = new Thread(() -> concatenated = concatAcrossSuspension(depth, "x"));
-        thread.setDaemon(true);
-        thread.start();
-        thread.join(5000);
-        var expected = new StringBuilder();
-        var local = "x";
-        for (var i = depth; i >= 0; --i) {
-            local += i;
-            expected.append(local).append(',');
-        }
-        expected.append(local);
-        assertEquals(expected.toString(), concatenated);
-    }
-
-    private String concatAcrossSuspension(int depth, String prefix) {
-        var local = prefix + depth;
-        var rest = depth == 0 ? returnSamePrimitive(local) : concatAcrossSuspension(depth - 1, local);
-        return local + "," + rest;
-    }
-
-    private class SuspendableStackTraceException extends RuntimeException {
-        @Override
-        public Throwable fillInStackTrace() {
-            perhapsSuspend(false, 0);
-            return this;
-        }
-    }
-
-    @Async
-    private native JSString getJsString();
-
-    private void getJsString(AsyncCallback<JSString> callback) {
-        setTimeout(() -> callback.complete(JSString.valueOf("foo")));
-    }
-
-    @Async
-    private native int returnSamePrimitive(int value);
-
-    private void returnSamePrimitive(int value, AsyncCallback<Integer> callback) {
-        setTimeout(() -> callback.complete(value));
-    }
-
-    @Async
-    private native double returnSamePrimitive(double value);
-
-    private void returnSamePrimitive(double value, AsyncCallback<Double> callback) {
-        setTimeout(() -> callback.complete(value));
-    }
-
-    @Async
-    private native Object returnSameObject(Object value);
-
-    private void returnSameObject(Object value, AsyncCallback<Object> callback) {
-        setTimeout(() -> callback.complete(value));
-    }
-
-    @Async
-    private native String returnSamePrimitive(String value);
-
-    private void returnSamePrimitive(String value, AsyncCallback<String> callback) {
-        setTimeout(() -> callback.complete(value));
-    }
-
-    private static void setTimeout(Runnable callback) {
-        if (PlatformDetector.isC()) {
-            EventQueue.offer(callback::run);
-        } else {
-            Window.setTimeout(callback::run, 0);
-        }
-    }
-
-    private int perhapsSuspend(boolean shouldSuspend, int value) {
-        if (shouldSuspend) {
-            try {
-                Thread.sleep(0);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return value;
-    }
-    
-    @Async
-    private static native int wrapWithJsCall(IntSupplier fn);
-    
-    private static void wrapWithJsCall(IntSupplier fn, AsyncCallback<Integer> callback) {
-        setTimeout(() -> {
-            try {
-                callback.complete(fn.getAsInt());
-            } catch (Throwable e) {
-                callback.error(e);
-            }
-        });
     }
 }

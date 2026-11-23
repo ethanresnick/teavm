@@ -33,13 +33,15 @@
 package org.teavm.classlib.java.util.concurrent;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
 import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 
+
 @TeaVMTest
+@AsyncEnabled
 public class CountDownLatchTest extends JSR166TestCase {
     // android-note: Removed because the CTS runner does a bad job of
     // retrying tests that have suite() declarations.

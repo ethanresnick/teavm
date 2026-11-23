@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -330,6 +331,7 @@ public class IntegerTest {
     // the specified radix (as determined by whether Character.digit(char, int) returns a nonnegative value),
     // except that the first character may be an ASCII plus sign '+'."
     @Test
+    @AsyncEnabled
     public void parseUnsignedInt() {
         assertEquals(0, Integer.parseUnsignedInt("0"));
         assertEquals(-1, Integer.parseUnsignedInt("4294967295"));
@@ -345,6 +347,7 @@ public class IntegerTest {
     // Javadoc: "An exception of type NumberFormatException is thrown if any of the following situations
     // occurs: [...] The value represented by the string is larger than the largest unsigned int, 2^32-1."
     @Test
+    @AsyncEnabled
     public void parseUnsignedIntAllRadixes() {
         long[] valid = { 0, 1, 2, 35, 36, Integer.MAX_VALUE - 1L, Integer.MAX_VALUE, 1L << 31, (1L << 31) + 1,
                 (1L << 32) - 2, (1L << 32) - 1 };
@@ -378,6 +381,7 @@ public class IntegerTest {
     }
 
     @Test
+    @AsyncEnabled
     public void parseUnsignedIntRoundTrips() {
         int[] radixes = { 2, 3, 7, 8, 10, 16, 32, 36 };
         long seed = 12345;
@@ -396,6 +400,7 @@ public class IntegerTest {
     // plus sign '+' provided that the string is longer than length 1"; and the method summary says
     // "An ASCII minus sign '-' is not permitted", so even "-0" is rejected.
     @Test
+    @AsyncEnabled
     public void parseUnsignedIntRejectsSignsAndEmpty() {
         assertEquals(0, Integer.parseUnsignedInt("+0"));
         assertEquals(-1, Integer.parseUnsignedInt("+4294967295"));
@@ -410,6 +415,7 @@ public class IntegerTest {
 
     // Javadoc: "The radix is either smaller than Character.MIN_RADIX or larger than Character.MAX_RADIX."
     @Test
+    @AsyncEnabled
     public void parseUnsignedIntRejectsBadRadix() {
         for (int radix : new int[] { Integer.MIN_VALUE, -1, 0, 1, 37, Integer.MAX_VALUE }) {
             assertThrows(NumberFormatException.class, () -> Integer.parseUnsignedInt("0", radix));
@@ -420,6 +426,7 @@ public class IntegerTest {
     // Javadoc: "Any character of the string is not a digit of the specified radix, except that the first
     // character may be a plus sign '+'".
     @Test
+    @AsyncEnabled
     public void parseUnsignedIntRejectsInvalidCharAtEveryPosition() {
         char[] bad = { ' ', '\t', '\0', '.', ',', '/', ':', '@', '[', '`', '{', '-', '_', '\u00E9', '\u2028' };
         for (int radix = Character.MIN_RADIX; radix <= Character.MAX_RADIX; ++radix) {
@@ -454,6 +461,7 @@ public class IntegerTest {
     // Accepted gap: the JDK accepts any character for which Character.digit is nonnegative, including non-ASCII
     // digits and fullwidth Latin letters; TeaVM (here and in parseInt) only accepts ASCII digits and letters.
     @Test
+    @AsyncEnabled
     @Disabled("TeaVM's integer parsers accept only ASCII digits, not every char that Character.digit accepts")
     public void parseUnsignedIntAcceptsNonAsciiDigits() {
         assertEquals(12, Integer.parseUnsignedInt("\u0661\u0662"));

@@ -45,6 +45,11 @@ public final class ExceptionHandling {
         Address stackFrame = ShadowStack.getStackTop();
         while (stackFrame != null) {
             int callSiteId = ShadowStack.getCallSiteId(stackFrame);
+            if (callSiteId < 0) {
+                // A runtime frame that only holds GC roots
+                stackFrame = ShadowStack.getNextStackFrame(stackFrame);
+                continue;
+            }
             if (isObfuscated()) {
                 Console.printString("\tat Obfuscated.obfuscated(Obfuscated.java:");
                 Console.printInt(callSiteId);
@@ -147,24 +152,21 @@ public final class ExceptionHandling {
         }
     }
 
-    @Unmanaged
+    // These four are managed, so that the new exception is a GC root while its constructor allocates
     public static void throwClassCastException() {
         throwException(new ClassCastException());
     }
 
-    @Unmanaged
     @Export(name = "teavm_throwNullPointerException")
     public static void throwNullPointerException() {
         throwException(new NullPointerException());
     }
 
-    @Unmanaged
     @Export(name = "teavm_throwArrayIndexOutOfBoundsException")
     public static void throwArrayIndexOutOfBoundsException() {
         throwException(new ArrayIndexOutOfBoundsException());
     }
 
-    @Unmanaged
     @Export(name = "teavm_throwArithmeticException")
     public static void throwArithmeticException() {
         throwException(new ArithmeticException());
@@ -219,6 +221,7 @@ public final class ExceptionHandling {
         int size = callStackSize();
 
         ShadowStack.allocStack(1);
+        ShadowStack.registerCallSite(-1);
         ShadowStack.removeGCRoot(0);
         StackTraceElement[] target = new StackTraceElement[size];
         ShadowStack.registerGCRoot(0, target);

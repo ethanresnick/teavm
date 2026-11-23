@@ -29,9 +29,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
+@AsyncEnabled
 public class MessageDigestTest {
     // The FIPS 180-4 example messages (NIST CSRC "Examples with intermediate values"): the empty message, "abc",
     // the 448-bit and 896-bit two-block messages, and one million 'a'. MD5 uses the same messages.

@@ -37,6 +37,7 @@ import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.MapTest2Support;
 import org.teavm.classlib.support.UnmodifiableCollectionTestSupport;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -975,6 +976,7 @@ public class HashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void cloneDoesNotCallOverriddenPutOrPutAll() {
         var map = new FrozenMap();
         map.put("a", "1");

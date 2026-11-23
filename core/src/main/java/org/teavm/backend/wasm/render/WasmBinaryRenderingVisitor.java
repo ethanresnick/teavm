@@ -120,6 +120,22 @@ class WasmBinaryRenderingVisitor implements WasmInstructionVisitor {
         }
     }
 
+    /**
+     * Ends the inlined-method frames that are still open when the function's code ends. Without this, a function
+     * whose last location is inside inlined code leaves those frames open. The function's own end in the debug
+     * lines then closes an inlined frame instead, every later function nests inside it, and the deobfuscator
+     * finds no line information for any of them.
+     */
+    void finish() {
+        if (debugLines != null) {
+            debugLines.advance(writer.getPosition() + addressOffset);
+            while (!methodStack.isEmpty()) {
+                debugLines.end();
+                methodStack.remove(methodStack.size() - 1);
+            }
+        }
+    }
+
     @Override
     public void visit(WasmUnreachable instruction) {
         emitLocation(instruction);
@@ -1171,22 +1187,6 @@ class WasmBinaryRenderingVisitor implements WasmInstructionVisitor {
 
     private int alignment(int value) {
         return 31 - Integer.numberOfLeadingZeros(Math.max(1, value));
-    }
-
-    /**
-     * Ends the inlined-method frames that are still open when the function's code ends. Without this, a function
-     * whose last location is inside inlined code leaves those frames open. The function's own end in the debug
-     * lines then closes an inlined frame instead, every later function nests inside it, and the deobfuscator
-     * finds no line information for any of them.
-     */
-    void endLocations() {
-        if (debugLines != null && !methodStack.isEmpty()) {
-            debugLines.advance(writer.getPosition() + addressOffset);
-            while (!methodStack.isEmpty()) {
-                debugLines.end();
-                methodStack.remove(methodStack.size() - 1);
-            }
-        }
     }
 
     private void emitLocation(WasmInstruction instruction) {

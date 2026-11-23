@@ -17,6 +17,7 @@ package org.teavm.vm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -26,6 +27,7 @@ import org.teavm.junit.TeaVMTest;
  * "Variable used before definition". Where the merged object is read, the result is checked too.
  */
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class ScalarReplacementPhiTest {
     @Test

@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -90,6 +91,7 @@ public class RttiTest {
     }
 
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void castWithUnusedResultFails() {
         List<String> list = makeList();
@@ -105,6 +107,7 @@ public class RttiTest {
     // JLS 5.5: a cast checks the type of the value at run time and throws ClassCastException if it is not
     // assignable, even when nothing reads the result. null passes every reference cast.
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedCastChecksEveryValueInLoop() {
         Object[] values = { "a", 1, null, new ArrayList<>(), new Object[0], new String[0], 2L, null };
@@ -131,6 +134,7 @@ public class RttiTest {
     }
 
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedCastInLoopThrowsAtFirstBadValue() {
         Object[] values = { "a", "b", 3, "d" };
@@ -147,6 +151,7 @@ public class RttiTest {
     }
 
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedCastInInlinedMethodThrows() {
         assertThrows(ClassCastException.class, () -> castToString(1));
@@ -160,6 +165,7 @@ public class RttiTest {
 
     // javac casts the erased result of a generic method to the type argument, even when the result is ignored.
     @Test
+    @AsyncEnabled
     @SuppressWarnings({ "unused", "unchecked" })
     public void unusedGenericResultIsChecked() {
         List<String> list = (List<String>) (List<?>) List.of(1);
@@ -178,6 +184,7 @@ public class RttiTest {
     }
 
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void unusedCastInLambdaThrows() {
         Object value = 1;
@@ -193,6 +200,7 @@ public class RttiTest {
     }
 
     @Test
+    @AsyncEnabled
     @SuppressWarnings("unused")
     public void handlerSeesStateBeforeFailedUnusedCast() {
         Object value = 1;

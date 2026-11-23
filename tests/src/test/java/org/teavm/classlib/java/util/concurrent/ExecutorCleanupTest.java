@@ -34,6 +34,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
 import org.teavm.jso.core.JSObjects;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.SkipJVM;
 import org.teavm.junit.SkipPlatform;
@@ -41,6 +42,7 @@ import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 @SkipJVM
 public class ExecutorCleanupTest {

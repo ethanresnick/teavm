@@ -45,12 +45,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.teavm.classlib.support.GCSupport;
 import org.teavm.classlib.support.MapTest2Support;
+import org.teavm.compiler.bootstrap.junit.platform.BootstrapWasmGCTestPlatform;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.SkipPlatform;
 import org.teavm.junit.TeaVMTest;
 import org.teavm.junit.TestPlatform;
 
 @TeaVMTest
-@SkipPlatform(TestPlatform.WEBASSEMBLY_GC)
+@SkipPlatform({TestPlatform.WEBASSEMBLY_GC, BootstrapWasmGCTestPlatform.ID})
 public class WeakHashMapTest {
     static class MockMap<K, V> extends AbstractMap<K, V> {
         @Override
@@ -159,6 +161,7 @@ public class WeakHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void entrySet() {
         var weakMap = new WeakHashMap<>();
         for (int i = 0; i < 100; i++) {
@@ -220,6 +223,7 @@ public class WeakHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void entrySet2() {
         whm = new WeakHashMap<>();
         for (int i = 0; i < 100; i++) {
@@ -260,6 +264,7 @@ public class WeakHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void put() {
         var map = new WeakHashMap<>();
         map.put(null, "value"); // add null key
@@ -294,6 +299,7 @@ public class WeakHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void keySet() {
         whm = new WeakHashMap<>();
         for (int i = 0; i < 100; i++) {
@@ -318,6 +324,7 @@ public class WeakHashMapTest {
     }
 
     @Test
+    @AsyncEnabled
     public void keySetHasNext() {
         var map = new WeakHashMap<>();
         var cl = new ConstantHashClass(2);
@@ -349,6 +356,7 @@ public class WeakHashMapTest {
 
 
     @Test
+    @AsyncEnabled
     public void values() {
         whm = new WeakHashMap<>();
         for (int i = 0; i < 100; i++) {

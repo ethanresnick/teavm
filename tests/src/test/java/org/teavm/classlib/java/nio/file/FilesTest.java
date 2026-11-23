@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -623,6 +624,7 @@ public class FilesTest {
     // exception)". Files.copy without REPLACE_EXISTING throws FileAlreadyExistsException "if the target file
     // exists". Every way to create a new file fails on an existing file or directory and leaves it unchanged.
     @Test
+    @AsyncEnabled
     public void createNewFailsOnExistingEntryAndLeavesItUnchanged() throws IOException {
         var file = Path.of("test-create-new-file");
         var dir = Path.of("test-create-new-dir");
@@ -701,6 +703,7 @@ public class FilesTest {
     // "UnsupportedOperationException - if the array contains an attribute that cannot be set atomically when
     // creating the file". An attribute is never silently dropped, and nothing is created.
     @Test
+    @AsyncEnabled
     public void creationRejectsUnsupportedAttribute() throws IOException {
         var attribute = new FileAttribute<String>() {
             @Override
@@ -739,6 +742,7 @@ public class FilesTest {
     // in which case ".tmp" is used". Unlike File.createTempFile, no minimum prefix length is specified. It "Creates
     // a new empty file in the specified directory".
     @Test
+    @AsyncEnabled
     public void createTempFileTakesAnyPrefix() throws IOException {
         var dir = Files.createDirectories(Path.of("test-temp-file-dir"));
         var created = new ArrayList<Path>();
@@ -774,6 +778,7 @@ public class FilesTest {
     // Files.createTempFile(prefix, suffix, attrs) "Creates an empty file in the default temporary-file directory";
     // its prefix "may be null" too.
     @Test
+    @AsyncEnabled
     public void createTempFileInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
         var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
         var shortPrefix = Files.createTempFile("a", null);
@@ -795,6 +800,7 @@ public class FilesTest {
     // Files.createTempDirectory(prefix, attrs) "Creates a new directory in the default temporary-file directory";
     // "prefix - the prefix string to be used in generating the directory's name; may be null".
     @Test
+    @AsyncEnabled
     public void createTempDirectoryInDefaultDirectoryTakesShortOrNullPrefix() throws IOException {
         var tmpDir = Path.of(System.getProperty("java.io.tmpdir"));
         var shortPrefix = Files.createTempDirectory("a");
@@ -813,6 +819,7 @@ public class FilesTest {
 
     // Files.isReadable/isWritable/isExecutable: "true if the file exists and is readable/writable/executable".
     @Test
+    @AsyncEnabled
     public void accessChecksFollowFilePermissions() throws IOException {
         var file = new File("test-file-permissions");
         var path = Path.of("test-file-permissions");
@@ -841,6 +848,7 @@ public class FilesTest {
     // already exists." It returns "the directory".
     // Every depth of an existing prefix (none, some, all), for a relative and an absolute path.
     @Test
+    @AsyncEnabled
     public void createDirectoriesWithEveryExistingPrefix() throws IOException {
         var relative = Path.of("test-dirs-prefix", "a", "b");
         for (var leaf : new Path[] { relative, relative.toAbsolutePath() }) {
@@ -865,6 +873,7 @@ public class FilesTest {
 
     // The same, for a path with a single name, relative and absolute.
     @Test
+    @AsyncEnabled
     public void createDirectoriesAcceptsExistingDirectory() throws IOException {
         var dir = Path.of("test-existing-dir");
         try {
@@ -886,6 +895,7 @@ public class FilesTest {
 
     // "FileAlreadyExistsException - if dir exists but is not a directory (optional specific exception)".
     @Test
+    @AsyncEnabled
     public void createDirectoriesRejectsExistingFile() throws IOException {
         var file = Path.of("test-dirs-file");
         var nested = Path.of("test-dirs-parent", "file");
@@ -906,6 +916,7 @@ public class FilesTest {
 
     // createDirectory and createFile with an absolute path create the entry at that path.
     @Test
+    @AsyncEnabled
     public void createDirectoryAndFileWithAbsolutePath() throws IOException {
         var dir = Path.of("test-abs-dir").toAbsolutePath();
         var file = dir.resolve("file");
@@ -924,6 +935,7 @@ public class FilesTest {
     // Files.newInputStream: "If no options are present then it is equivalent to opening the file with the READ
     // option." Every combination of READ and NOFOLLOW_LINKS opens the file for reading.
     @Test
+    @AsyncEnabled
     public void newInputStreamAcceptsReadOptions() throws IOException {
         var path = Path.of("test-file-read-option");
         var optionSets = new OpenOption[][] {
@@ -950,6 +962,7 @@ public class FilesTest {
     // or "UnsupportedOperationException - if an unsupported option is specified". A stream for reading cannot
     // write, so WRITE and APPEND are one or the other, with or without READ.
     @Test
+    @AsyncEnabled
     public void newInputStreamRejectsWriteOptions() throws IOException {
         var path = Path.of("test-file-read-write-option");
         try {
@@ -976,6 +989,7 @@ public class FilesTest {
     // StandardOpenOption.APPEND: "This option may not be used in conjunction with the READ or TRUNCATE_EXISTING
     // options."
     @Test
+    @AsyncEnabled
     public void newOutputStreamRejectsInvalidCombinations() throws IOException {
         var path = Path.of("test-file-write-invalid");
         var optionSets = new OpenOption[][] {
@@ -1004,6 +1018,7 @@ public class FilesTest {
     // TRUNCATE_EXISTING: "the existing file is truncated to a size of 0 bytes"; CREATE: "an existing file is opened
     // if it exists". SYNC, DSYNC, SPARSE and NOFOLLOW_LINKS do not change the content.
     @Test
+    @AsyncEnabled
     public void newOutputStreamOptionsOnExistingFile() throws IOException {
         var path = Path.of("test-file-write-options");
         var options = new OpenOption[] {
@@ -1043,6 +1058,7 @@ public class FilesTest {
     // attempt to delete the file when closed by the appropriate close method." TeaVM accepts the option but never
     // deletes the file.
     @Test
+    @AsyncEnabled
     @Disabled("newOutputStream accepts DELETE_ON_CLOSE but does not delete the file when the stream is closed")
     public void newOutputStreamDeleteOnClose() throws IOException {
         var path = Path.of("test-file-delete-on-close");
@@ -1063,6 +1079,7 @@ public class FilesTest {
     // file system. Converting from finer to coarser granularities results in precision loss."
     // So a file system may keep whole seconds (the C backend's does), but must not keep any other value.
     @Test
+    @AsyncEnabled
     public void setLastModifiedTime() throws IOException {
         var path = Path.of("test-file-mtime");
         var dir = Path.of("test-dir-mtime");
@@ -1106,6 +1123,7 @@ public class FilesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void setLastModifiedTimeOfMissingFile() throws IOException {
         var time = FileTime.fromMillis(1_600_000_000_000L);
         assertThrows(NoSuchFileException.class, () -> Files.setLastModifiedTime(Path.of("no-such-file"), time));
@@ -1117,6 +1135,7 @@ public class FilesTest {
     // java.nio.file package docs: "Unless otherwise noted, passing a null argument to a constructor or method of
     // any class or interface in this package will cause a NullPointerException to be thrown."
     @Test
+    @AsyncEnabled
     public void setLastModifiedTimeRejectsNull() throws IOException {
         var path = Path.of("test-file-mtime-null");
         try {
@@ -1128,6 +1147,7 @@ public class FilesTest {
     }
 
     @Test
+    @AsyncEnabled
     public void readString() throws IOException {
         var path = Path.of("test-file-string");
         try {

@@ -404,11 +404,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         }
         while (!waitHandlers.isEmpty()) {
             WaitHandler handler = waitHandlers.remove();
-            if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-                EventQueue.offer(handler::changed);
-            } else {
-                Platform.postpone(handler::changed);
-            }
+            EventQueue.offer(handler::changed);
         }
         waitHandlers = null;
     }
@@ -439,9 +435,7 @@ public class TArrayBlockingQueue<E> extends TAbstractQueue<E> implements TBlocki
         handler.queue = this;
         waitHandlers.add(handler);
         if (timeLimit > 0) {
-            handler.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.scheduleAt(handler, timeLimit)
-                    : Platform.scheduleAt(handler, timeLimit);
+            handler.timer = EventQueue.scheduleAt(handler, timeLimit);
         }
 
         TThread.currentThread().interruptHandler = handler;

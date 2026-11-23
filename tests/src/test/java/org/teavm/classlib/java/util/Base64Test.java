@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Random;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.TeaVMTest;
 
 @TeaVMTest
@@ -76,6 +77,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decoderRejectsNonAsciiInput() {
         var bytes = new byte[][] { { 'Q', 'U', (byte) 0x80, 'A' }, { 'Q', 'U', (byte) 0xFF, 'A' } };
         for (var text : bytes) {
@@ -88,6 +90,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decoderRejectsIllegalCharacters() {
         for (var text : new String[] { "QU*A", "QU A", "QU=A", "QU_A", "QU-A", "QQ==QQ==" }) {
             assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(text), text);
@@ -98,6 +101,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void decoderRejectsWrongPadding() {
         for (var text : new String[] { "QUJDR", "QUJDR===", "QQ=", "QQ===", "QUI==", "QUJD=", "QUJD====", "==" }) {
             assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode(text), text);
@@ -120,6 +124,7 @@ public class Base64Test {
     // to this one, but without adding any padding character at the end of the encoded byte data."
     // So every encoder returned by a factory, getUrlEncoder() included, pads.
     @Test
+    @AsyncEnabled
     public void urlEncoderPads() {
         var bytes = new byte[] { (byte) 0xFB, (byte) 0xFF };
         assertEquals("-_8=", Base64.getUrlEncoder().encodeToString(bytes));
@@ -132,6 +137,7 @@ public class Base64Test {
     // RFC 4648 (Table 1 for getEncoder(), Table 2 for getUrlEncoder(), padding per section 3.2). On the JVM
     // run of this test, the reference itself is checked against the JDK.
     @Test
+    @AsyncEnabled
     public void encodersAndDecodersMatchReference() {
         var random = new Random(66);
         for (var length = 0; length <= 100; ++length) {
@@ -220,6 +226,7 @@ public class Base64Test {
     // Javadoc of Decoder.decode(ByteBuffer): "IllegalArgumentException is thrown if the input buffer is not in
     // valid Base64 encoding scheme. The position of the input buffer will not be advanced in this case."
     @Test
+    @AsyncEnabled
     public void decodeBufferKeepsPositionOnInvalidInput() {
         var random = new Random(67);
         for (var length = 1; length <= 100; ++length) {
@@ -271,6 +278,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void arrayAndBufferOverloads() {
         var abcd = new byte[] { 'A', 'B', 'C', 'D' };
         var encoded = new byte[10];
@@ -302,6 +310,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void mimeEncoderWrapsLines() {
         var bytes = new byte[60];
         for (var i = 0; i < bytes.length; ++i) {
@@ -322,6 +331,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void mimeDecoderSkipsCharactersOutsideAlphabet() {
         assertEquals("ABCDEF", new String(Base64.getMimeDecoder().decode("QU*J\r\nDR EVG"),
                 StandardCharsets.ISO_8859_1));
@@ -340,6 +350,7 @@ public class Base64Test {
     // "rounded down to nearest multiple of 4. If the rounded down line length is not a positive value, the output
     // will not be separated in lines".
     @Test
+    @AsyncEnabled
     public void mimeEncoderMatchesReference() {
         forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> {
             assertEquals(expected, encoder.encodeToString(data), message);
@@ -355,6 +366,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void mimeDecoderDecodesMimeEncoderOutput() {
         forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> {
             assertArrayEquals(data, Base64.getMimeDecoder().decode(expected), message);
@@ -363,6 +375,7 @@ public class Base64Test {
     }
 
     @Test
+    @AsyncEnabled
     public void mimeArrayAndBufferOverloads() {
         forEachMimeCase((data, expected, expectedUnpadded, encoder, message) -> checkOverloads(data,
                 expected.getBytes(StandardCharsets.ISO_8859_1), encoder, Base64.getMimeDecoder(), message));
@@ -411,6 +424,7 @@ public class Base64Test {
     // Javadoc of getMimeEncoder(int, byte[]): throws IllegalArgumentException "if lineSeparator includes any
     // character of "The Base64 Alphabet" as specified in Table 1 of RFC 2045". The JDK rejects '=' too.
     @Test
+    @AsyncEnabled
     public void mimeEncoderRejectsSeparatorsInAlphabet() {
         var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
         for (var b = 0; b < 256; ++b) {
@@ -430,6 +444,7 @@ public class Base64Test {
     // character present in the final unit, the correct number of padding character(s) must be present".
     // The expected values were checked against the JDK.
     @Test
+    @AsyncEnabled
     public void mimeDecoderPaddingAndTrailingCharacters() {
         var decoder = Base64.getMimeDecoder();
         assertArrayEquals(new byte[0], decoder.decode(""));
@@ -448,6 +463,7 @@ public class Base64Test {
     // Exhaustive differential test: every input of up to 6 characters over two small alphabets. The expected
     // digests were computed with the JDK's MIME decoder, and the JVM run of this test checks them.
     @Test
+    @AsyncEnabled
     public void mimeDecoderMatchesJdkOnAllShortInputs() {
         assertEquals(-5105170174715733430L, mimeDecoderOutcomeDigest("QA=*\n", 6));
         assertEquals(-8695801745419786358L, mimeDecoderOutcomeDigest("g/=é ", 6));
@@ -490,6 +506,7 @@ public class Base64Test {
     // invoking decode(src.getBytes(StandardCharsets.ISO_8859_1))". A character above 0xFF becomes '?', which the
     // MIME decoder skips and the other decoders reject.
     @Test
+    @AsyncEnabled
     public void decodeStringMapsWideCharactersAsIso88591() {
         assertArrayEquals(new byte[] { 65, 66, 67 }, Base64.getMimeDecoder().decode("QUłJD"));
         assertThrows(IllegalArgumentException.class, () -> Base64.getDecoder().decode("QUłJD"));

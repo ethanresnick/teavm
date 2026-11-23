@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.teavm.junit.AsyncEnabled;
 import org.teavm.junit.EachTestCompiledSeparately;
 import org.teavm.junit.TeaVMTest;
 
@@ -30,6 +31,7 @@ import org.teavm.junit.TeaVMTest;
 // missing type. A missing type shows only in optimized builds. Each test fails a class of its own, because the JVM
 // runs all of them in one class loader.
 @TeaVMTest
+@AsyncEnabled
 @EachTestCompiledSeparately
 public class InitializerExceptionHandlerTest {
     private boolean throwCustom;
