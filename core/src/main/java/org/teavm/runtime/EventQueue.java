@@ -89,7 +89,7 @@ public final class EventQueue {
             return offerWasmGC(action, Math.min(remainingMillis(time), Integer.MAX_VALUE));
         }
         if (PlatformDetector.isJavaScript()) {
-            return offerJS(action, time);
+            return offerJS(action, Math.min(remainingMillis(time), Integer.MAX_VALUE));
         }
         ensureCapacity(size + 1);
         int current = size;
@@ -114,8 +114,8 @@ public final class EventQueue {
     @Intrinsified
     private static native int offerWasmGC(Event action, double delay);
 
-    // Implemented by the JavaScript backend's EventQueueGenerator, on top of setTimeout.
-    private static native int offerJS(Event action, double time);
+    // Implemented by the JavaScript backend's EventQueueGenerator, with a relative delay for setTimeout.
+    private static native int offerJS(Event action, double delay);
 
     private static void run(Event action) {
         action.run();
@@ -276,9 +276,13 @@ public final class EventQueue {
         }
 
         protected void schedule(long delay) {
-            id = PlatformDetector.isWebAssemblyGC()
-                    ? offerWasmGC(this, Math.min(delay, Integer.MAX_VALUE))
-                    : offer(this, deadline);
+            if (PlatformDetector.isWebAssemblyGC()) {
+                id = offerWasmGC(this, Math.min(delay, Integer.MAX_VALUE));
+            } else if (PlatformDetector.isJavaScript()) {
+                id = offerJS(this, Math.min(delay, Integer.MAX_VALUE));
+            } else {
+                id = offer(this, deadline);
+            }
         }
 
         public void kill() {

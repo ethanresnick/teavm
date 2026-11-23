@@ -58,9 +58,7 @@ public class TReferenceQueue<T> {
             }
             var callbackWrapper = new RemoveCallback(callback);
             if (timeout != 0) {
-                callbackWrapper.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                        ? EventQueue.scheduleAfter(callbackWrapper, timeout)
-                        : Platform.scheduleAfter(callbackWrapper, timeout);
+                callbackWrapper.timer = EventQueue.scheduleAfter(callbackWrapper, timeout);
             }
             TThread.currentThread().interruptHandler = callbackWrapper;
             registerCallback(callbackWrapper);

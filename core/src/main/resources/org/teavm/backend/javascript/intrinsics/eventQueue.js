@@ -14,8 +14,7 @@
  *  limitations under the License.
  */
 
-function offer(event, time) {
-    let delay = Math.max(0, time - Date.now());
+function offer(event, delay) {
     // Node.js returns a Timeout object, which converts to a numeric id that clearTimeout accepts
     return teavm_globals.setTimeout(() => {
         if ($rt_exited()) {
@@ -29,7 +28,7 @@ function offer(event, time) {
                 throw e;
             }
         }
-    }, delay) | 0;
+    }, Math.max(0, Math.min(delay, 0x7FFFFFFF))) | 0;
 }
 
 function kill(id) {

@@ -476,11 +476,7 @@ public class TThread extends TObject implements TRunnable {
             handler.interrupted();
             return;
         }
-        if (PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()) {
-            handler.timer = EventQueue.scheduleAfter(handler, millis);
-        } else {
-            handler.timer = Platform.scheduleAfter(handler, millis);
-        }
+        handler.timer = EventQueue.scheduleAfter(handler, millis);
         current.interruptHandler = handler;
     }
 

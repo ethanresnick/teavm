@@ -175,6 +175,8 @@ The comparisons below use the pre-merge fork tip `ce2e810bf` and upstream tip `4
 
 **Comparison/merge:** upstream simplifies lifetime management and avoids linear queue removal; the fork has stronger clock/cancellation behavior and additional interrupt cleanup. Use the upstream list with fork timer objects and cleanup semantics. Retain the necessary JS timer API and dependency wiring; copying upstream's removal of that wiring broke the retained fork timers.
 
+**Timer consolidation (2026-11-23):** sleep, monitor waits, reference-queue waits, blocking queues and LockSupport now use only `EventQueue.scheduleAfter`/`scheduleAt`. Remove the duplicate Platform scheduling facade and timer subclass. The JS event-queue adapter now takes a bounded relative delay, like Wasm, rather than subtracting Date.now from the monotonic deadline. Deadline arithmetic, cancellation, host-delay limits, rearming and exit guards remain centralized. All nine TimerTest methods pass on JS and Wasm GC with optimized/unoptimized compilation and IR verification; the fork's new interrupt-dispatch regression and the relevant core/platform/classlib/tests style checks also pass. The checks were explicitly authorized for this change; this does not lift the general restriction on other local builds or test runs.
+
 ### 8. Waking a Wasm GC thread blocked in ReferenceQueue.remove
 
 **Issue:** a collected reference must first satisfy a queued `remove()` waiter, rather than always going into the poll queue.

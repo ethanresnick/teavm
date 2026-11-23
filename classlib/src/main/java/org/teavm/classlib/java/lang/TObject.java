@@ -459,9 +459,7 @@ public class TObject {
         TThread.currentThread().interruptHandler = listener;
         if (timeout > 0 || nanos > 0) {
             long delay = nanos > 0 && timeout < Long.MAX_VALUE ? timeout + 1 : timeout;
-            listener.timer = PlatformDetector.isLowLevel() || PlatformDetector.isWebAssemblyGC()
-                    ? EventQueue.scheduleAfter(listener, delay)
-                    : Platform.scheduleAfter(listener, delay);
+            listener.timer = EventQueue.scheduleAfter(listener, delay);
         }
         monitorExit(this, monitor.count);
     }
