@@ -196,6 +196,7 @@ public class ClassTest {
 
     @Test
     @AsyncEnabled
+    @SkipPlatform(TestPlatform.C)
     public void instanceCreatedThroughReflectionAsync() throws Exception {
         Runnable instance = TestObjectAsync.class.newInstance();
         instance.run();

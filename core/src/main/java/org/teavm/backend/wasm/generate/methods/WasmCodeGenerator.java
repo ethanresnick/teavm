@@ -1480,8 +1480,8 @@ public class WasmCodeGenerator implements InstructionVisitor, FlowTreeNodeVisito
     public void visit(UnwrapArrayInstruction insn) {
         emitLocal(builder, insn.getArray());
         var type = typeInference.typeOf(insn.getArray());
-        var arrayType = (WasmType.CompositeReference) context.typeMapper().mapType(type.valueType);
-        var arrayStruct = (WasmStructure) arrayType.composite;
+        // Missing-class arrays map to bottom references, but unwrapping still needs their array layout.
+        var arrayStruct = context.classInfoProvider().getClassInfo(type.valueType).getStructure();
         builder.structGet(arrayStruct, WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET);
         builder.setLocal(mapToLocal(insn.getReceiver()));
     }
@@ -1489,8 +1489,7 @@ public class WasmCodeGenerator implements InstructionVisitor, FlowTreeNodeVisito
     @Override
     public void visit(GetElementInstruction insn) {
         var arrayValueType = typeInference.typeOf(insn.getArray()).valueType;
-        var arrayType = (WasmType.CompositeReference) context.typeMapper().mapType(arrayValueType);
-        var arrayWrapperStruct = (WasmStructure) arrayType.composite;
+        var arrayWrapperStruct = context.classInfoProvider().getClassInfo(arrayValueType).getStructure();
         var arrayFieldType = (WasmType.CompositeReference) arrayWrapperStruct.getFields()
                 .get(WasmGCClassInfoProvider.ARRAY_DATA_FIELD_OFFSET).getType().asUnpackedType();
         var wasmArray = (WasmArray) arrayFieldType.composite;

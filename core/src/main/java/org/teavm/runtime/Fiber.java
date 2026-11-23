@@ -106,7 +106,10 @@ public final class Fiber {
         } else if (objectTop + 1 == objectValues.length) {
             var savedCurrent = current;
             current = null;
-            objectValues = Arrays.copyOf(objectValues, objectValues.length * 3 / 2);
+            // The stack is always Object[], so growing it must not link reflective array allocation.
+            var newValues = new Object[objectValues.length * 3 / 2];
+            System.arraycopy(objectValues, 0, newValues, 0, objectValues.length);
+            objectValues = newValues;
             current = savedCurrent;
         }
         objectValues[objectTop++] = value;

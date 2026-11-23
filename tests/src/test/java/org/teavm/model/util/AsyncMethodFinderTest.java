@@ -140,6 +140,7 @@ public class AsyncMethodFinderTest {
         var target = new JavaScriptTarget();
         target.setStrict(true);
         var vm = new TeaVMBuilder(target).build();
+        vm.setAsyncEnabled(true);
         vm.add(new DependencyTestPatcher(getClass().getName(), methodName));
         for (var transformer : transformers) {
             vm.add(transformer);

@@ -123,6 +123,7 @@ public class ReflectiveInitializationCompilationTest {
 
     private TeaVM compile(Class<?> entryPoint, TeaVMOptimizationLevel level, TeaVMTarget target) {
         var vm = new TeaVMBuilder(target).build();
+        vm.setAsyncEnabled(true);
         vm.installPlugins();
         vm.setEntryPoint(entryPoint.getName());
         vm.setOptimizationLevel(level);

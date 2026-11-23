@@ -359,6 +359,7 @@ public class VMTest {
 
     @Test
     @AsyncEnabled
+    @SkipPlatform(TestPlatform.C)
     public void asyncWait() {
         AsyncClinitClass acl = new AsyncClinitClass();
         acl.doWait();

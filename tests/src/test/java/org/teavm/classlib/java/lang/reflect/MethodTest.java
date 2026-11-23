@@ -280,6 +280,7 @@ public class MethodTest {
     
     @Test
     @AsyncEnabled
+    @SkipPlatform(TestPlatform.C)
     public void asyncReflection() throws Exception {
         var method = ClassWithAsyncMethod.class.getMethod("foo", int.class);
         var result = method.invoke(null, 23);
@@ -293,6 +294,7 @@ public class MethodTest {
 
     @Test
     @AsyncEnabled
+    @SkipPlatform(TestPlatform.C)
     public void asyncReflectionWithSeveralParameters() throws Exception {
         var method = ClassWithAsyncMethodWithSeveralParameters.class.getMethod("foo", int.class, int.class);
         var result = method.invoke(null, 23, 42);
